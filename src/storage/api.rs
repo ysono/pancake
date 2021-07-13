@@ -17,8 +17,9 @@ impl Deref for Key {
 /// API Value type.
 #[derive(Debug, Clone)]
 pub enum Value {
-    Integer(i64),
-    Text(String)
+    // Integer(i64),
+    // Text(String),
+    Bytes(Vec<u8>),
 }
 
 

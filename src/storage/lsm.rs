@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 use std::prelude::*;
 use super::api::*;
 use std::fs::{OpenOptions, File};
-use std::io::{SeekFrom, Write};
+use std::io::{BufRead, Read, SeekFrom, Write};
 use std::error::Error;
 use std::path::PathBuf;
 
 
-static DATA_DIR: &'static str = "/tmp/pancakes/";
+static DATA_DIR: &'static str = "/tmp/pancake/";
 
 
 /// The memtable: in-memory sorted map of the most recently put items.
@@ -46,7 +46,7 @@ impl State {
         let commit_log = OpenOptions::new()
             .create(true)
             .write(true)
-            .truncate(true)
+            .append(true)
             .open(&data_path)
             .unwrap();
 
@@ -70,17 +70,50 @@ impl State {
     }
 }
 
-fn read_commit_log(file: File) -> Memtable {
-    // TODO
-    Memtable::default()
+fn read_commit_log(mut file: File) -> Memtable {
+    let mut get_data = || -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut buf=[0u8; 8];
+        &file.read_exact(&mut buf)?;
+        let sz = usize::from_le_bytes(buf);
+    
+        let mut buf = vec![0u8; sz];
+        &file.read_exact(&mut buf)?;
+        Ok(buf)
+    };
+
+    let mut memtable = Memtable::default();
+    loop {
+        if let Ok(key_bytes) = get_data() {
+            if let Ok(value_bytes) = get_data() {
+                let key = Key(String::from_utf8(key_bytes).unwrap());
+                let val = Value::Bytes(value_bytes);
+                memtable.0.insert(key, val);
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    memtable
 }
 
 fn append_to_commit_log(file: &mut File, k: &Key, v: &Option<Value>) {
-    let fmt = format!(
-        "{}\0",
-        k as &String
-    );
-    file.write(fmt.as_bytes()).unwrap();
+    let mut buffer = Vec::<u8>::new();
+    buffer.write(&k.0.len().to_le_bytes()).unwrap();
+    buffer.write(k.0.as_bytes()).unwrap();
+    match v {
+        Some(Value::Bytes(v)) => {
+            buffer.write(&v.len().to_le_bytes()).unwrap();
+            buffer.write(v).unwrap();
+        }
+        _ => {
+            let zero: usize = 0;
+            buffer.write(&zero.to_le_bytes()).unwrap();
+        }
+    }
+
+    file.write(&buffer).unwrap();
 }
 
 fn read_sstable(file: File) -> SSTable {
@@ -126,6 +159,7 @@ pub fn get(s: &State, k: Key) -> Option<Value> {
 }
 
 // TODO
+// file format
 // background job: flush
 //   1. flush memtable to sstable
 //   1. swap new memtable and commit log
@@ -136,3 +170,4 @@ pub fn get(s: &State, k: Key) -> Option<Value> {
 //   1. flush new ss table(s)
 //   1. swap new ss table(s)' in-mem idx and files
 // multithread
+// tests
