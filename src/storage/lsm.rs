@@ -5,6 +5,7 @@ use std::fs::{OpenOptions, File};
 use std::io::{BufRead, Read, SeekFrom, Write};
 use std::error::Error;
 use std::path::PathBuf;
+use anyhow::Result;
 
 
 static DATA_DIR: &'static str = "/tmp/pancake/";
@@ -39,7 +40,7 @@ impl State {
         data_path.push("commit_log");
 
         let memtable = match File::open(&data_path) {
-            Ok(commit_log) => read_commit_log(commit_log),
+            Ok(commit_log) => read_commit_log(commit_log)?,
             Err(_) => Memtable::default(),
         };
 
@@ -47,8 +48,7 @@ impl State {
             .create(true)
             .write(true)
             .append(true)
-            .open(&data_path)
-            .unwrap();
+            .open(&data_path)?;
 
         data_path.pop();
         data_path.push("sstables");
@@ -70,8 +70,8 @@ impl State {
     }
 }
 
-fn read_commit_log(mut file: File) -> Memtable {
-    let mut get_data = || -> Result<Vec<u8>, Box<dyn Error>> {
+fn read_commit_log(mut file: File) -> Result<Memtable> {
+    let mut get_data = || -> Result<Vec<u8>> {
         let mut buf=[0u8; 8];
         &file.read_exact(&mut buf)?;
         let sz = usize::from_le_bytes(buf);
@@ -85,7 +85,7 @@ fn read_commit_log(mut file: File) -> Memtable {
     loop {
         if let Ok(key_bytes) = get_data() {
             if let Ok(value_bytes) = get_data() {
-                let key = Key(String::from_utf8(key_bytes).unwrap());
+                let key = Key(String::from_utf8(key_bytes)?);
                 let val = Value::Bytes(value_bytes);
                 memtable.0.insert(key, val);
             } else {
@@ -95,25 +95,23 @@ fn read_commit_log(mut file: File) -> Memtable {
             break;
         }
     }
-    memtable
+    Ok(memtable)
 }
 
-fn append_to_commit_log(file: &mut File, k: &Key, v: &Option<Value>) {
-    let mut buffer = Vec::<u8>::new();
-    buffer.write(&k.0.len().to_le_bytes()).unwrap();
-    buffer.write(k.0.as_bytes()).unwrap();
+fn append_to_commit_log(file: &mut File, k: &Key, v: &Option<Value>) -> Result<()> {
+    file.write(&k.0.len().to_le_bytes())?;
+    file.write(k.0.as_bytes())?;
     match v {
         Some(Value::Bytes(v)) => {
-            buffer.write(&v.len().to_le_bytes()).unwrap();
-            buffer.write(v).unwrap();
+            file.write(&v.len().to_le_bytes())?;
+            file.write(v)?;
         }
         _ => {
             let zero: usize = 0;
-            buffer.write(&zero.to_le_bytes()).unwrap();
+            file.write(&zero.to_le_bytes())?;
         }
     }
-
-    file.write(&buffer).unwrap();
+    Ok(())
 }
 
 fn read_sstable(file: File) -> SSTable {
@@ -133,7 +131,8 @@ fn search_in_sstable(ss: &SSTable, k: &Key) -> Option<Value> {
 }
 
 pub fn put(s: &mut State, k: Key, v: Option<Value>) {
-    append_to_commit_log(s.commit_log.as_mut().unwrap(), &k, &v);
+    // TODO(btc): maybe change return type to return a Result (perhaps not anyhow though)
+    append_to_commit_log(s.commit_log.as_mut().unwrap(), &k, &v).unwrap();
     match v {
         Some(v) => { s.memtable.0.insert(k, v); },
         None => { s.memtable.0.remove(&k); },
