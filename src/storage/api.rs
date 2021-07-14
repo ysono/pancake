@@ -4,7 +4,7 @@ use std::ops::Deref;
 /// API Key type.
 /// Newtype of String.
 #[derive(PartialEq, PartialOrd, Eq, Ord)]
-pub struct Key (pub String);
+pub struct Key(pub String);
 
 impl Deref for Key {
     type Target = String;

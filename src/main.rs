@@ -1,19 +1,17 @@
-use pancake::storage::lsm;
 use pancake::storage::api::*;
+use pancake::storage::lsm;
 
 fn put(s: &mut lsm::State, k: &str, v: Option<&str>) {
     lsm::put(
         s,
         Key(String::from(k)),
-        v.map(|v| Value::Bytes(v.as_bytes().to_vec()))
-    ).unwrap();
+        v.map(|v| Value::Bytes(v.as_bytes().to_vec())),
+    )
+    .unwrap();
 }
 
 fn get(s: &mut lsm::State, k: &str) -> Option<Value> {
-    lsm::get(
-        s,
-        Key(String::from(k))
-    ).unwrap()
+    lsm::get(s, Key(String::from(k))).unwrap()
 }
 fn get_print(s: &mut lsm::State, k: &str) {
     match get(s, k) {
@@ -33,7 +31,7 @@ fn main() {
     put(&mut s, "key2", Some("valasdf2"));
     put(&mut s, "keyasdf3", None);
     put(&mut s, "key4", Some("v4"));
-    
+
     get_print(&mut s, "key1");
     get_print(&mut s, "key2");
     get_print(&mut s, "keyasdf3");

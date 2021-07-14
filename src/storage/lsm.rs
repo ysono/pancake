@@ -1,10 +1,10 @@
-use std::collections::BTreeMap;
-use std::fs::{OpenOptions, File};
-use std::io::{Seek, SeekFrom};
-use std::path::PathBuf;
-use anyhow::Result;
 use super::api::{Key, Value};
 use super::serde;
+use anyhow::Result;
+use std::collections::BTreeMap;
+use std::fs::{File, OpenOptions};
+use std::io::{Seek, SeekFrom};
+use std::path::PathBuf;
 
 static COMMIT_LOG_PATH: &'static str = "/tmp/pancake/commit_log.data";
 static SSTABLE_DIR_PATH: &'static str = "/tmp/pancake/sstables";
@@ -15,7 +15,7 @@ static MEMTABLE_COMPACTION_SIZE_THRESH: usize = 3;
 /// Its content corresponds to the append-only commit log.
 /// The memtable and commit log will be flushed to a (on-disk SSTable, in-memory sparse seeks of this SSTable) pair, at a later time.
 #[derive(Default)]
-struct Memtable (BTreeMap<Key, Value>);
+struct Memtable(BTreeMap<Key, Value>);
 
 /// One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file.
 struct SSTable {
@@ -32,7 +32,7 @@ pub struct State {
 impl State {
     pub fn init() -> Result<State> {
         std::fs::create_dir_all(SSTABLE_DIR_PATH)?;
-        
+
         let memtable = read_commit_log(&PathBuf::from(COMMIT_LOG_PATH));
 
         let commit_log = OpenOptions::new()
@@ -41,8 +41,7 @@ impl State {
             .append(true)
             .open(COMMIT_LOG_PATH)?;
 
-        let sstables: Vec<SSTable> =
-            std::fs::read_dir(SSTABLE_DIR_PATH)?
+        let sstables: Vec<SSTable> = std::fs::read_dir(SSTABLE_DIR_PATH)?
             .map(|res| res.map(|e| e.path()))
             .map(|path| read_sstable(path.unwrap()).unwrap())
             .collect();
@@ -66,7 +65,7 @@ impl State {
                 .create(true)
                 .write(true)
                 .append(true)
-                .open(COMMIT_LOG_PATH)?
+                .open(COMMIT_LOG_PATH)?,
         );
 
         Ok(())
@@ -116,7 +115,7 @@ fn read_sstable(path: PathBuf) -> Result<SSTable> {
     let mut idx = BTreeMap::<Key, u64>::new();
 
     let mut offset = 0usize;
-    
+
     let mut file = File::open(&path)?;
     let iter = serde::KeyValueIterator { file: &mut file };
     for (delta_offset, key, _) in iter {
@@ -124,10 +123,7 @@ fn read_sstable(path: PathBuf) -> Result<SSTable> {
         offset += delta_offset;
     }
 
-    Ok(SSTable {
-        path,
-        idx
-    })
+    Ok(SSTable { path, idx })
 }
 
 /// 1. Bisect in the in-memory sparse index.
@@ -137,9 +133,7 @@ fn search_in_sstable(ss: &SSTable, k: &Key) -> Result<Option<Value>> {
     let mut iter = ss.idx.iter();
     let pos = iter.rposition(|kv| kv.0 <= k);
     let (lo, hi) = match pos {
-        None => {
-            (None, ss.idx.iter().next())
-        }
+        None => (None, ss.idx.iter().next()),
         Some(pos) => {
             let mut iter = ss.idx.iter();
             let lo = iter.nth(pos);
@@ -157,8 +151,8 @@ fn search_in_sstable(ss: &SSTable, k: &Key) -> Result<Option<Value>> {
 
     let mut file = File::open(&ss.path)?;
     file.seek(SeekFrom::Start(*lo))?;
-    
-    let ss_iter = serde::KeyValueIterator { file : &mut file };
+
+    let ss_iter = serde::KeyValueIterator { file: &mut file };
     let mut offset = 0u64;
     for (delta_offset, key, maybe_val) in ss_iter {
         offset += delta_offset as u64;
@@ -175,10 +169,14 @@ fn search_in_sstable(ss: &SSTable, k: &Key) -> Result<Option<Value>> {
 pub fn put(s: &mut State, k: Key, v: Option<Value>) -> Result<()> {
     // TODO(btc): maybe change return type to return a Result (perhaps not anyhow though)
     serde::write_kv(&k, v.as_ref(), s.commit_log.as_mut().unwrap())?;
-    
+
     match v {
-        Some(v) => { s.memtable.0.insert(k, v); }
-        None => { s.memtable.0.remove(&k); }
+        Some(v) => {
+            s.memtable.0.insert(k, v);
+        }
+        None => {
+            s.memtable.0.remove(&k);
+        }
     }
 
     if s.memtable.0.len() >= MEMTABLE_COMPACTION_SIZE_THRESH {
@@ -200,9 +198,9 @@ pub fn get(s: &State, k: Key) -> Result<Option<Value>> {
                     break;
                 }
                 // TODO bloom filter
-            };
+            }
             Ok(found)
-        },
+        }
     }
 }
 

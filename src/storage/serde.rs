@@ -1,8 +1,8 @@
+use super::api::{Key, Value};
+use anyhow::{anyhow, Result};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::mem::size_of;
-use anyhow::{anyhow, Result};
-use super::api::{Key, Value};
 
 pub fn write_key(k: &Key, w: &mut impl Write) -> Result<()> {
     w.write(&k.0.len().to_le_bytes())?;
@@ -15,14 +15,12 @@ pub fn write_val(v: Option<&Value>, w: &mut impl Write) -> Result<()> {
         None => {
             w.write(&(0 as usize).to_le_bytes())?;
         }
-        Some(v) => {
-            match v {
-                Value::Bytes(bytes) => {
-                    w.write(&bytes.len().to_le_bytes())?;
-                    w.write(bytes)?;
-                }
+        Some(v) => match v {
+            Value::Bytes(bytes) => {
+                w.write(&bytes.len().to_le_bytes())?;
+                w.write(bytes)?;
             }
-        }
+        },
     }
     Ok(())
 }
@@ -46,7 +44,7 @@ pub fn write_kv(k: &Key, v: Option<&Value>, file: &mut File) -> Result<()> {
 ///     If EOF, this amount is zero.
 /// tuple.1 =
 ///     A vector containing raw bytes.
-/// 
+///
 /// An error is returned if the exact amount of expected bytes cannot be read from file.
 pub fn read_item(file: &mut File) -> Result<(usize, Option<Vec<u8>>)> {
     const PRE_SIZE: usize = size_of::<usize>();
@@ -72,7 +70,7 @@ pub fn read_item(file: &mut File) -> Result<(usize, Option<Vec<u8>>)> {
     }
 }
 
-pub fn deserialize_key(bytes: Vec<u8>) -> Result<Key>  {
+pub fn deserialize_key(bytes: Vec<u8>) -> Result<Key> {
     Ok(Key(String::from_utf8(bytes)?))
 }
 
@@ -89,7 +87,8 @@ impl Iterator for KeyValueIterator<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match read_item(self.file).unwrap() {
-            (0, _) => { // EOF.
+            (0, _) => {
+                // EOF.
                 None
             }
             (_, None) => {
@@ -97,19 +96,15 @@ impl Iterator for KeyValueIterator<'_> {
             }
             (key_raw_size, Some(key_bytes)) => {
                 match read_item(self.file).unwrap() {
-                    (0, _) => { // EOF.
+                    (0, _) => {
+                        // EOF.
                         panic!("Key without value.")
                     }
                     (val_raw_size, maybe_val_bytes) => {
                         let key = deserialize_key(key_bytes).unwrap();
-                        let maybe_val = maybe_val_bytes.map(|bytes| {
-                            deserialize_val(bytes).unwrap()
-                        });
-                        Some((
-                            key_raw_size + val_raw_size,
-                            key,
-                            maybe_val
-                        ))
+                        let maybe_val =
+                            maybe_val_bytes.map(|bytes| deserialize_val(bytes).unwrap());
+                        Some((key_raw_size + val_raw_size, key, maybe_val))
                     }
                 }
             }
