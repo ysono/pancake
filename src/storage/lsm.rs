@@ -6,6 +6,7 @@ use std::io::{BufRead, Read, SeekFrom, Write};
 use std::error::Error;
 use std::path::PathBuf;
 use anyhow::Result;
+use std::mem::size_of;
 
 
 static DATA_DIR: &'static str = "/tmp/pancake/";
@@ -72,7 +73,7 @@ impl State {
 
 fn read_commit_log(mut file: File) -> Result<Memtable> {
     let mut get_data = || -> Result<Vec<u8>> {
-        let mut buf=[0u8; 8];
+        let mut buf=[0u8; size_of::<usize>()];
         &file.read_exact(&mut buf)?;
         let sz = usize::from_le_bytes(buf);
     
