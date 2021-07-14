@@ -21,8 +21,3 @@ pub enum Value {
     // Text(String),
     Bytes(Vec<u8>),
 }
-
-
-
-// static mut STATE: State = State::default();
-// static mut STATE: Box<State> = Box::new(State::default());

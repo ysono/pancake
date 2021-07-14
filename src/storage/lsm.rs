@@ -1,16 +1,15 @@
 use std::collections::BTreeMap;
-use std::prelude::*;
-use super::api::*;
 use std::fs::{OpenOptions, File};
-use std::io::{BufRead, Read, SeekFrom, Write};
-use std::error::Error;
+use std::io::{Seek, SeekFrom};
 use std::path::PathBuf;
 use anyhow::Result;
-use std::mem::size_of;
+use super::api::{Key, Value};
+use super::serde;
 
-
-static DATA_DIR: &'static str = "/tmp/pancake/";
-
+static COMMIT_LOG_PATH: &'static str = "/tmp/pancake/commit_log.data";
+static SSTABLE_DIR_PATH: &'static str = "/tmp/pancake/sstables";
+static SSTABLE_IDX_SPARSENESS: usize = 4;
+static MEMTABLE_COMPACTION_SIZE_THRESH: usize = 3;
 
 /// The memtable: in-memory sorted map of the most recently put items.
 /// Its content corresponds to the append-only commit log.
@@ -20,11 +19,10 @@ struct Memtable (BTreeMap<Key, Value>);
 
 /// One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file.
 struct SSTable {
-    file: File,
-    idx: BTreeMap<Key, SeekFrom>,
+    path: PathBuf,
+    idx: BTreeMap<Key, u64>,
 }
 
-// #[derive(Default)]
 pub struct State {
     memtable: Memtable,
     commit_log: Option<File>,
@@ -32,34 +30,21 @@ pub struct State {
 }
 
 impl State {
-    pub fn init() -> Result<State, Box<dyn Error>> {
-        let mut data_path = PathBuf::new();
-        data_path.push(DATA_DIR);
-
-        std::fs::create_dir_all(&data_path)?;
+    pub fn init() -> Result<State> {
+        std::fs::create_dir_all(SSTABLE_DIR_PATH)?;
         
-        data_path.push("commit_log");
-
-        let memtable = match File::open(&data_path) {
-            Ok(commit_log) => read_commit_log(commit_log)?,
-            Err(_) => Memtable::default(),
-        };
+        let memtable = read_commit_log(&PathBuf::from(COMMIT_LOG_PATH));
 
         let commit_log = OpenOptions::new()
             .create(true)
             .write(true)
             .append(true)
-            .open(&data_path)?;
-
-        data_path.pop();
-        data_path.push("sstables");
-        std::fs::create_dir_all(&data_path)?;
+            .open(COMMIT_LOG_PATH)?;
 
         let sstables: Vec<SSTable> =
-            std::fs::read_dir(&data_path)?
+            std::fs::read_dir(SSTABLE_DIR_PATH)?
             .map(|res| res.map(|e| e.path()))
-            .map(|path| File::open(path.unwrap()).unwrap())
-            .map(|file| read_sstable(file))
+            .map(|path| read_sstable(path.unwrap()).unwrap())
             .collect();
 
         let ret = State {
@@ -69,98 +54,159 @@ impl State {
         };
         Ok(ret)
     }
+
+    pub fn flush_memtable(&mut self) -> Result<()> {
+        let path = PathBuf::from("/tmp/pancake/sstables/1.data");
+        let sstable = write_sstable(&self.memtable, path)?;
+        self.sstables.push(sstable);
+        self.memtable.0.clear();
+        self.commit_log.take(); // Close the file.
+        self.commit_log = Some(
+            OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(COMMIT_LOG_PATH)?
+        );
+
+        Ok(())
+    }
 }
 
-fn read_commit_log(mut file: File) -> Result<Memtable> {
-    let mut get_data = || -> Result<Vec<u8>> {
-        let mut buf=[0u8; size_of::<usize>()];
-        &file.read_exact(&mut buf)?;
-        let sz = usize::from_le_bytes(buf);
+/// Read all key-value pairs.
+fn read_commit_log(path: &PathBuf) -> Memtable {
+    let mut memtable = Memtable::default();
+
+    let file_result = File::open(path);
+    if let Ok(mut file) = file_result {
+        let iter = serde::KeyValueIterator { file: &mut file };
+        for (_, key, maybe_val) in iter {
+            match maybe_val {
+                None => {
+                    memtable.0.remove(&key);
+                }
+                Some(val) => {
+                    memtable.0.insert(key, val);
+                }
+            }
+        }
+    }
+    // Else, ignore if commit log does not exist.
+
+    memtable
+}
+
+fn write_sstable(memtable: &Memtable, path: PathBuf) -> Result<SSTable> {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)?;
+
+    for (i, kv) in memtable.0.iter().enumerate() {
+        if i % SSTABLE_IDX_SPARSENESS == 0 {
+            serde::write_kv(kv.0, Some(&kv.1), &mut file)?;
+        }
+    }
+
+    Ok(read_sstable(path)?)
+}
+
+fn read_sstable(path: PathBuf) -> Result<SSTable> {
+    let mut idx = BTreeMap::<Key, u64>::new();
+
+    let mut offset = 0usize;
     
-        let mut buf = vec![0u8; sz];
-        &file.read_exact(&mut buf)?;
-        Ok(buf)
-    };
-    let mut get_key_value = || -> Result<(Key, Value)> {
-        let key_bytes = get_data()?;
-        let value_bytes = get_data()?;
-        let key = Key(String::from_utf8(key_bytes)?);
-        let val = Value::Bytes(value_bytes);
-        Ok((key, val))
+    let mut file = File::open(&path)?;
+    let iter = serde::KeyValueIterator { file: &mut file };
+    for (delta_offset, key, _) in iter {
+        idx.insert(key, offset as u64);
+        offset += delta_offset;
+    }
+
+    Ok(SSTable {
+        path,
+        idx
+    })
+}
+
+/// 1. Bisect in the in-memory sparse index.
+/// 1. Seek linearlly in file.
+fn search_in_sstable(ss: &SSTable, k: &Key) -> Result<Option<Value>> {
+    // TODO what's the best way to bisect a BTreeMap?
+    let mut iter = ss.idx.iter();
+    let pos = iter.rposition(|kv| kv.0 <= k);
+    let (lo, hi) = match pos {
+        None => {
+            (None, ss.idx.iter().next())
+        }
+        Some(pos) => {
+            let mut iter = ss.idx.iter();
+            let lo = iter.nth(pos);
+            (lo, iter.next())
+        }
     };
 
-    let mut memtable = Memtable::default();
-    loop {
-        if let Ok((key, val)) = get_key_value() {
-            memtable.0.insert(key, val);
-        } else {
+    if let (None, None) = (lo, hi) {
+        // sstable is empty.
+        return Ok(None);
+    }
+
+    let lo = lo.map(|kv| kv.1).unwrap_or(&0u64);
+    let hi = hi.map(|kv| kv.1 as &u64);
+
+    let mut file = File::open(&ss.path)?;
+    file.seek(SeekFrom::Start(*lo))?;
+    
+    let ss_iter = serde::KeyValueIterator { file : &mut file };
+    let mut offset = 0u64;
+    for (delta_offset, key, maybe_val) in ss_iter {
+        offset += delta_offset as u64;
+        if hi.is_some() && hi.unwrap() <= &offset {
             break;
         }
+        if &key == k {
+            return Ok(maybe_val);
+        }
     }
-    Ok(memtable)
+    Ok(None)
 }
 
-fn append_to_commit_log(file: &mut File, k: &Key, v: &Option<Value>) -> Result<()> {
-    file.write(&k.0.len().to_le_bytes())?;
-    file.write(k.0.as_bytes())?;
+pub fn put(s: &mut State, k: Key, v: Option<Value>) -> Result<()> {
+    // TODO(btc): maybe change return type to return a Result (perhaps not anyhow though)
+    serde::write_kv(&k, v.as_ref(), s.commit_log.as_mut().unwrap())?;
+    
     match v {
-        Some(Value::Bytes(v)) => {
-            file.write(&v.len().to_le_bytes())?;
-            file.write(v)?;
-        }
-        _ => {
-            let zero: usize = 0;
-            file.write(&zero.to_le_bytes())?;
-        }
+        Some(v) => { s.memtable.0.insert(k, v); }
+        None => { s.memtable.0.remove(&k); }
     }
+
+    if s.memtable.0.len() >= MEMTABLE_COMPACTION_SIZE_THRESH {
+        s.flush_memtable()?;
+    }
+
     Ok(())
 }
 
-fn read_sstable(file: File) -> SSTable {
-    // TODO
-    let idx = BTreeMap::<Key, SeekFrom>::new();
-    SSTable {
-        file,
-        idx
-    }
-}
-
-fn search_in_sstable(ss: &SSTable, k: &Key) -> Option<Value> {
-    // TODO
-    // 1. bisect in ss.idx
-    // 1. Seek linearlly in file
-    None
-}
-
-pub fn put(s: &mut State, k: Key, v: Option<Value>) {
-    // TODO(btc): maybe change return type to return a Result (perhaps not anyhow though)
-    append_to_commit_log(s.commit_log.as_mut().unwrap(), &k, &v).unwrap();
-    match v {
-        Some(v) => { s.memtable.0.insert(k, v); },
-        None => { s.memtable.0.remove(&k); },
-    }
-}
-
-pub fn get(s: &State, k: Key) -> Option<Value> {
+pub fn get(s: &State, k: Key) -> Result<Option<Value>> {
     match s.memtable.0.get(&k) {
-        Some(v) => Some(v.clone()),
+        Some(v) => Ok(Some(v.clone())),
         None => {
             let mut found = None;
             for ss in s.sstables.iter() {
-                let v = search_in_sstable(ss, &k);
+                let v = search_in_sstable(ss, &k)?;
                 if v.is_some() {
                     found = v;
                     break;
                 }
                 // TODO bloom filter
             };
-            found
+            Ok(found)
         },
     }
 }
 
 // TODO
-// file format
 // background job: flush
 //   1. flush memtable to sstable
 //   1. swap new memtable and commit log
@@ -170,5 +216,5 @@ pub fn get(s: &State, k: Key) -> Option<Value> {
 //   1. compact
 //   1. flush new ss table(s)
 //   1. swap new ss table(s)' in-mem idx and files
-// multithread
+// handle requests in multi threads
 // tests

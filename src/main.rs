@@ -1,60 +1,41 @@
-use pancake::storage;
+use pancake::storage::lsm;
 use pancake::storage::api::*;
 
+fn put(s: &mut lsm::State, k: &str, v: Option<&str>) {
+    lsm::put(
+        s,
+        Key(String::from(k)),
+        v.map(|v| Value::Bytes(v.as_bytes().to_vec()))
+    ).unwrap();
+}
+
+fn get(s: &mut lsm::State, k: &str) -> Option<Value> {
+    lsm::get(
+        s,
+        Key(String::from(k))
+    ).unwrap()
+}
+fn get_print(s: &mut lsm::State, k: &str) {
+    match get(s, k) {
+        None => {
+            println!("{} ... No such key", k)
+        }
+        Some(Value::Bytes(vec)) => {
+            println!("{} ---> {}", k, String::from_utf8(vec).unwrap());
+        }
+    }
+}
+
 fn main() {
-    let mut lsm_state = storage::lsm::State::init().unwrap();
+    let mut s = lsm::State::init().unwrap();
+
+    put(&mut s, "key1", Some("val1"));
+    put(&mut s, "key2", Some("valasdf2"));
+    put(&mut s, "keyasdf3", None);
+    put(&mut s, "key4", Some("v4"));
     
-    storage::lsm::put(
-        &mut lsm_state,
-        Key(String::from("mykey")),
-        Some(Value::Bytes("myvalue".as_bytes().to_vec())));
-
-    storage::lsm::put(
-        &mut lsm_state,
-        Key(String::from("mykey2")),
-        Some(Value::Bytes("myvalue2".as_bytes().to_vec())));
-    
-    storage::lsm::put(
-        &mut lsm_state,
-        Key(String::from("mykey3")),
-        Some(Value::Bytes("myvalue3".as_bytes().to_vec())));
-
-    // storage::lsm::put(
-    //     &mut lsm_state,
-    //     Key(String::from("myint")),
-    //     Some(Value::Integer(3)));
-
-    // storage::lsm::put(
-    //     &mut lsm_state,
-    //     Key(String::from("mytext")),
-    //     Some(Value::Text(String::from("aloha"))));
-
-    let gotten = storage::lsm::get(
-        &lsm_state,
-        Key(String::from("mykey"))
-    );
-    match gotten {
-        Some(Value::Bytes(v)) => {
-            println!("{:?}", String::from_utf8(v).unwrap());
-        },
-        _ => { println!("No such key"); },
-    }
-    
-    let gotten = storage::lsm::get(
-        &lsm_state,
-        Key(String::from("mykey2"))
-    );
-    match gotten {
-        Some(Value::Bytes(v)) => { println!("{:?}", String::from_utf8(v).unwrap()); },
-        None => { println!("No such key"); },
-    }
-
-    let gotten = storage::lsm::get(
-        &lsm_state,
-        Key(String::from("mykey3"))
-    );
-    match gotten {
-        Some(Value::Bytes(v)) => { println!("{:?}", String::from_utf8(v).unwrap()); },
-        None => { println!("No such key"); },
-    }
+    get_print(&mut s, "key1");
+    get_print(&mut s, "key2");
+    get_print(&mut s, "keyasdf3");
+    get_print(&mut s, "key4");
 }
