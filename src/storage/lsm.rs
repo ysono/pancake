@@ -80,17 +80,18 @@ fn read_commit_log(mut file: File) -> Result<Memtable> {
         &file.read_exact(&mut buf)?;
         Ok(buf)
     };
+    let mut get_key_value = || -> Result<(Key, Value)> {
+        let key_bytes = get_data()?;
+        let value_bytes = get_data()?;
+        let key = Key(String::from_utf8(key_bytes)?);
+        let val = Value::Bytes(value_bytes);
+        Ok((key, val))
+    };
 
     let mut memtable = Memtable::default();
     loop {
-        if let Ok(key_bytes) = get_data() {
-            if let Ok(value_bytes) = get_data() {
-                let key = Key(String::from_utf8(key_bytes)?);
-                let val = Value::Bytes(value_bytes);
-                memtable.0.insert(key, val);
-            } else {
-                break;
-            }
+        if let Ok((key, val)) = get_key_value() {
+            memtable.0.insert(key, val);
         } else {
             break;
         }
