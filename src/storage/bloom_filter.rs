@@ -3,7 +3,7 @@ pub struct BloomFilter {
 }
 
 impl BloomFilter {
-    pub fn isMissing() -> bool {
+    pub fn is_missing() -> bool {
         false
     }
 }
