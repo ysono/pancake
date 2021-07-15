@@ -85,43 +85,31 @@ impl SSTable {
 
     /// Both the in-memory index and the file are sorted by key.
     /// The index maps { key (sparse) => file offset }.
-    /// 1. Bisect in the in-memory sparse index.
-    ///     Find the two adjacent index items that form a range that contains the sought key.
-    ///     This gives us two file offsets within which to find the key.
-    /// 1. Jump to the low offset in the file. Then read linearlly in file up to the high offset.
+    /// 1. Bisect in the in-memory sparse index, to find the lower-bound file offset.
+    /// 1. Seek the offset in the file. Then read linearlly in file until either EOF or the last-read key is greater than the sought key.
     fn search(&self, k: &Key) -> Result<Option<Value>> {
-        // TODO what's the best way to bisect a BTreeMap? Note, rposition() takes `&mut self`.
-        let pos = self.idx.iter().rposition(|kv| kv.0 <= k);
-        let (idx_lo, idx_hi) = match pos {
-            None => (None, self.idx.iter().next()),
-            Some(pos) => {
-                let mut iter = self.idx.iter();
-                let idx_lo = iter.nth(pos);
-                (idx_lo, iter.next())
+        // TODO what's the best way to bisect a BTreeMap?
+        let idx_pos = self.idx.iter().rposition(|kv| kv.0 <= k);
+        let file_offset = match idx_pos {
+            None => 0u64,
+            Some(idx_pos) => {
+                let (_, file_offset) = self.idx.iter().nth(idx_pos).unwrap();
+                *file_offset
             }
         };
 
-        if let (None, None) = (idx_lo, idx_hi) {
-            // The sstable file is empty. This shouldn't happen.
-            return Ok(None);
-        }
-
-        let file_lo = idx_lo.map(|kv| kv.1).unwrap_or(&0u64);
-        let file_hi = idx_hi.map(|kv| kv.1 as &u64);
-
         let mut file = File::open(&self.path)?;
-        file.seek(SeekFrom::Start(*file_lo))?;
+        file.seek(SeekFrom::Start(file_offset))?;
 
+        // TODO Create a second kind of iterator so that we're not unnecessarily reading value items from file into heap.
         let ss_iter = serde::KeyValueIterator { file: &mut file };
-        let mut offset = 0u64;
         for file_data in ss_iter {
-            let (delta_offset, key, maybe_val) = file_data?;
-            offset += delta_offset as u64;
-            if file_hi.is_some() && file_hi.unwrap() <= &offset {
-                break;
-            }
+            let (_, key, maybe_val) = file_data?;
             if &key == k {
                 return Ok(maybe_val);
+            }
+            if &key > k {
+                break;
             }
         }
         Ok(None)
