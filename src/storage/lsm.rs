@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom};
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 static COMMIT_LOG_PATH: &'static str = "/tmp/pancake/commit_log.data";
 static SSTABLE_DIR_PATH: &'static str = "/tmp/pancake/sstables";
@@ -15,14 +16,17 @@ static MEMTABLE_COMPACTION_SIZE_THRESH: usize = 3;
 /// Its content corresponds to the append-only commit log.
 /// The memtable and commit log will be flushed to a (on-disk SSTable, in-memory sparse seeks of this SSTable) pair, at a later time.
 #[derive(Default)]
+#[derive(Debug)]
 struct Memtable(BTreeMap<Key, Value>);
 
 /// One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file.
+#[derive(Debug)]
 struct SSTable {
     path: PathBuf,
     idx: BTreeMap<Key, u64>,
 }
 
+#[derive(Debug)]
 pub struct State {
     memtable: Memtable,
     commit_log: Option<File>,
@@ -55,7 +59,9 @@ impl State {
     }
 
     pub fn flush_memtable(&mut self) -> Result<()> {
-        let path = PathBuf::from("/tmp/pancake/sstables/1.data");
+        let path = PathBuf::from(format!(
+            "/tmp/pancake/sstables/{}.data",
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros()));
         let sstable = write_sstable(&self.memtable, path)?;
         self.sstables.push(sstable);
         self.memtable.0.clear();
@@ -102,10 +108,8 @@ fn write_sstable(memtable: &Memtable, path: PathBuf) -> Result<SSTable> {
         .truncate(true)
         .open(&path)?;
 
-    for (i, kv) in memtable.0.iter().enumerate() {
-        if i % SSTABLE_IDX_SPARSENESS == 0 {
-            serde::write_kv(kv.0, Some(&kv.1), &mut file)?;
-        }
+    for kv in memtable.0.iter() {
+        serde::write_kv(kv.0, Some(&kv.1), &mut file)?;
     }
 
     Ok(read_sstable(path)?)
@@ -118,7 +122,7 @@ fn read_sstable(path: PathBuf) -> Result<SSTable> {
 
     let mut file = File::open(&path)?;
     let iter = serde::KeyValueIterator { file: &mut file };
-    for (delta_offset, key, _) in iter {
+    for (delta_offset, key, _) in iter.step_by(SSTABLE_IDX_SPARSENESS) {
         idx.insert(key, offset as u64);
         offset += delta_offset;
     }
