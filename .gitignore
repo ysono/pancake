@@ -1,1 +1,4 @@
 /target
+
+# Reserve this path for `ln -s /tmp/pancake ./data`
+/data

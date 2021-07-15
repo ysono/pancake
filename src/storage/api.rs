@@ -3,8 +3,8 @@ use std::ops::Deref;
 
 /// API Key type.
 /// Newtype of String.
-#[derive(PartialEq, PartialOrd, Eq, Ord)]
-pub struct Key (pub String);
+#[derive(PartialEq, PartialOrd, Eq, Ord, Debug)]
+pub struct Key(pub String);
 
 impl Deref for Key {
     type Target = String;
@@ -21,8 +21,3 @@ pub enum Value {
     // Text(String),
     Bytes(Vec<u8>),
 }
-
-
-
-// static mut STATE: State = State::default();
-// static mut STATE: Box<State> = Box::new(State::default());
