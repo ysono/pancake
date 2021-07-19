@@ -28,7 +28,7 @@ impl Memtable {
         }
 
         let mut file = File::open(path)?;
-        let iter = serde::KeyValueIterator::from(&mut file);
+        let iter = serde::KeyValueIterator::from(file);
         for file_data in iter {
             let (_, key, maybe_val) = file_data?;
             match maybe_val {
@@ -73,7 +73,7 @@ impl SSTable {
         let mut offset = 0usize;
 
         let mut file = File::open(&path)?;
-        let iter = serde::KeyValueIterator::from(&mut file);
+        let iter = serde::KeyValueIterator::from(file);
         for file_data in iter.step_by(SSTABLE_IDX_SPARSENESS) {
             let (delta_offset, key, _) = file_data?;
             idx.insert(key, offset as u64);
@@ -102,7 +102,7 @@ impl SSTable {
         file.seek(SeekFrom::Start(file_offset))?;
 
         // TODO Create a second kind of iterator so that we're not unnecessarily reading value items from file into heap.
-        let ss_iter = serde::KeyValueIterator::from(&mut file);
+        let ss_iter = serde::KeyValueIterator::from(file);
         for file_data in ss_iter {
             let (_, key, maybe_val) = file_data?;
             if &key == k {
