@@ -81,18 +81,25 @@ fn deserialize_val(bytes: Vec<u8>) -> Value {
     Value::Bytes(bytes)
 }
 
-pub struct KeyValueIterator<'a> {
-    pub file: &'a mut File,
+pub struct KeyValueIterator {
+    file: File,
 }
 
-impl Iterator for KeyValueIterator<'_> {
+impl From<File> for KeyValueIterator {
+    fn from(file: File) -> Self {
+        Self { file }
+    }
+}
+
+impl Iterator for KeyValueIterator {
     type Item = Result<(usize, Key, Option<Value>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match read_item(self.file).unwrap() {
+        // TODO(btc): if the iterator returns an error, perhaps it should continue to return errors for all subsequent calls?
+        match read_item(&mut self.file).unwrap() {
             FileItem::EOF => None,
             FileItem::Item(_, None) => Some(Err(anyhow!("Read key as a zero-byte item."))),
-            FileItem::Item(key_raw_size, Some(key_bytes)) => match read_item(self.file).unwrap() {
+            FileItem::Item(key_raw_size, Some(key_bytes)) => match read_item(&mut self.file).unwrap() {
                 FileItem::EOF => Some(Err(anyhow!("Key without value."))),
                 FileItem::Item(val_raw_size, maybe_val_bytes) => {
                     let size = key_raw_size + val_raw_size;

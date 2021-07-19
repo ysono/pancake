@@ -20,15 +20,15 @@ static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 struct Memtable(BTreeMap<Key, Value>);
 
 impl Memtable {
-    fn read_from_commit_log(path: &PathBuf) -> Result<Memtable> {
-        let mut memtable = Memtable::default();
+    fn read_from_commit_log(path: &PathBuf) -> Result<Self> {
+        let mut memtable = Self::default();
 
         if !path.exists() {
             return Ok(memtable);
         }
 
         let mut file = File::open(path)?;
-        let iter = serde::KeyValueIterator { file: &mut file };
+        let iter = serde::KeyValueIterator::from(file);
         for file_data in iter {
             let (_, key, maybe_val) = file_data?;
             match maybe_val {
@@ -73,7 +73,7 @@ impl SSTable {
         let mut offset = 0usize;
 
         let mut file = File::open(&path)?;
-        let iter = serde::KeyValueIterator { file: &mut file };
+        let iter = serde::KeyValueIterator::from(file);
         for file_data in iter.step_by(SSTABLE_IDX_SPARSENESS) {
             let (delta_offset, key, _) = file_data?;
             idx.insert(key, offset as u64);
@@ -102,7 +102,7 @@ impl SSTable {
         file.seek(SeekFrom::Start(file_offset))?;
 
         // TODO Create a second kind of iterator so that we're not unnecessarily reading value items from file into heap.
-        let ss_iter = serde::KeyValueIterator { file: &mut file };
+        let ss_iter = serde::KeyValueIterator::from(file);
         for file_data in ss_iter {
             let (_, key, maybe_val) = file_data?;
             if &key == k {
@@ -177,7 +177,6 @@ impl State {
 }
 
 pub fn put(s: &mut State, k: Key, v: Option<Value>) -> Result<()> {
-    // TODO(btc): maybe change return type to return a Result (perhaps not anyhow though)
     serde::write_kv(&k, v.as_ref(), s.commit_log.as_mut().unwrap())?;
 
     match v {
