@@ -38,15 +38,8 @@ impl Memtable {
         let file = File::open(path)?;
         let iter = serde::KeyValueIterator::from(file);
         for file_data in iter {
-            let (key, maybe_val) = file_data;
-            match maybe_val {
-                None => {
-                    self.remove(&key);
-                }
-                Some(val) => {
-                    self.insert(key, val);
-                }
-            }
+            let (key, val) = file_data;
+            self.insert(key, val);
         }
         Ok(())
     }
@@ -60,30 +53,40 @@ struct SSTable {
 }
 
 impl SSTable {
+    fn is_kv_in_mem(kv_i: usize) -> bool {
+        kv_i % SSTABLE_IDX_SPARSENESS == SSTABLE_IDX_SPARSENESS - 1
+    }
+
     fn write_from_memtable(memtable: &Memtable, path: PathBuf) -> Result<SSTable> {
+        let mut idx = BTreeMap::<Key, u64>::new();
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
             .open(&path)?;
+        let mut offset = 0usize;
+        for (kv_i, (k, v)) in memtable.iter().enumerate() {
+            let delta_offset = serde::serialize_kv(k, v, &mut file)?;
 
-        for kv in memtable.iter() {
-            serde::write_kv(kv.0, Some(&kv.1), &mut file)?;
+            if SSTable::is_kv_in_mem(kv_i) {
+                idx.insert((*k).clone(), offset as u64);
+            }
+
+            offset += delta_offset;
         }
 
-        // (It would be more efficient to create idx as we write, rather than reread.)
-        SSTable::read_from_file(path)
+        Ok(SSTable{path, idx})
     }
 
     fn read_from_file(path: PathBuf) -> Result<SSTable> {
         let mut idx = BTreeMap::<Key, u64>::new();
         let mut file = File::open(&path)?;
         let mut offset = 0usize;
-        for item_ct in 0usize.. {
-            let deser_key = item_ct % SSTABLE_IDX_SPARSENESS == SSTABLE_IDX_SPARSENESS - 1;
+        for kv_i in 0usize.. {
+            let deser_key = SSTable::is_kv_in_mem(kv_i);
             match serde::read_kv(&mut file, deser_key, |_| false)? {
                 serde::FileKeyValue::EOF => break,
-                serde::FileKeyValue::KeyValue(delta_offset, maybe_key, _) => {
+                serde::FileKeyValue::KV(delta_offset, maybe_key, _) => {
                     if let Some(key) = maybe_key {
                         idx.insert(key, offset as u64);
                     }
@@ -117,7 +120,7 @@ impl SSTable {
         loop {
             match serde::read_kv(&mut file, true, |read_key| read_key == k)? {
                 serde::FileKeyValue::EOF => break,
-                serde::FileKeyValue::KeyValue(_, _, Some(val)) => return Ok(Some(val)),
+                serde::FileKeyValue::KV(_, _, Some(val)) => return Ok(Some(val)),
                 _ => continue,
             }
         }
@@ -229,17 +232,10 @@ impl LSM {
         Ok(())
     }
 
-    pub fn put(&mut self, k: Key, v: Option<Value>) -> Result<()> {
-        serde::write_kv(&k, v.as_ref(), &mut self.commit_log)?;
+    pub fn put(&mut self, k: Key, v: Value) -> Result<()> {
+        serde::serialize_kv(&k, &v, &mut self.commit_log)?;
 
-        match v {
-            Some(v) => {
-                self.memtable.insert(k, v);
-            }
-            None => {
-                self.memtable.remove(&k);
-            }
-        }
+        self.memtable.insert(k, v);
 
         if self.memtable.len() >= MEMTABLE_FLUSH_SIZE_THRESH {
             self.flush_memtable()?;
@@ -257,12 +253,12 @@ impl LSM {
                 return Ok(Some(v.clone()));
             }
         }
+        // TODO bloom filter here
         for ss in self.sstables.iter().rev() {
             let v = ss.search(&k)?;
             if v.is_some() {
                 return Ok(v);
             }
-            // TODO bloom filter
         }
         Ok(None)
     }
