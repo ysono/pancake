@@ -8,11 +8,7 @@ fn put(s: &mut lsm::LSM, k: &String, v: Option<String>) {
         None => Value::Tombstone,
         Some(v) => Value::Bytes(v.as_bytes().to_vec()),
     };
-    s.put(
-        Key(k.clone()),
-        v
-    )
-    .unwrap();
+    s.put(Key(k.clone()), v).unwrap();
 }
 
 fn get(s: &mut lsm::LSM, k: String) -> Option<Value> {

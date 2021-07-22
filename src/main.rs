@@ -1,6 +1,4 @@
-fn main() {
-
-}
+fn main() {}
 
 // fn temp() {
 //     use std::sync::{Arc, Mutex, RwLock};

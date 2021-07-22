@@ -1,6 +1,6 @@
 use super::api::{Key, Value};
 use super::serde;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
@@ -38,7 +38,7 @@ impl Memtable {
         let file = File::open(path)?;
         let iter = serde::KeyValueIterator::from(file);
         for file_data in iter {
-            let (key, val) = file_data;
+            let (key, val) = file_data?;
             self.insert(key, val);
         }
         Ok(())
@@ -75,7 +75,7 @@ impl SSTable {
             offset += delta_offset;
         }
 
-        Ok(SSTable{path, idx})
+        Ok(SSTable { path, idx })
     }
 
     fn read_from_file(path: PathBuf) -> Result<SSTable> {
@@ -185,6 +185,7 @@ impl LSM {
             .append(true)
             .open(&new_cl_path)?;
         let old_cl_path: PathBuf;
+
         {
             // TODO MutexGuard here
             let old_mt = mem::replace(&mut self.memtable, Memtable::default());
@@ -194,15 +195,18 @@ impl LSM {
             old_cl_path = mem::replace(&mut self.commit_log_path, new_cl_path);
         }
 
-        let new_sst = SSTable::write_from_memtable(
-            self.memtable_in_flush.as_ref().unwrap(),
-            new_path(SSTABLES_DIR_PATH),
-        )?;
+        let mtf = self
+            .memtable_in_flush
+            .as_ref()
+            .ok_or(anyhow!("Unexpected error: no memtable being flushed"))?;
+        let new_sst = SSTable::write_from_memtable(mtf, new_path(SSTABLES_DIR_PATH))?;
+
         {
             // TODO MutexGuard here
             self.sstables.push(new_sst);
             self.memtable_in_flush.take();
         }
+
         fs::remove_file(old_cl_path)?;
 
         if self.sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH {

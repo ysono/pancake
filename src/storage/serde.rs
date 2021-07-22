@@ -1,9 +1,9 @@
 use super::api::{Key, Value};
 use anyhow::{anyhow, Result};
+use derive_more::From;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem::size_of;
-use derive_more::From;
 
 fn serialize_key(k: &Key, w: &mut impl Write) -> Result<usize> {
     let pre_sz = w.write(&k.len().to_le_bytes())?;
@@ -18,7 +18,7 @@ fn serialize_val(v: &Value, w: &mut impl Write) -> Result<usize> {
             let pre_sz = w.write(&bytes.len().to_le_bytes())?;
             let datum_sz = w.write(bytes)?;
             pre_sz + datum_sz
-        },
+        }
     };
     Ok(sz)
 }
@@ -88,19 +88,19 @@ where
     F: Fn(&Key) -> bool,
 {
     let (key_sz, maybe_key) = match read_item(file, deser_key)? {
-        FileItem::EOF => { return Ok(FileKeyValue::EOF); }
+        FileItem::EOF => return Ok(FileKeyValue::EOF),
         FileItem::Skip(sz) => (sz, None),
-        FileItem::Empty(_) => { return Err(anyhow!("Read key as a zero-byte item.")); }
+        FileItem::Empty(_) => return Err(anyhow!("Read key as a zero-byte item.")),
         FileItem::Item(sz, bytes) => (sz, Some(deserialize_key(bytes)?)),
     };
 
     let deser_val = match &maybe_key {
         None => false,
-        Some(key) => deser_val(key)
+        Some(key) => deser_val(key),
     };
 
     let (val_sz, maybe_val) = match read_item(file, deser_val)? {
-        FileItem::EOF => { return Err(anyhow!("Key without value.")) }
+        FileItem::EOF => return Err(anyhow!("Key without value.")),
         FileItem::Skip(sz) => (sz, None),
         FileItem::Empty(sz) => (sz, Some(Value::Tombstone)),
         FileItem::Item(sz, bytes) => (sz, Some(deserialize_val(bytes))),
@@ -117,15 +117,15 @@ pub struct KeyValueIterator {
 }
 
 impl Iterator for KeyValueIterator {
-    type Item = (Key, Value);
+    type Item = Result<(Key, Value)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // TODO(btc): if read_kv returns an error, perhaps it should continue to return errors for all subsequent calls?
-        match read_kv(&mut self.file, true, |_| true).unwrap() {
-            FileKeyValue::EOF => None,
-            FileKeyValue::KV(_, maybe_key, maybe_val) => {
-                Some((maybe_key.unwrap(), maybe_val.unwrap()))
-            }
+        match read_kv(&mut self.file, true, |_| true) {
+            Err(e) => Some(Err(e)),
+            Ok(FileKeyValue::EOF) => None,
+            Ok(FileKeyValue::KV(_, Some(key), Some(val))) => Some(Ok((key, val))),
+            _ => Some(Err(anyhow!("Error in read_kv logic"))),
         }
     }
 }
