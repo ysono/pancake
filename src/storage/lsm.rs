@@ -7,6 +7,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Seek, SeekFrom};
 use std::mem;
 use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 static COMMIT_LOGS_DIR_PATH: &'static str = "/tmp/pancake/commit_logs";
@@ -128,13 +129,16 @@ impl SSTable {
     }
 }
 
-#[derive(Debug)]
-pub struct LSM {
+struct LSMHead {
     memtable: Memtable,
     commit_log_path: PathBuf,
     commit_log: File,
     memtable_in_flush: Option<Memtable>,
-    sstables: Vec<SSTable>,
+}
+
+pub struct LSM {
+    head: Arc<RwLock<LSMHead>>,
+    sstables: Arc<RwLock<Vec<SSTable>>>,
 }
 
 impl LSM {
@@ -145,7 +149,7 @@ impl LSM {
         let mut memtable = Memtable::default();
         let mut commit_log_path = None;
         let dir_iter = std::fs::read_dir(COMMIT_LOGS_DIR_PATH)?;
-        // Assume alphabetical order.
+        // TODO sort alphabetically.
         for dir_entry in dir_iter {
             let path = dir_entry?.path();
             memtable.update_from_commit_log(&path)?;
@@ -159,7 +163,7 @@ impl LSM {
             .append(true)
             .open(&commit_log_path)?;
 
-        // Assume alphabetical order.
+        // TODO sort alphabetically.
         let sstables: Vec<SSTable> = fs::read_dir(SSTABLES_DIR_PATH)?
             .map(|entry_result| {
                 let path = entry_result.unwrap().path();
@@ -168,11 +172,13 @@ impl LSM {
             .collect();
 
         let ret = LSM {
-            memtable,
-            commit_log_path,
-            commit_log,
-            memtable_in_flush: None,
-            sstables,
+            head: Arc::new(RwLock::new(LSMHead {
+                memtable,
+                commit_log_path,
+                commit_log,
+                memtable_in_flush: None,
+            })),
+            sstables: Arc::new(RwLock::new(sstables)),
         };
         Ok(ret)
     }
@@ -184,30 +190,40 @@ impl LSM {
             .write(true)
             .append(true)
             .open(&new_cl_path)?;
-        let old_cl_path: PathBuf;
-        {
-            // TODO MutexGuard here
-            let old_mt = mem::replace(&mut self.memtable, Memtable::default());
-            self.memtable_in_flush = Some(old_mt);
 
-            self.commit_log = new_cl;
-            old_cl_path = mem::replace(&mut self.commit_log_path, new_cl_path);
+        let old_cl_path = {
+            let mut head = self.head.write().unwrap();
+
+            let old_mt = mem::replace(&mut head.memtable, Memtable::default());
+            head.memtable_in_flush = Some(old_mt);
+
+            head.commit_log = new_cl;
+            mem::replace(&mut head.commit_log_path, new_cl_path)
+        };
+
+        let new_sst = {
+            let head = self.head.read().unwrap();
+            let mtf = head
+                .memtable_in_flush
+                .as_ref()
+                .ok_or(anyhow!("Unexpected error: no memtable being flushed"))?;
+            SSTable::write_from_memtable(mtf, new_path(SSTABLES_DIR_PATH))?
+        };
+
+        let needs_compaction = {
+            let mut sstables = self.sstables.write().unwrap();
+            sstables.push(new_sst);
+            sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH
+        };
+
+        {
+            let mut head = self.head.write().unwrap();
+            head.memtable_in_flush.take();
         }
 
-        let mtf = self
-            .memtable_in_flush
-            .as_ref()
-            .ok_or(anyhow!("Unexpected error: no memtable being flushed"))?;
-        let new_sst = SSTable::write_from_memtable(mtf, new_path(SSTABLES_DIR_PATH))?;
-
-        {
-            // TODO MutexGuard here
-            self.sstables.push(new_sst);
-            self.memtable_in_flush.take();
-        }
         fs::remove_file(old_cl_path)?;
 
-        if self.sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH {
+        if needs_compaction {
             self.compact_sstables()?;
         }
 
@@ -216,14 +232,22 @@ impl LSM {
 
     fn compact_sstables(&mut self) -> Result<()> {
         let mut dense_idx = Memtable::default();
-        for old_sst in self.sstables.iter() {
-            dense_idx.update_from_commit_log(&old_sst.path)?;
-        }
-        let new_sst = SSTable::write_from_memtable(&dense_idx, new_path(SSTABLES_DIR_PATH))?;
 
-        // TODO MutexGuard here
-        // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
-        let old_sst_list = mem::replace(&mut self.sstables, vec![new_sst]);
+        {
+            let sstables = self.sstables.read().unwrap();
+            for old_sst in sstables.iter() {
+                dense_idx.update_from_commit_log(&old_sst.path)?;
+            }
+        }
+
+        let new_sst = SSTable::write_from_memtable(&dense_idx, new_path(SSTABLES_DIR_PATH))?;
+        let new_sst_list = vec![new_sst];
+
+        let old_sst_list = {
+            let mut sstables = self.sstables.write().unwrap();
+            mem::replace(&mut *sstables, new_sst_list)
+        };
+
         for old_sst in old_sst_list {
             fs::remove_file(&old_sst.path)?;
         }
@@ -232,11 +256,17 @@ impl LSM {
     }
 
     pub fn put(&mut self, k: Key, v: Value) -> Result<()> {
-        serde::serialize_kv(&k, &v, &mut self.commit_log)?;
+        let needs_flushing = {
+            let mut head = self.head.write().unwrap();
 
-        self.memtable.insert(k, v);
+            serde::serialize_kv(&k, &v, &mut head.commit_log)?;
 
-        if self.memtable.len() >= MEMTABLE_FLUSH_SIZE_THRESH {
+            head.memtable.insert(k, v);
+
+            head.memtable.len() >= MEMTABLE_FLUSH_SIZE_THRESH
+        };
+
+        if needs_flushing {
             self.flush_memtable()?;
         }
 
@@ -244,34 +274,27 @@ impl LSM {
     }
 
     pub fn get(&self, k: Key) -> Result<Option<Value>> {
-        if let Some(v) = self.memtable.get(&k) {
-            return Ok(Some(v.clone()));
-        }
-        if let Some(mtf) = &self.memtable_in_flush {
-            if let Some(v) = mtf.get(&k) {
+        {
+            let head = self.head.read().unwrap();
+            if let Some(v) = head.memtable.get(&k) {
                 return Ok(Some(v.clone()));
+            }
+            if let Some(mtf) = &head.memtable_in_flush {
+                if let Some(v) = mtf.get(&k) {
+                    return Ok(Some(v.clone()));
+                }
             }
         }
         // TODO bloom filter here
-        for ss in self.sstables.iter().rev() {
-            let v = ss.search(&k)?;
-            if v.is_some() {
-                return Ok(v);
+        {
+            let sstables = self.sstables.read().unwrap();
+            for ss in sstables.iter().rev() {
+                let v = ss.search(&k)?;
+                if v.is_some() {
+                    return Ok(v);
+                }
             }
         }
         Ok(None)
     }
 }
-
-// TODO
-// background job: flush
-//   1. flush memtable to sstable
-//   1. swap new memtable and commit log
-//   This is to run also when quitting.
-// background job: compact
-//   1. read multiple ss tables
-//   1. compact
-//   1. flush new ss table(s)
-//   1. swap new ss table(s)' in-mem idx and files
-// handle requests in multi threads
-// tests
