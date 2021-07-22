@@ -1,6 +1,7 @@
 use super::api::{Key, Value};
 use super::serde;
 use anyhow::Result;
+use derive_more::{Deref, DerefMut};
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Seek, SeekFrom};
@@ -29,7 +30,7 @@ fn new_path(parent_path: &str) -> PathBuf {
 /// The memtable: in-memory sorted map of the most recently put items.
 /// Its content corresponds to the append-only commit log.
 /// The memtable and commit log will be flushed to a (on-disk SSTable, in-memory sparse seeks of this SSTable) pair, at a later time.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Deref, DerefMut)]
 struct Memtable(BTreeMap<Key, Value>);
 
 impl Memtable {
@@ -40,10 +41,10 @@ impl Memtable {
             let (key, maybe_val) = file_data;
             match maybe_val {
                 None => {
-                    self.0.remove(&key);
+                    self.remove(&key);
                 }
                 Some(val) => {
-                    self.0.insert(key, val);
+                    self.insert(key, val);
                 }
             }
         }
@@ -66,7 +67,7 @@ impl SSTable {
             .truncate(true)
             .open(&path)?;
 
-        for kv in memtable.0.iter() {
+        for kv in memtable.iter() {
             serde::write_kv(kv.0, Some(&kv.1), &mut file)?;
         }
 
@@ -233,14 +234,14 @@ impl LSM {
 
         match v {
             Some(v) => {
-                self.memtable.0.insert(k, v);
+                self.memtable.insert(k, v);
             }
             None => {
-                self.memtable.0.remove(&k);
+                self.memtable.remove(&k);
             }
         }
 
-        if self.memtable.0.len() >= MEMTABLE_FLUSH_SIZE_THRESH {
+        if self.memtable.len() >= MEMTABLE_FLUSH_SIZE_THRESH {
             self.flush_memtable()?;
         }
 
@@ -248,11 +249,11 @@ impl LSM {
     }
 
     pub fn get(&self, k: Key) -> Result<Option<Value>> {
-        if let Some(v) = self.memtable.0.get(&k) {
+        if let Some(v) = self.memtable.get(&k) {
             return Ok(Some(v.clone()));
         }
         if let Some(mtf) = &self.memtable_in_flush {
-            if let Some(v) = mtf.0.get(&k) {
+            if let Some(v) = mtf.get(&k) {
                 return Ok(Some(v.clone()));
             }
         }
