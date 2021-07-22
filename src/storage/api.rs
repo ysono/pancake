@@ -1,9 +1,9 @@
-use derive_more::Deref;
+use derive_more::{Deref, From};
 use std::cmp::{Eq, Ord, PartialEq, PartialOrd};
 
 /// API Key type.
 /// Newtype of String.
-#[derive(PartialEq, PartialOrd, Eq, Ord, Debug, Deref, Clone)]
+#[derive(PartialEq, PartialOrd, Eq, Ord, Debug, From, Deref, Clone)]
 pub struct Key(pub String);
 
 /// API Value type.

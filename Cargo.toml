@@ -8,4 +8,10 @@ edition = "2018"
 [dependencies]
 anyhow = "*"
 derive_more = "*"
+futures = "*"
+hyper = { version = "*", features = ["full"] }
+routerify = "*"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
 rand = "*"
