@@ -185,7 +185,6 @@ impl LSM {
             .append(true)
             .open(&new_cl_path)?;
         let old_cl_path: PathBuf;
-
         {
             // TODO MutexGuard here
             let old_mt = mem::replace(&mut self.memtable, Memtable::default());
@@ -206,7 +205,6 @@ impl LSM {
             self.sstables.push(new_sst);
             self.memtable_in_flush.take();
         }
-
         fs::remove_file(old_cl_path)?;
 
         if self.sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH {
