@@ -1,18 +1,10 @@
+use derive_more::Deref;
 use std::cmp::{Eq, Ord, PartialEq, PartialOrd};
-use std::ops::Deref;
 
 /// API Key type.
 /// Newtype of String.
-#[derive(PartialEq, PartialOrd, Eq, Ord, Debug)]
+#[derive(PartialEq, PartialOrd, Eq, Ord, Debug, Deref)]
 pub struct Key(pub String);
-
-impl Deref for Key {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 /// API Value type.
 #[derive(Debug, Clone)]

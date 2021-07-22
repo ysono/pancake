@@ -1,47 +1,54 @@
 use super::api::{Key, Value};
 use super::serde;
 use anyhow::Result;
+use derive_more::{Deref, DerefMut};
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Seek, SeekFrom};
+use std::mem;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-static COMMIT_LOG_PATH: &'static str = "/tmp/pancake/commit_log.data";
-static SSTABLE_DIR_PATH: &'static str = "/tmp/pancake/sstables";
-static SSTABLE_IDX_SPARSENESS: usize = 4;
-static MEMTABLE_FLUSH_SIZE_THRESH: usize = 3;
+static COMMIT_LOGS_DIR_PATH: &'static str = "/tmp/pancake/commit_logs";
+static SSTABLES_DIR_PATH: &'static str = "/tmp/pancake/sstables";
+static SSTABLE_IDX_SPARSENESS: usize = 3;
+static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;
 static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
+
+fn new_path(parent_path: &str) -> PathBuf {
+    let mut path = PathBuf::from(parent_path);
+    path.push(format!(
+        "{}.data",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros()
+    ));
+    path
+}
 
 /// The memtable: in-memory sorted map of the most recently put items.
 /// Its content corresponds to the append-only commit log.
 /// The memtable and commit log will be flushed to a (on-disk SSTable, in-memory sparse seeks of this SSTable) pair, at a later time.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Deref, DerefMut)]
 struct Memtable(BTreeMap<Key, Value>);
 
 impl Memtable {
-    fn read_from_commit_log(path: &PathBuf) -> Result<Self> {
-        let mut memtable = Self::default();
-
-        if !path.exists() {
-            return Ok(memtable);
-        }
-
-        let mut file = File::open(path)?;
+    fn update_from_commit_log(&mut self, path: &PathBuf) -> Result<()> {
+        let file = File::open(path)?;
         let iter = serde::KeyValueIterator::from(file);
         for file_data in iter {
-            let (_, key, maybe_val) = file_data?;
+            let (key, maybe_val) = file_data;
             match maybe_val {
                 None => {
-                    memtable.0.remove(&key);
+                    self.remove(&key);
                 }
                 Some(val) => {
-                    memtable.0.insert(key, val);
+                    self.insert(key, val);
                 }
             }
         }
-
-        Ok(memtable)
+        Ok(())
     }
 }
 
@@ -60,24 +67,30 @@ impl SSTable {
             .truncate(true)
             .open(&path)?;
 
-        for kv in memtable.0.iter() {
+        for kv in memtable.iter() {
             serde::write_kv(kv.0, Some(&kv.1), &mut file)?;
         }
 
-        Ok(SSTable::read_from_file(path)?)
+        // (It would be more efficient to create idx as we write, rather than reread.)
+        SSTable::read_from_file(path)
     }
 
     fn read_from_file(path: PathBuf) -> Result<SSTable> {
         let mut idx = BTreeMap::<Key, u64>::new();
-
-        let mut offset = 0usize;
-
         let mut file = File::open(&path)?;
-        let iter = serde::KeyValueIterator::from(file);
-        for file_data in iter.step_by(SSTABLE_IDX_SPARSENESS) {
-            let (delta_offset, key, _) = file_data?;
-            idx.insert(key, offset as u64);
-            offset += delta_offset;
+        let mut offset = 0usize;
+        for item_ct in 0usize.. {
+            let deser_key = item_ct % SSTABLE_IDX_SPARSENESS == SSTABLE_IDX_SPARSENESS - 1;
+            match serde::read_kv(&mut file, deser_key, |_| false)? {
+                serde::FileKeyValue::EOF => break,
+                serde::FileKeyValue::KeyValue(delta_offset, maybe_key, _) => {
+                    if let Some(key) = maybe_key {
+                        idx.insert(key, offset as u64);
+                    }
+
+                    offset += delta_offset;
+                }
+            }
         }
 
         Ok(SSTable { path, idx })
@@ -101,15 +114,11 @@ impl SSTable {
         let mut file = File::open(&self.path)?;
         file.seek(SeekFrom::Start(file_offset))?;
 
-        // TODO Create a second kind of iterator so that we're not unnecessarily reading value items from file into heap.
-        let ss_iter = serde::KeyValueIterator::from(file);
-        for file_data in ss_iter {
-            let (_, key, maybe_val) = file_data?;
-            if &key == k {
-                return Ok(maybe_val);
-            }
-            if &key > k {
-                break;
+        loop {
+            match serde::read_kv(&mut file, true, |read_key| read_key == k)? {
+                serde::FileKeyValue::EOF => break,
+                serde::FileKeyValue::KeyValue(_, _, Some(val)) => return Ok(Some(val)),
+                _ => continue,
             }
         }
         Ok(None)
@@ -117,99 +126,145 @@ impl SSTable {
 }
 
 #[derive(Debug)]
-pub struct State {
+pub struct LSM {
     memtable: Memtable,
-    commit_log: Option<File>,
+    commit_log_path: PathBuf,
+    commit_log: File,
+    memtable_in_flush: Option<Memtable>,
     sstables: Vec<SSTable>,
 }
 
-impl State {
-    pub fn init() -> Result<State> {
-        std::fs::create_dir_all(SSTABLE_DIR_PATH)?;
+impl LSM {
+    pub fn init() -> Result<LSM> {
+        std::fs::create_dir_all(COMMIT_LOGS_DIR_PATH)?;
+        std::fs::create_dir_all(SSTABLES_DIR_PATH)?;
 
-        let memtable = Memtable::read_from_commit_log(&PathBuf::from(COMMIT_LOG_PATH))?;
+        let mut memtable = Memtable::default();
+        let mut commit_log_path = None;
+        let dir_iter = std::fs::read_dir(COMMIT_LOGS_DIR_PATH)?;
+        // Assume alphabetical order.
+        for dir_entry in dir_iter {
+            let path = dir_entry?.path();
+            memtable.update_from_commit_log(&path)?;
+            commit_log_path = Some(path);
+        }
 
+        let commit_log_path = commit_log_path.unwrap_or(new_path(COMMIT_LOGS_DIR_PATH));
         let commit_log = OpenOptions::new()
             .create(true)
             .write(true)
             .append(true)
-            .open(COMMIT_LOG_PATH)?;
+            .open(&commit_log_path)?;
 
-        let sstables: Vec<SSTable> = std::fs::read_dir(SSTABLE_DIR_PATH)?
-            .map(|res| res.map(|e| e.path()))
-            .map(|path| SSTable::read_from_file(path.unwrap()).unwrap())
+        // Assume alphabetical order.
+        let sstables: Vec<SSTable> = fs::read_dir(SSTABLES_DIR_PATH)?
+            .map(|entry_result| {
+                let path = entry_result.unwrap().path();
+                SSTable::read_from_file(path).unwrap()
+            })
             .collect();
 
-        let ret = State {
+        let ret = LSM {
             memtable,
-            commit_log: Some(commit_log),
+            commit_log_path,
+            commit_log,
+            memtable_in_flush: None,
             sstables,
         };
         Ok(ret)
     }
 
-    pub fn flush_memtable(&mut self) -> Result<()> {
-        let path = PathBuf::from(format!(
-            "/tmp/pancake/sstables/{}.data",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_micros()
-        ));
-        let sstable = SSTable::write_from_memtable(&self.memtable, path)?;
-        self.sstables.push(sstable);
-        self.memtable.0.clear();
-        self.commit_log.take(); // Close the file.
-        self.commit_log = Some(
-            OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(true)
-                .open(COMMIT_LOG_PATH)?,
-        );
+    fn flush_memtable(&mut self) -> Result<()> {
+        let new_cl_path = new_path(COMMIT_LOGS_DIR_PATH);
+        let new_cl = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&new_cl_path)?;
+        let old_cl_path: PathBuf;
+        {
+            // TODO MutexGuard here
+            let old_mt = mem::replace(&mut self.memtable, Memtable::default());
+            self.memtable_in_flush = Some(old_mt);
+
+            self.commit_log = new_cl;
+            old_cl_path = mem::replace(&mut self.commit_log_path, new_cl_path);
+        }
+
+        let new_sst = SSTable::write_from_memtable(
+            self.memtable_in_flush.as_ref().unwrap(),
+            new_path(SSTABLES_DIR_PATH),
+        )?;
+        {
+            // TODO MutexGuard here
+            self.sstables.push(new_sst);
+            self.memtable_in_flush.take();
+        }
+        fs::remove_file(old_cl_path)?;
 
         if self.sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH {
-            // TODO compact
+            self.compact_sstables()?;
         }
 
         Ok(())
     }
-}
 
-pub fn put(s: &mut State, k: Key, v: Option<Value>) -> Result<()> {
-    serde::write_kv(&k, v.as_ref(), s.commit_log.as_mut().unwrap())?;
+    fn compact_sstables(&mut self) -> Result<()> {
+        let mut dense_idx = Memtable::default();
+        for old_sst in self.sstables.iter() {
+            dense_idx.update_from_commit_log(&old_sst.path)?;
+        }
+        let new_sst = SSTable::write_from_memtable(&dense_idx, new_path(SSTABLES_DIR_PATH))?;
 
-    match v {
-        Some(v) => {
-            s.memtable.0.insert(k, v);
+        let old_sst_list: Vec<SSTable>;
+        {
+            // TODO MutexGuard here
+            // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
+            old_sst_list = mem::replace(&mut self.sstables, vec![new_sst]);
         }
-        None => {
-            s.memtable.0.remove(&k);
+        for old_sst in old_sst_list {
+            fs::remove_file(&old_sst.path)?;
         }
+
+        Ok(())
     }
 
-    if s.memtable.0.len() >= MEMTABLE_FLUSH_SIZE_THRESH {
-        s.flush_memtable()?;
-    }
+    pub fn put(&mut self, k: Key, v: Option<Value>) -> Result<()> {
+        serde::write_kv(&k, v.as_ref(), &mut self.commit_log)?;
 
-    Ok(())
-}
-
-pub fn get(s: &State, k: Key) -> Result<Option<Value>> {
-    match s.memtable.0.get(&k) {
-        Some(v) => Ok(Some(v.clone())),
-        None => {
-            let mut found = None;
-            for ss in s.sstables.iter() {
-                let v = ss.search(&k)?;
-                if v.is_some() {
-                    found = v;
-                    break;
-                }
-                // TODO bloom filter
+        match v {
+            Some(v) => {
+                self.memtable.insert(k, v);
             }
-            Ok(found)
+            None => {
+                self.memtable.remove(&k);
+            }
         }
+
+        if self.memtable.len() >= MEMTABLE_FLUSH_SIZE_THRESH {
+            self.flush_memtable()?;
+        }
+
+        Ok(())
+    }
+
+    pub fn get(&self, k: Key) -> Result<Option<Value>> {
+        if let Some(v) = self.memtable.get(&k) {
+            return Ok(Some(v.clone()));
+        }
+        if let Some(mtf) = &self.memtable_in_flush {
+            if let Some(v) = mtf.get(&k) {
+                return Ok(Some(v.clone()));
+            }
+        }
+        for ss in self.sstables.iter().rev() {
+            let v = ss.search(&k)?;
+            if v.is_some() {
+                return Ok(v);
+            }
+            // TODO bloom filter
+        }
+        Ok(None)
     }
 }
 

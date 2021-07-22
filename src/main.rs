@@ -1,20 +1,19 @@
 use pancake::storage::api::*;
 use pancake::storage::lsm;
+use rand;
+use std::collections::BTreeSet;
 
-fn put(s: &mut lsm::State, k: &str, v: Option<&str>) {
-    lsm::put(
-        s,
-        Key(String::from(k)),
-        v.map(|v| Value::Bytes(v.as_bytes().to_vec())),
-    )
-    .unwrap();
+fn put(s: &mut lsm::LSM, k: String, v: Option<String>) {
+    s.put(Key(k), v.map(|v| Value::Bytes(v.as_bytes().to_vec())))
+        .unwrap();
 }
 
-fn get(s: &mut lsm::State, k: &str) -> Option<Value> {
-    lsm::get(s, Key(String::from(k))).unwrap()
+fn get(s: &mut lsm::LSM, k: String) -> Option<Value> {
+    s.get(Key(k)).unwrap()
 }
-fn get_print(s: &mut lsm::State, k: &str) {
-    match get(s, k) {
+
+fn get_print(s: &mut lsm::LSM, k: String) {
+    match get(s, k.clone()) {
         None => {
             println!("{} ... No such key", k)
         }
@@ -25,15 +24,36 @@ fn get_print(s: &mut lsm::State, k: &str) {
 }
 
 fn main() {
-    let mut s = lsm::State::init().unwrap();
+    let mut s = lsm::LSM::init().unwrap();
 
-    put(&mut s, "key1", Some("val1"));
-    put(&mut s, "key2", Some("valasdf2"));
-    put(&mut s, "keyasdf3", None);
-    put(&mut s, "key4", Some("v4"));
+    let mut ii = BTreeSet::new();
 
-    get_print(&mut s, "key1");
-    get_print(&mut s, "key2");
-    get_print(&mut s, "keyasdf3");
-    get_print(&mut s, "key4");
+    for _ in 0..37 {
+        let i = rand::random::<u8>();
+
+        let insert = rand::random::<f32>() < 0.7;
+
+        let key = format!("key{}", i);
+        let val = if insert {
+            Some(format!("val{}", i))
+        } else {
+            None
+        };
+
+        put(&mut s, key, val);
+
+        ii.insert(i);
+    }
+
+    for i in ii.iter() {
+        get_print(&mut s, format!("key{}", i));
+    }
 }
+
+
+// fn temp() {
+//     use std::sync::{Arc, Mutex, RwLock};
+
+//     let mutex = RwLock::new(8);
+//     mutex.borrow
+// }

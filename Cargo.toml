@@ -7,3 +7,5 @@ edition = "2018"
 
 [dependencies]
 anyhow = "*"
+derive_more = "*"
+rand = "*"
