@@ -149,7 +149,6 @@ impl State {
         }
 
         let commit_log_path = commit_log_path.unwrap_or(new_path(COMMIT_LOGS_DIR_PATH));
-        println!("New head commit log path is {:?}", commit_log_path);
         let commit_log = OpenOptions::new()
             .create(true)
             .write(true)
@@ -157,9 +156,11 @@ impl State {
             .open(&commit_log_path)?;
 
         // Assume alphabetical order.
-        let sstables: Vec<SSTable> = std::fs::read_dir(SSTABLES_DIR_PATH)?
-            .map(|dir_iter| dir_iter.map(|e| e.path()))
-            .map(|path| SSTable::read_from_file(path.unwrap()).unwrap())
+        let sstables: Vec<SSTable> = fs::read_dir(SSTABLES_DIR_PATH)?
+            .map(|entry_result| {
+                let path = entry_result.unwrap().path();
+                SSTable::read_from_file(path).unwrap()
+            })
             .collect();
 
         let ret = State {
@@ -189,13 +190,15 @@ impl State {
             old_cl_path = mem::replace(&mut self.commit_log_path, new_cl_path);
         }
 
-        let new_sst = SSTable::write_from_memtable(self.memtable_in_flush.as_ref().unwrap(), new_path(SSTABLES_DIR_PATH))?;
+        let new_sst = SSTable::write_from_memtable(
+            self.memtable_in_flush.as_ref().unwrap(),
+            new_path(SSTABLES_DIR_PATH),
+        )?;
         {
             // TODO MutexGuard here
             self.sstables.push(new_sst);
             self.memtable_in_flush.take();
         }
-        println!("Removing {:?}", &old_cl_path);
         fs::remove_file(old_cl_path)?;
 
         if self.sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH {
@@ -224,44 +227,44 @@ impl State {
 
         Ok(())
     }
-}
 
-pub fn put(s: &mut State, k: Key, v: Option<Value>) -> Result<()> {
-    serde::write_kv(&k, v.as_ref(), &mut s.commit_log)?;
+    pub fn put(&mut self, k: Key, v: Option<Value>) -> Result<()> {
+        serde::write_kv(&k, v.as_ref(), &mut self.commit_log)?;
 
-    match v {
-        Some(v) => {
-            s.memtable.0.insert(k, v);
+        match v {
+            Some(v) => {
+                self.memtable.0.insert(k, v);
+            }
+            None => {
+                self.memtable.0.remove(&k);
+            }
         }
-        None => {
-            s.memtable.0.remove(&k);
+
+        if self.memtable.0.len() >= MEMTABLE_FLUSH_SIZE_THRESH {
+            self.flush_memtable()?;
         }
+
+        Ok(())
     }
 
-    if s.memtable.0.len() >= MEMTABLE_FLUSH_SIZE_THRESH {
-        s.flush_memtable()?;
-    }
-
-    Ok(())
-}
-
-pub fn get(s: &State, k: Key) -> Result<Option<Value>> {
-    if let Some(v) = s.memtable.0.get(&k) {
-        return Ok(Some(v.clone()));
-    }
-    if let Some(mtf) = &s.memtable_in_flush {
-        if let Some(v) = mtf.0.get(&k) {
+    pub fn get(&self, k: Key) -> Result<Option<Value>> {
+        if let Some(v) = self.memtable.0.get(&k) {
             return Ok(Some(v.clone()));
         }
-    }
-    for ss in s.sstables.iter().rev() {
-        let v = ss.search(&k)?;
-        if v.is_some() {
-            return Ok(v);
+        if let Some(mtf) = &self.memtable_in_flush {
+            if let Some(v) = mtf.0.get(&k) {
+                return Ok(Some(v.clone()));
+            }
         }
-        // TODO bloom filter
+        for ss in self.sstables.iter().rev() {
+            let v = ss.search(&k)?;
+            if v.is_some() {
+                return Ok(v);
+            }
+            // TODO bloom filter
+        }
+        Ok(None)
     }
-    Ok(None)
 }
 
 // TODO

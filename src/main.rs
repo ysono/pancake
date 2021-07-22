@@ -2,11 +2,12 @@ use pancake::storage::api::*;
 use pancake::storage::lsm;
 
 fn put(s: &mut lsm::State, k: String, v: Option<String>) {
-    lsm::put(s, Key(k), v.map(|v| Value::Bytes(v.as_bytes().to_vec()))).unwrap();
+    s.put(Key(k), v.map(|v| Value::Bytes(v.as_bytes().to_vec())))
+        .unwrap();
 }
 
 fn get(s: &mut lsm::State, k: String) -> Option<Value> {
-    lsm::get(s, Key(k)).unwrap()
+    s.get(Key(k)).unwrap()
 }
 
 fn get_print(s: &mut lsm::State, k: String) {
