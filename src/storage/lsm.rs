@@ -125,7 +125,7 @@ impl SSTable {
 }
 
 #[derive(Debug)]
-pub struct State {
+pub struct LSM {
     memtable: Memtable,
     commit_log_path: PathBuf,
     commit_log: File,
@@ -133,8 +133,8 @@ pub struct State {
     sstables: Vec<SSTable>,
 }
 
-impl State {
-    pub fn init() -> Result<State> {
+impl LSM {
+    pub fn init() -> Result<LSM> {
         std::fs::create_dir_all(COMMIT_LOGS_DIR_PATH)?;
         std::fs::create_dir_all(SSTABLES_DIR_PATH)?;
 
@@ -163,7 +163,7 @@ impl State {
             })
             .collect();
 
-        let ret = State {
+        let ret = LSM {
             memtable,
             commit_log_path,
             commit_log,

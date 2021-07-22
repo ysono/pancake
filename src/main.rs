@@ -3,16 +3,16 @@ use pancake::storage::lsm;
 use rand;
 use std::collections::BTreeSet;
 
-fn put(s: &mut lsm::State, k: String, v: Option<String>) {
+fn put(s: &mut lsm::LSM, k: String, v: Option<String>) {
     s.put(Key(k), v.map(|v| Value::Bytes(v.as_bytes().to_vec())))
         .unwrap();
 }
 
-fn get(s: &mut lsm::State, k: String) -> Option<Value> {
+fn get(s: &mut lsm::LSM, k: String) -> Option<Value> {
     s.get(Key(k)).unwrap()
 }
 
-fn get_print(s: &mut lsm::State, k: String) {
+fn get_print(s: &mut lsm::LSM, k: String) {
     match get(s, k.clone()) {
         None => {
             println!("{} ... No such key", k)
@@ -24,7 +24,7 @@ fn get_print(s: &mut lsm::State, k: String) {
 }
 
 fn main() {
-    let mut s = lsm::State::init().unwrap();
+    let mut s = lsm::LSM::init().unwrap();
 
     let mut ii = BTreeSet::new();
 
@@ -49,3 +49,11 @@ fn main() {
         get_print(&mut s, format!("key{}", i));
     }
 }
+
+
+// fn temp() {
+//     use std::sync::{Arc, Mutex, RwLock};
+
+//     let mutex = RwLock::new(8);
+//     mutex.borrow
+// }
