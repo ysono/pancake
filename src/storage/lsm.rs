@@ -216,12 +216,9 @@ impl LSM {
         }
         let new_sst = SSTable::write_from_memtable(&dense_idx, new_path(SSTABLES_DIR_PATH))?;
 
-        let old_sst_list: Vec<SSTable>;
-        {
-            // TODO MutexGuard here
-            // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
-            old_sst_list = mem::replace(&mut self.sstables, vec![new_sst]);
-        }
+        // TODO MutexGuard here
+        // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
+        let old_sst_list = mem::replace(&mut self.sstables, vec![new_sst]);
         for old_sst in old_sst_list {
             fs::remove_file(&old_sst.path)?;
         }
