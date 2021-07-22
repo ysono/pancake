@@ -1,8 +1,10 @@
 use super::api::{Key, Value};
 use super::serde;
 use super::utils;
+use crate::storage::serde::KeyValueIterator;
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
+use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Seek, SeekFrom};
@@ -114,6 +116,11 @@ impl SSTable {
         }
         Ok(None)
     }
+
+    fn remove_files(&self) -> Result<()> {
+        fs::remove_file(&self.path)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -200,18 +207,76 @@ impl LSM {
     }
 
     fn compact_sstables(&mut self) -> Result<()> {
-        let mut dense_idx = Memtable::default();
-        for old_sst in self.sstables.iter() {
-            dense_idx.update_from_commit_log(&old_sst.path)?;
+        let path = utils::timestamped_path(SSTABLES_DIR_PATH);
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&path)?;
+
+        let mut key_value_iterators = Vec::new();
+        for (index, table) in self.sstables.iter().enumerate() {
+            let p = &table.path;
+            let file = File::open(p)?;
+
+            // NB: the index/position of the sstable is included for the purpose of breaking ties
+            // on duplicate keys.
+            let iter = KeyValueIterator::from(file).zip(std::iter::repeat(index));
+            key_value_iterators.push(iter);
         }
-        let new_sst =
-            SSTable::write_from_memtable(&dense_idx, utils::timestamped_path(SSTABLES_DIR_PATH))?;
+
+        let compacted = key_value_iterators
+            .into_iter()
+            .kmerge_by(|(a, index_a), (b, index_b)| {
+                /*
+                the comparator contract dictates we return true iff |a| is ordered before |b|
+                    or said differently: |a| < |b|.
+
+                for equal keys, we define |a| < |b| iff |a| is more recent.
+                    note: |a| is more recent when index_a > index_b.
+
+                by defining the ordering in this way,
+                    we only keep the first instance of key |k| in the compacted iterator.
+                    duplicate items with key |k| must be discarded.
+                 */
+
+                // guide results to the front of the iterator for early termination
+                if a.is_err() {
+                    return true;
+                }
+                if b.is_err() {
+                    return false;
+                }
+
+                let key_a = &a.as_ref().unwrap().0;
+                let key_b = &b.as_ref().unwrap().0;
+
+                let a_is_equal_but_more_recent = key_a == key_b && index_a > index_b;
+                return key_a < key_b || a_is_equal_but_more_recent;
+            })
+            .map(|a| a.0); // tables[i] is no longer needed
+                           // .unique_by(|(k, _)| k.0.clone()); // keep first instance of |k|
+
+        let mut prev = None;
+        for result in compacted {
+            let (k, v) = result?;
+            if prev.is_some() && &k == prev.as_ref().unwrap() {
+                continue;
+            }
+            serde::serialize_kv(&k, &v, &mut file)?;
+            prev = Some(k);
+        }
+
+        file.sync_all()?;
+
+        // TODO(btc): instead of |read_from_file|, create SSTable index in streaming fashion
+        let new_tables = vec![SSTable::read_from_file(path)?];
 
         // TODO MutexGuard here
         // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
-        let old_sst_list = mem::replace(&mut self.sstables, vec![new_sst]);
-        for old_sst in old_sst_list {
-            fs::remove_file(&old_sst.path)?;
+        let old_tables = mem::replace(&mut self.sstables, new_tables);
+        for table in old_tables {
+            table.remove_files()?;
         }
 
         Ok(())
