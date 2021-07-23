@@ -8,7 +8,7 @@ pub fn timestamped_path(parent_path: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_micros();
-    
+
     // Padding zeros on the left, to ensure that the filenames' alphanumerical order
     // is the same as their order when compared as numbers.
     // When using micros, the base-10 digit count will be 16 for the forseeable future.
