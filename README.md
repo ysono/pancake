@@ -5,6 +5,7 @@
 ### Usage
 
 ```sh
-curl -i localhost:3000/get/mykey
-curl -i -X PUT localhost:3000/put/mykey -d myvalue
+curl -i localhost:3000/key/mykey
+curl -i -X PUT localhost:3000/key/mykey -d myvalue
+curl -i -X DELETE localhost:3000/key/mykey
 ```

@@ -33,7 +33,7 @@ async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
             .body(Body::empty())
             .map_err(|e| anyhow!(e)),
         Some(Value::Bytes(bytes)) => {
-            let body = String::from_utf8(bytes).unwrap();
+            let body = String::from_utf8(bytes)?;
             Ok(Response::new(Body::from(body)))
         }
     }
@@ -45,13 +45,28 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key_raw: &String = parts.param("key").unwrap();
     let key = Key::from(key_raw.clone());
 
-    let val: Vec<u8> = block_on(hyper::body::to_bytes(body)).unwrap().to_vec();
+    let val: Vec<u8> = block_on(hyper::body::to_bytes(body))?.to_vec();
     let val = Value::Bytes(val);
 
     let lsm = parts.data::<Arc<RwLock<LSM>>>().unwrap();
     let mut lsm = lsm.write().unwrap();
 
-    lsm.put(key, val).unwrap();
+    lsm.put(key, val)?;
+
+    Response::builder()
+        .status(StatusCode::NO_CONTENT)
+        .body(Body::empty())
+        .map_err(|e| anyhow!(e))
+}
+
+async fn delete_handler(req: Request<Body>) -> Result<Response<Body>> {
+    let key_raw: &String = req.param("key").unwrap();
+    let key = Key::from(key_raw.clone());
+
+    let lsm = req.data::<Arc<RwLock<LSM>>>().unwrap();
+    let mut lsm = lsm.write().unwrap();
+
+    lsm.put(key, Value::Tombstone)?;
 
     Response::builder()
         .status(StatusCode::NO_CONTENT)
@@ -73,8 +88,9 @@ fn router() -> Router<Body, Error> {
     Router::builder()
         .data(lsm)
         .middleware(Middleware::pre(logger))
-        .get("/get/:key", get_handler)
-        .put("/put/:key", put_handler)
+        .get("/key/:key", get_handler)
+        .put("/key/:key", put_handler)
+        .delete("/key/:key", delete_handler)
         .err_handler_with_info(error_handler)
         .build()
         .unwrap()
