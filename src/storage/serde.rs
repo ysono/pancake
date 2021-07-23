@@ -40,9 +40,9 @@ fn deserialize_val(bytes: Vec<u8>) -> Value {
 
 enum FileItem {
     EOF,
-    Skip(usize),
-    Empty(usize),
-    Item(usize, Vec<u8>),
+    Skip(usize),    // The result when caller requested not to deserialize.
+    Empty(usize),   // The result when caller requested to deserialize, and the length of data bytes is zero.
+    Item(usize, Vec<u8>),   // The result when caller requested to deserialize.
 }
 
 /// From file reads one item, which consists of:
