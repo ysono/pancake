@@ -1,5 +1,6 @@
 use super::api::{Key, Value};
 use super::serde;
+use super::utils;
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
 use std::collections::BTreeMap;
@@ -7,25 +8,12 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Seek, SeekFrom};
 use std::mem;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 static COMMIT_LOGS_DIR_PATH: &'static str = "/tmp/pancake/commit_logs";
 static SSTABLES_DIR_PATH: &'static str = "/tmp/pancake/sstables";
 static SSTABLE_IDX_SPARSENESS: usize = 3;
 static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;
 static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
-
-fn new_path(parent_path: &str) -> PathBuf {
-    let mut path = PathBuf::from(parent_path);
-    path.push(format!(
-        "{}.data",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_micros()
-    ));
-    path
-}
 
 /// The memtable: in-memory sorted map of the most recently put items.
 /// Its content corresponds to the append-only commit log.
@@ -144,28 +132,24 @@ impl LSM {
 
         let mut memtable = Memtable::default();
         let mut commit_log_path = None;
-        let dir_iter = std::fs::read_dir(COMMIT_LOGS_DIR_PATH)?;
-        // Assume alphabetical order.
-        for dir_entry in dir_iter {
-            let path = dir_entry?.path();
+        for path in utils::read_dir_sorted(COMMIT_LOGS_DIR_PATH)? {
             memtable.update_from_commit_log(&path)?;
             commit_log_path = Some(path);
         }
 
-        let commit_log_path = commit_log_path.unwrap_or(new_path(COMMIT_LOGS_DIR_PATH));
+        let commit_log_path =
+            commit_log_path.unwrap_or(utils::timestamped_path(COMMIT_LOGS_DIR_PATH));
         let commit_log = OpenOptions::new()
             .create(true)
             .write(true)
             .append(true)
             .open(&commit_log_path)?;
 
-        // Assume alphabetical order.
-        let sstables: Vec<SSTable> = fs::read_dir(SSTABLES_DIR_PATH)?
-            .map(|entry_result| {
-                let path = entry_result.unwrap().path();
-                SSTable::read_from_file(path).unwrap()
-            })
+        let sstables: Result<Vec<SSTable>> = utils::read_dir_sorted(SSTABLES_DIR_PATH)?
+            .into_iter()
+            .map(SSTable::read_from_file)
             .collect();
+        let sstables = sstables?;
 
         let ret = LSM {
             memtable,
@@ -178,7 +162,7 @@ impl LSM {
     }
 
     fn flush_memtable(&mut self) -> Result<()> {
-        let new_cl_path = new_path(COMMIT_LOGS_DIR_PATH);
+        let new_cl_path = utils::timestamped_path(COMMIT_LOGS_DIR_PATH);
         let new_cl = OpenOptions::new()
             .create(true)
             .write(true)
@@ -198,7 +182,8 @@ impl LSM {
             .memtable_in_flush
             .as_ref()
             .ok_or(anyhow!("Unexpected error: no memtable being flushed"))?;
-        let new_sst = SSTable::write_from_memtable(mtf, new_path(SSTABLES_DIR_PATH))?;
+        let new_sst =
+            SSTable::write_from_memtable(mtf, utils::timestamped_path(SSTABLES_DIR_PATH))?;
 
         {
             // TODO MutexGuard here
@@ -219,7 +204,8 @@ impl LSM {
         for old_sst in self.sstables.iter() {
             dense_idx.update_from_commit_log(&old_sst.path)?;
         }
-        let new_sst = SSTable::write_from_memtable(&dense_idx, new_path(SSTABLES_DIR_PATH))?;
+        let new_sst =
+            SSTable::write_from_memtable(&dense_idx, utils::timestamped_path(SSTABLES_DIR_PATH))?;
 
         // TODO MutexGuard here
         // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
