@@ -38,11 +38,14 @@ fn deserialize_val(bytes: Vec<u8>) -> Value {
     Value::Bytes(bytes)
 }
 
+/// `Skip`: The result when caller requested not to deserialize.
+/// `Empty`: The result when caller requested to deserialize and the length of data bytes is zero.
+/// `Item`: The result when caller requested to deserialize.
 enum FileItem {
     EOF,
-    Skip(usize),    // The result when caller requested not to deserialize.
-    Empty(usize),   // The result when caller requested to deserialize, and the length of data bytes is zero.
-    Item(usize, Vec<u8>),   // The result when caller requested to deserialize.
+    Skip(usize),
+    Empty(usize),
+    Item(usize, Vec<u8>),
 }
 
 /// From file reads one item, which consists of:
@@ -78,11 +81,14 @@ fn read_item(file: &mut File, deser: bool) -> Result<FileItem> {
     }
 }
 
+/// `KV`: The key and value are each an `Option`. Each `Option` reflects whether the caller requested to deserize that part. (The optionality has nothing to do with tombstones.)
 pub enum FileKeyValue {
     EOF,
     KV(usize, Option<Key>, Option<Value>),
 }
 
+/// @arg `deser_key`: Whether to deserialize the key.
+/// @arg `deser_val`: A callable that takes the just-deserialized key and returns whether to deserialize the value. If `deser_key` was false, then regardless of the `deser_val` argument, the value will _not_ be deserialized.
 pub fn read_kv<F>(file: &mut File, deser_key: bool, deser_val: F) -> Result<FileKeyValue>
 where
     F: Fn(&Key) -> bool,
@@ -116,6 +122,7 @@ pub struct KeyValueIterator {
     file: File,
 }
 
+/// This iterator always deserializes both the key and the value.
 impl Iterator for KeyValueIterator {
     type Item = Result<(Key, Value)>;
 
