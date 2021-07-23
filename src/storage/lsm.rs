@@ -117,7 +117,7 @@ impl SSTable {
         Ok(None)
     }
 
-    fn remove_files(&self) -> Result<()> {
+    fn remove_file(&self) -> Result<()> {
         fs::remove_file(&self.path)?;
         Ok(())
     }
@@ -276,7 +276,7 @@ impl LSM {
         // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
         let old_tables = mem::replace(&mut self.sstables, new_tables);
         for table in old_tables {
-            table.remove_files()?;
+            table.remove_file()?;
         }
 
         Ok(())
