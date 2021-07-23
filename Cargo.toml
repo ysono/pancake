@@ -10,6 +10,7 @@ anyhow = "*"
 derive_more = "*"
 futures = "*"
 hyper = { version = "*", features = ["full"] }
+itertools = "*"
 routerify = "*"
 tokio = { version = "1", features = ["full"] }
 
