@@ -1,28 +1,45 @@
 use crate::storage::api::{Key, Value};
 use crate::storage::LSM;
+use anyhow::{anyhow, Error, Result};
 use futures::executor::block_on;
 use hyper::{Body, Request, Response, Server, StatusCode};
 use routerify::prelude::*;
-use routerify::{RequestInfo, Router, RouterService};
+use routerify::{Middleware, RequestInfo, Router, RouterService};
+use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
-use std::{convert::Infallible, net::SocketAddr};
 
-async fn get_handler(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn logger(req: Request<Body>) -> Result<Request<Body>> {
+    println!(
+        "{} {} {}",
+        req.remote_addr(),
+        req.method(),
+        req.uri().path()
+    );
+    Ok(req)
+}
+
+async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key: &String = req.param("key").unwrap();
     let key = Key::from(key.clone());
 
     let lsm = req.data::<Arc<RwLock<LSM>>>().unwrap();
     let lsm = lsm.read().unwrap();
 
-    let maybe_val: Option<Value> = lsm.get(key).unwrap();
-    let val_repr = match maybe_val {
-        Some(Value::Bytes(bytes)) => String::from_utf8(bytes).unwrap(),
-        x => format!("{:?}", x),
-    };
-    Ok(Response::new(Body::from(format!("Got {:?}", val_repr))))
+    let maybe_val: Option<Value> = lsm.get(key)?;
+
+    match maybe_val {
+        None | Some(Value::Tombstone) => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::empty())
+            .map_err(|e| anyhow!(e)),
+        Some(Value::Bytes(bytes)) => {
+            let body = String::from_utf8(bytes).unwrap();
+            Ok(Response::new(Body::from(body)))
+        }
+    }
 }
 
-async fn put_handler(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
     let (parts, body) = req.into_parts();
 
     let key_raw: &String = parts.param("key").unwrap();
@@ -30,20 +47,16 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 
     let val: Vec<u8> = block_on(hyper::body::to_bytes(body)).unwrap().to_vec();
     let val = Value::Bytes(val);
-    let val_repr = match &val {
-        Value::Bytes(bytes) => String::from_utf8(bytes.clone()).unwrap(),
-        x => format!("{:?}", x),
-    };
 
     let lsm = parts.data::<Arc<RwLock<LSM>>>().unwrap();
     let mut lsm = lsm.write().unwrap();
 
     lsm.put(key, val).unwrap();
 
-    Ok(Response::new(Body::from(format!(
-        "Put {:?} {:?}",
-        key_raw, val_repr
-    ))))
+    Response::builder()
+        .status(StatusCode::NO_CONTENT)
+        .body(Body::empty())
+        .map_err(|e| anyhow!(e))
 }
 
 async fn error_handler(err: routerify::RouteError, _: RequestInfo) -> Response<Body> {
@@ -54,11 +67,12 @@ async fn error_handler(err: routerify::RouteError, _: RequestInfo) -> Response<B
         .unwrap()
 }
 
-fn router() -> Router<Body, Infallible> {
+fn router() -> Router<Body, Error> {
     let lsm: Arc<RwLock<LSM>> = Arc::new(RwLock::new(LSM::init().unwrap()));
 
     Router::builder()
         .data(lsm)
+        .middleware(Middleware::pre(logger))
         .get("/get/:key", get_handler)
         .put("/put/:key", put_handler)
         .err_handler_with_info(error_handler)
