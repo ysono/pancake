@@ -1,16 +1,22 @@
 use derive_more::{Deref, From};
 use std::cmp::{Eq, Ord, PartialEq, PartialOrd};
 
-/// API Key type.
-/// Newtype of String.
-#[derive(PartialEq, PartialOrd, Eq, Ord, Debug, From, Deref, Clone)]
-pub struct Key(pub String);
-
-/// API Value type.
-#[derive(Debug, Clone)]
-pub enum Value {
-    Tombstone,
-    // Integer(i64),
-    // Text(String),
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+pub enum Datum {
     Bytes(Vec<u8>),
+    I64(i64),
+    Str(String),
+    Tuple(Vec<Datum>),
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Deref, From, Debug)]
+pub struct Key(pub Datum);
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Deref, Debug)]
+pub struct Value(pub Option<Datum>);
+
+impl From<Datum> for Value {
+    fn from(dat: Datum) -> Self {
+        Self(Some(dat))
+    }
 }

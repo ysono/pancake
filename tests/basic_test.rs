@@ -1,56 +1,109 @@
+use anyhow::Result;
 use pancake::storage::api::*;
 use pancake::storage::lsm;
 use rand;
 use std::collections::BTreeMap;
 
-fn put(s: &mut lsm::LSM, k: &String, v: Option<String>) {
-    let v = match v {
-        None => Value::Tombstone,
-        Some(v) => Value::Bytes(v.as_bytes().to_vec()),
-    };
-    s.put(Key(k.clone()), v).unwrap();
-}
+fn put_then_tomb() -> Result<()> {
+    let mut lsm = lsm::LSM::init()?;
 
-fn get(s: &mut lsm::LSM, k: String) -> Option<Value> {
-    s.get(Key(k)).unwrap()
-}
-
-fn get_print(s: &mut lsm::LSM, k: String, exp_deleted: bool) {
-    match get(s, k.clone()) {
-        None | Some(Value::Tombstone) => {
-            println!("{} ... No such key", k);
-            assert!(exp_deleted);
-        }
-        Some(Value::Bytes(vec)) => {
-            println!("{} ---> {}", k, String::from_utf8(vec).unwrap());
-            assert!(!exp_deleted);
-        }
-    }
-}
-
-#[test]
-fn random_data() {
-    let mut s = lsm::LSM::init().unwrap();
-
-    let mut i_to_deleted = BTreeMap::new();
+    let mut k_to_expected_v = BTreeMap::<Key, Value>::new();
 
     for _ in 0..37 {
         let i = rand::random::<u8>();
 
-        let key = format!("key{}", i);
-        let val = Some(format!("val{}", i));
+        let key = Key(Datum::Str(format!("key{}", i)));
+        let mut val = Value::from(Datum::Str(format!("val{}", i)));
 
-        put(&mut s, &key, val);
+        lsm.put(key.clone(), val.clone())?;
 
-        let is_deleted = rand::random::<f32>() < 0.3;
-        if is_deleted {
-            put(&mut s, &key, None);
-            println!("key {} is del.", i);
+        let keep = rand::random::<f32>() < 0.7;
+        if !keep {
+            val = Value(None);
+            lsm.put(key.clone(), val.clone())?;
         }
-        i_to_deleted.insert(i, is_deleted);
+
+        k_to_expected_v.insert(key, val);
     }
 
-    for (i, is_deleted) in i_to_deleted.iter() {
-        get_print(&mut s, format!("key{}", i), *is_deleted);
+    for (k, exp_v) in k_to_expected_v {
+        let actual_v = lsm.get(k).unwrap();
+        if exp_v != actual_v {
+            panic!("Expected {:?}; got {:?}", exp_v, actual_v);
+        }
     }
+
+    Ok(())
+}
+
+fn nonexistent() -> Result<()> {
+    let lsm = lsm::LSM::init()?;
+
+    let key = Key(Datum::Str(String::from("nonexistent")));
+
+    let res = lsm.get(key)?;
+
+    assert!(res.is_none());
+
+    Ok(())
+}
+
+fn zero_byte_value() -> Result<()> {
+    let mut lsm = lsm::LSM::init()?;
+
+    let key = Key(Datum::Str(String::from("empty")));
+
+    let val = Value::from(Datum::Bytes(vec![]));
+
+    lsm.put(key.clone(), val.clone())?;
+
+    let res = lsm.get(key)?;
+
+    if val != res {
+        panic!("Expected {:?}; got {:?}", val, res);
+    }
+
+    Ok(())
+}
+
+fn tuple() -> Result<()> {
+    let mut lsm = lsm::LSM::init()?;
+
+    let key = Key(Datum::Tuple(vec![
+        Datum::Bytes(vec![16u8, 17u8, 18u8]),
+        Datum::I64(0x123456789abcdef),
+        Datum::Str(String::from("ahoy in tuple")),
+    ]));
+
+    let val = Value::from(Datum::Tuple(vec![
+        Datum::I64(0x1337),
+        Datum::Tuple(vec![
+            Datum::Str(String::from("double-nested 1")),
+            Datum::Str(String::from("double-nested 2")),
+            Datum::Str(String::from("double-nested 3")),
+        ]),
+        Datum::Tuple(vec![]),
+        Datum::I64(0x7331),
+    ]));
+
+    lsm.put(key.clone(), val.clone())?;
+
+    let res = lsm.get(key)?;
+    println!("{:?}", res);
+
+    if res != val {
+        panic!("Mismatch {:?} {:?}", res, val);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_in_single_thread() -> Result<()> {
+    put_then_tomb()?;
+    nonexistent()?;
+    zero_byte_value()?;
+    tuple()?;
+    put_then_tomb()?;
+    Ok(())
 }
