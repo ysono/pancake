@@ -70,7 +70,7 @@ enum DatumType {
     Tuple = 4,
 }
 
-/// @return Total count of bytes that are serialized to file.
+/// @return Total count of bytes that are written to file.
 fn write_item(datum_type: DatumType, datum_bytes: &[u8], w: &mut impl Write) -> Result<usize> {
     let mut span_size = 0usize;
     span_size += size_of::<DatumTypeInt>();
@@ -165,13 +165,14 @@ fn deserialize_optdat(
 
 /// `Skip`:  The result when caller requested not to deserialize.
 /// `Item`:  The result when caller requested to deserialize. `None` means a tombstone.
+/// 
+/// The `usize` item: Total count of bytes that are read from file.
 enum FileItem {
     EOF,
     Skip(usize),
     Item(usize, Option<Datum>),
 }
 
-/// @return Total count of bytes that are deserialized from file.
 fn read_item(file: &mut File, deser: bool) -> Result<FileItem> {
     let mut span_size_buf = [0u8; size_of::<usize>()];
     let mut read_size = file.read(&mut span_size_buf)?;

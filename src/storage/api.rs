@@ -12,6 +12,7 @@ pub enum Datum {
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Deref, From, Debug)]
 pub struct Key(pub Datum);
 
+/// Newtype for `Option<Datum>`. A `Value(None)` specifies a tombstone entry -- either writing a tombstone or reading a tombstone.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Deref, Debug)]
 pub struct Value(pub Option<Datum>);
 
