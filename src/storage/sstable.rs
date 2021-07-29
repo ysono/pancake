@@ -1,5 +1,4 @@
 use crate::storage::api::{Key, Value};
-use crate::storage::lsm::Memtable;
 use crate::storage::{serde, utils};
 use anyhow::Result;
 use core::option::Option;
@@ -14,7 +13,6 @@ use std::path::PathBuf;
 use crate::storage::serde::KeyValueIterator;
 use itertools::Itertools;
 
-type FileOffset = u64;
 
 static SSTABLES_DIR_PATH: &'static str = "/tmp/pancake/sstables";
 static SSTABLE_IDX_SPARSENESS: usize = 3;
