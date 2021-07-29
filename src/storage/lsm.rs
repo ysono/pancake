@@ -20,7 +20,7 @@ static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 /// The memtable: in-memory sorted map of the most recently put items.
 /// Its content corresponds to the append-only commit log.
 /// The memtable and commit log will be flushed to a (on-disk SSTable, in-memory sparse seeks of this SSTable) pair, at a later time.
-#[derive(Default, Debug, Deref, DerefMut)]
+#[derive(Default, Deref, DerefMut)]
 struct Memtable(BTreeMap<Key, Value>);
 
 impl Memtable {
@@ -35,11 +35,13 @@ impl Memtable {
     }
 }
 
+type FileOffset = u64;
+
 /// One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file.
 #[derive(Debug)]
 struct SSTable {
     path: PathBuf,
-    idx: BTreeMap<Key, u64>,
+    idx: BTreeMap<Key, FileOffset>,
 }
 
 impl SSTable {
@@ -48,7 +50,7 @@ impl SSTable {
     }
 
     fn write_from_memtable(memtable: &Memtable, path: PathBuf) -> Result<SSTable> {
-        let mut idx = BTreeMap::<Key, u64>::new();
+        let mut idx = BTreeMap::<Key, FileOffset>::new();
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -59,7 +61,7 @@ impl SSTable {
             let delta_offset = serde::serialize_kv(k, v, &mut file)?;
 
             if SSTable::is_kv_in_mem(kv_i) {
-                idx.insert((*k).clone(), offset as u64);
+                idx.insert((*k).clone(), offset as FileOffset);
             }
 
             offset += delta_offset;
@@ -69,7 +71,7 @@ impl SSTable {
     }
 
     fn read_from_file(path: PathBuf) -> Result<SSTable> {
-        let mut idx = BTreeMap::<Key, u64>::new();
+        let mut idx = BTreeMap::<Key, FileOffset>::new();
         let mut file = File::open(&path)?;
         let mut offset = 0usize;
         for kv_i in 0usize.. {
@@ -78,7 +80,7 @@ impl SSTable {
                 serde::FileKeyValue::EOF => break,
                 serde::FileKeyValue::KV(delta_offset, maybe_key, _) => {
                     if let Some(key) = maybe_key {
-                        idx.insert(key, offset as u64);
+                        idx.insert(key, offset as FileOffset);
                     }
 
                     offset += delta_offset;
@@ -93,6 +95,10 @@ impl SSTable {
     /// The index maps { key (sparse) => file offset }.
     /// 1. Bisect in the in-memory sparse index, to find the lower-bound file offset.
     /// 1. Seek the offset in the file. Then read linearlly in file until either EOF or the last-read key is greater than the sought key.
+    ///
+    /// @return
+    ///     If found within this sstable, then return Some. The content of the Some may be a tombstone: i.e. Some(Value(None)).
+    ///     If not found within this sstable, then return None.
     fn search(&self, k: &Key) -> Result<Option<Value>> {
         // TODO what's the best way to bisect a BTreeMap?
         let idx_pos = self.idx.iter().rposition(|kv| kv.0 <= k);
@@ -110,7 +116,7 @@ impl SSTable {
         loop {
             match serde::read_kv(&mut file, true, |read_key| read_key == k)? {
                 serde::FileKeyValue::EOF => break,
-                serde::FileKeyValue::KV(_, _, Some(val)) => return Ok(Some(val)),
+                serde::FileKeyValue::KV(_, _, found @ Some(_)) => return Ok(found),
                 _ => continue,
             }
         }
@@ -123,7 +129,6 @@ impl SSTable {
     }
 }
 
-#[derive(Debug)]
 pub struct LSM {
     memtable: Memtable,
     commit_log_path: PathBuf,
@@ -255,8 +260,9 @@ impl LSM {
                 return key_a < key_b || a_is_equal_but_more_recent;
             })
             .map(|a| a.0); // tables[i] is no longer needed
-                           // .unique_by(|(k, _)| k.0.clone()); // keep first instance of |k|
 
+        // Manual impl of:
+        // .unique_by(|(k, _)| k.0.clone()); // keep first instance of |k|
         let mut prev = None;
         for result in compacted {
             let (k, v) = result?;
@@ -294,23 +300,23 @@ impl LSM {
         Ok(())
     }
 
-    pub fn get(&self, k: Key) -> Result<Option<Value>> {
+    pub fn get(&self, k: Key) -> Result<Value> {
         if let Some(v) = self.memtable.get(&k) {
-            return Ok(Some(v.clone()));
+            return Ok(v.clone());
         }
         if let Some(mtf) = &self.memtable_in_flush {
             if let Some(v) = mtf.get(&k) {
-                return Ok(Some(v.clone()));
+                return Ok(v.clone());
             }
         }
         // TODO bloom filter here
         for ss in self.sstables.iter().rev() {
             let v = ss.search(&k)?;
-            if v.is_some() {
+            if let Some(v) = v {
                 return Ok(v);
             }
         }
-        Ok(None)
+        Ok(Value(None))
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::storage::api::{Key, Value};
+use crate::storage::api::{Datum, Key, Value};
 use crate::storage::LSM;
 use anyhow::{anyhow, Error, Result};
 use futures::executor::block_on;
@@ -20,20 +20,25 @@ async fn logger(req: Request<Body>) -> Result<Request<Body>> {
 
 async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key: &String = req.param("key").unwrap();
-    let key = Key::from(key.clone());
+    let key = Key(Datum::Str(key.clone()));
 
     let lsm = req.data::<Arc<RwLock<LSM>>>().unwrap();
     let lsm = lsm.read().unwrap();
 
-    let maybe_val: Option<Value> = lsm.get(key)?;
+    let val: Value = lsm.get(key)?;
 
-    match maybe_val {
-        None | Some(Value::Tombstone) => Response::builder()
+    match val.0 {
+        None => Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())
             .map_err(|e| anyhow!(e)),
-        Some(Value::Bytes(bytes)) => {
-            let body = String::from_utf8(bytes)?;
+        Some(val) => {
+            let body: String = match val {
+                Datum::Bytes(bytes) => bytes.iter().map(|b| format!("{:#x}", b)).collect(),
+                Datum::I64(i) => i.to_string(),
+                Datum::Str(s) => s,
+                Datum::Tuple(vec) => format!("{:?}", vec),
+            };
             Ok(Response::new(Body::from(body)))
         }
     }
@@ -42,11 +47,11 @@ async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
 async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
     let (parts, body) = req.into_parts();
 
-    let key_raw: &String = parts.param("key").unwrap();
-    let key = Key::from(key_raw.clone());
+    let key: &String = parts.param("key").unwrap();
+    let key = Key(Datum::Str(key.clone()));
 
     let val: Vec<u8> = block_on(hyper::body::to_bytes(body))?.to_vec();
-    let val = Value::Bytes(val);
+    let val = Value::from(Datum::Bytes(val));
 
     let lsm = parts.data::<Arc<RwLock<LSM>>>().unwrap();
     let mut lsm = lsm.write().unwrap();
@@ -60,13 +65,13 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
 }
 
 async fn delete_handler(req: Request<Body>) -> Result<Response<Body>> {
-    let key_raw: &String = req.param("key").unwrap();
-    let key = Key::from(key_raw.clone());
+    let key: &String = req.param("key").unwrap();
+    let key = Key(Datum::Str(key.clone()));
 
     let lsm = req.data::<Arc<RwLock<LSM>>>().unwrap();
     let mut lsm = lsm.write().unwrap();
 
-    lsm.put(key, Value::Tombstone)?;
+    lsm.put(key, Value(None))?;
 
     Response::builder()
         .status(StatusCode::NO_CONTENT)
