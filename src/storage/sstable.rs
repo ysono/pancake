@@ -23,7 +23,7 @@ static SSTABLE_IDX_SPARSENESS: usize = 3;
 #[derive(Debug)]
 pub struct SSTable {
     path: PathBuf,
-    idx: BTreeMap<Key, FileOffset>,
+    sparse_index: BTreeMap<Key, FileOffset>,
 }
 
 impl SSTable {
@@ -32,7 +32,7 @@ impl SSTable {
     }
 
     pub fn write_from_memtable(memtable: &Memtable, path: PathBuf) -> Result<SSTable> {
-        let mut idx = BTreeMap::<Key, FileOffset>::new();
+        let mut sparse_index = BTreeMap::<Key, FileOffset>::new();
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -43,17 +43,17 @@ impl SSTable {
             let delta_offset = serde::serialize_kv(k, v, &mut file)?;
 
             if SSTable::is_kv_in_mem(kv_i) {
-                idx.insert((*k).clone(), offset as FileOffset);
+                sparse_index.insert((*k).clone(), offset as FileOffset);
             }
 
             offset += delta_offset;
         }
 
-        Ok(SSTable { path, idx })
+        Ok(SSTable { path, sparse_index })
     }
 
     pub fn read_from_file(path: PathBuf) -> Result<SSTable> {
-        let mut idx = BTreeMap::<Key, FileOffset>::new();
+        let mut sparse_index = BTreeMap::<Key, FileOffset>::new();
         let mut file = File::open(&path)?;
         let mut offset = 0usize;
         for kv_i in 0usize.. {
@@ -62,7 +62,7 @@ impl SSTable {
                 serde::FileKeyValue::EOF => break,
                 serde::FileKeyValue::KV(delta_offset, maybe_key, _) => {
                     if let Some(key) = maybe_key {
-                        idx.insert(key, offset as FileOffset);
+                        sparse_index.insert(key, offset as FileOffset);
                     }
 
                     offset += delta_offset;
@@ -70,7 +70,7 @@ impl SSTable {
             }
         }
 
-        Ok(SSTable { path, idx })
+        Ok(SSTable { path, sparse_index })
     }
 
     /// Both the in-memory index and the file are sorted by key.
@@ -83,11 +83,11 @@ impl SSTable {
     ///     If not found within this sstable, then return None.
     pub fn get(&self, k: &Key) -> Result<Option<Value>> {
         // TODO what's the best way to bisect a BTreeMap?
-        let idx_pos = self.idx.iter().rposition(|kv| kv.0 <= k);
+        let idx_pos = self.sparse_index.iter().rposition(|kv| kv.0 <= k);
         let file_offset = match idx_pos {
             None => 0u64,
             Some(idx_pos) => {
-                let (_, file_offset) = self.idx.iter().nth(idx_pos).unwrap();
+                let (_, file_offset) = self.sparse_index.iter().nth(idx_pos).unwrap();
                 *file_offset
             }
         };
