@@ -160,16 +160,3 @@ impl LSM {
         Ok(Value(None))
     }
 }
-
-// TODO
-// background job: flush
-//   1. flush memtable to sstable
-//   1. swap new memtable and commit log
-//   This is to run also when quitting.
-// background job: compact
-//   1. read multiple ss tables
-//   1. compact
-//   1. flush new ss table(s)
-//   1. swap new ss table(s)' in-mem idx and files
-// handle requests in multi threads
-// tests
