@@ -14,7 +14,6 @@ use std::io::Seek;
 use std::io::SeekFrom;
 use std::path::PathBuf;
 
-type FileOffset = u64;
 
 static SSTABLES_DIR_PATH: &'static str = "/tmp/pancake/sstables";
 static SSTABLE_IDX_SPARSENESS: usize = 3;
