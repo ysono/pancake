@@ -1,18 +1,18 @@
 use crate::storage::api::{Key, Value};
 use crate::storage::lsm::Memtable;
+use crate::storage::serde::KeyValueIterator;
 use crate::storage::{serde, utils};
 use anyhow::Result;
 use core::option::Option;
 use core::option::Option::{None, Some};
 use core::result::Result::Ok;
+use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::path::PathBuf;
-use crate::storage::serde::KeyValueIterator;
-use itertools::Itertools;
 
 type FileOffset = u64;
 
@@ -81,7 +81,7 @@ impl SSTable {
     /// @return
     ///     If found within this sstable, then return Some. The content of the Some may be a tombstone: i.e. Some(Value(None)).
     ///     If not found within this sstable, then return None.
-    pub fn search(&self, k: &Key) -> Result<Option<Value>> {
+    pub fn get(&self, k: &Key) -> Result<Option<Value>> {
         // TODO what's the best way to bisect a BTreeMap?
         let idx_pos = self.idx.iter().rposition(|kv| kv.0 <= k);
         let file_offset = match idx_pos {
@@ -110,7 +110,7 @@ impl SSTable {
         Ok(())
     }
 
-    pub fn compact<'a, I: Iterator<Item=&'a Self>>(tables: I) -> Result<Vec<Self>> {
+    pub fn compact<'a, I: Iterator<Item = &'a Self>>(tables: I) -> Result<Vec<Self>> {
         let path = utils::timestamped_path(SSTABLES_DIR_PATH);
         let mut file = OpenOptions::new()
             .create(true)

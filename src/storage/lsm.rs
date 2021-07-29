@@ -5,9 +5,6 @@ use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
-use itertools::Itertools;
-
-use crate::storage::serde::KeyValueIterator;
 
 use super::api::{Key, Value};
 use super::serde;
@@ -120,7 +117,6 @@ impl LSM {
     }
 
     fn compact_sstables(&mut self) -> Result<()> {
-
         let new_tables = SSTable::compact(self.sstables.iter())?;
 
         // TODO MutexGuard here
@@ -156,7 +152,7 @@ impl LSM {
         }
         // TODO bloom filter here
         for ss in self.sstables.iter().rev() {
-            let v = ss.search(&k)?;
+            let v = ss.get(&k)?;
             if let Some(v) = v {
                 return Ok(v);
             }
