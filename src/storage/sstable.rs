@@ -22,7 +22,7 @@ static SSTABLE_IDX_SPARSENESS: usize = 3;
 /// One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file.
 #[derive(Debug)]
 pub struct SSTable {
-    pub path: PathBuf,
+    path: PathBuf,
     idx: BTreeMap<Key, FileOffset>,
 }
 
