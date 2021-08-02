@@ -9,7 +9,7 @@ fn put_then_tomb() -> Result<()> {
 
     let mut k_to_expected_v = BTreeMap::<Key, Value>::new();
 
-    for _ in 0..500 {
+    for _ in 0..100 {
         let i = rand::random::<u16>();
 
         let key = Key(Datum::Str(format!("key{}", i)));
