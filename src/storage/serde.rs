@@ -51,6 +51,8 @@
 use super::api::{Datum, Key, Value};
 use anyhow::{anyhow, Result};
 use derive_more::From;
+use num_derive::{FromPrimitive};
+use num_traits::{FromPrimitive};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem::size_of;
@@ -58,10 +60,10 @@ use std::mem::size_of;
 /*
 We manually map enum members to data_type integers because:
 - Rust does not support specifying discriminants on an enum containing non-simple members. https://github.com/rust-lang/rust/issues/60553
-- One member, Tombstone, is outside the Datum enum. So crates like `num-traits` and `num-derive` can't help.
+- One member, Tombstone, is outside the Datum enum.
 - An automatic discriminant may change w/ enum definition change or compilation, according to [`std::mem::discriminant()`] doc.
 */
-type DatumTypeInt = u8;
+#[derive(FromPrimitive)]
 enum DatumType {
     Tombstone = 0,
     Bytes = 1,
@@ -69,6 +71,8 @@ enum DatumType {
     Str = 3,
     Tuple = 4,
 }
+
+type DatumTypeInt = u8;
 
 /// @return Total count of bytes that are written to file.
 fn write_item(datum_type: DatumType, datum_bytes: &[u8], w: &mut impl Write) -> Result<usize> {
@@ -122,24 +126,26 @@ fn deserialize_optdat(
     datum_size: usize,
     r: &mut File,
 ) -> Result<Option<Datum>> {
+    let datum_type = DatumType::from_u8(datum_type)
+        .ok_or(anyhow!("Unknown datum type {}", datum_type))?;
     match datum_type {
-        _ if datum_type == DatumType::Tombstone as DatumTypeInt => Ok(None),
-        _ if datum_type == DatumType::Bytes as DatumTypeInt => {
+        DatumType::Tombstone => Ok(None),
+        DatumType::Bytes => {
             let mut buf = vec![0u8; datum_size];
             r.read_exact(&mut buf)?;
             Ok(Some(Datum::Bytes(buf)))
         }
-        _ if datum_type == DatumType::I64 as DatumTypeInt => {
+        DatumType::I64 => {
             let mut buf = [0u8; size_of::<i64>()];
             r.read_exact(&mut buf)?;
             Ok(Some(Datum::I64(i64::from_le_bytes(buf))))
         }
-        _ if datum_type == DatumType::Str as DatumTypeInt => {
+        DatumType::Str => {
             let mut buf = vec![0u8; datum_size];
             r.read_exact(&mut buf)?;
             Ok(Some(Datum::Str(String::from_utf8(buf)?)))
         }
-        _ if datum_type == DatumType::Tuple as DatumTypeInt => {
+        DatumType::Tuple => {
             let mut tup_len_buf = [0u8; size_of::<usize>()];
             r.read_exact(&mut tup_len_buf)?;
             let tup_len = usize::from_le_bytes(tup_len_buf);
@@ -159,7 +165,6 @@ fn deserialize_optdat(
 
             Ok(Some(Datum::Tuple(datum)))
         }
-        _ => Err(anyhow!(format!("Unknown datum_type {}", datum_type))),
     }
 }
 
