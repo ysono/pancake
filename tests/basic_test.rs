@@ -1,12 +1,25 @@
 use anyhow::Result;
 use pancake::storage::api::*;
-use pancake::storage::lsm;
+use pancake::storage::{lsm, LSM};
 use rand;
 use std::collections::BTreeMap;
 use std::env::temp_dir;
 
-fn put_then_tomb() -> Result<()> {
-    let mut lsm = lsm::LSM::open(temp_dir())?;
+
+#[test]
+fn test_in_single_thread() -> Result<()> {
+    let dir = temp_dir();
+    let mut lsm = lsm::LSM::open(dir)?;
+    
+    put_then_tomb(&mut lsm)?;
+    nonexistent(&mut lsm)?;
+    zero_byte_value(&mut lsm)?;
+    tuple(&mut lsm)?;
+    put_then_tomb(&mut lsm)?;
+    Ok(())
+}
+
+fn put_then_tomb(lsm: &mut LSM) -> Result<()> {
 
     let mut k_to_expected_v = BTreeMap::<Key, Value>::new();
 
@@ -37,8 +50,7 @@ fn put_then_tomb() -> Result<()> {
     Ok(())
 }
 
-fn nonexistent() -> Result<()> {
-    let lsm = lsm::LSM::open(temp_dir())?;
+fn nonexistent(lsm: &mut LSM) -> Result<()> {
 
     let key = Key(Datum::Str(String::from("nonexistent")));
 
@@ -49,8 +61,7 @@ fn nonexistent() -> Result<()> {
     Ok(())
 }
 
-fn zero_byte_value() -> Result<()> {
-    let mut lsm = lsm::LSM::open(temp_dir())?;
+fn zero_byte_value(lsm: &mut LSM) -> Result<()> {
 
     let key = Key(Datum::Str(String::from("empty")));
 
@@ -67,8 +78,7 @@ fn zero_byte_value() -> Result<()> {
     Ok(())
 }
 
-fn tuple(p: P) -> Result<()> {
-    let mut lsm = lsm::LSM::open(p)?;
+fn tuple(lsm: &mut LSM) -> Result<()> {
 
     let key = Key(Datum::Tuple(vec![
         Datum::Bytes(vec![16u8, 17u8, 18u8]),
@@ -96,16 +106,5 @@ fn tuple(p: P) -> Result<()> {
         panic!("Mismatch {:?} {:?}", res, val);
     }
 
-    Ok(())
-}
-
-#[test]
-fn test_in_single_thread() -> Result<()> {
-    let p = temp_dir();
-    put_then_tomb(p)?;
-    nonexistent(p)?;
-    zero_byte_value(p)?;
-    tuple(p)?;
-    put_then_tomb(p)?;
     Ok(())
 }
