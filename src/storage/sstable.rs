@@ -23,7 +23,7 @@ static SSTABLE_IDX_SPARSENESS: usize = 3;
 #[derive(Debug)]
 pub struct SSTable {
     path: PathBuf,
-    sparse_index: BTreeMap<Key, FileOffset>,
+    sparse_index: SparseIndex,
 }
 
 impl SSTable {
@@ -32,7 +32,7 @@ impl SSTable {
     }
 
     pub fn write_from_memtable(memtable: &Memtable, path: PathBuf) -> Result<SSTable> {
-        let mut sparse_index = BTreeMap::<Key, FileOffset>::new();
+        let mut sparse_index = SparseIndex::new();
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -53,7 +53,7 @@ impl SSTable {
     }
 
     pub fn read_from_file(path: PathBuf) -> Result<SSTable> {
-        let mut sparse_index = BTreeMap::<Key, FileOffset>::new();
+        let mut sparse_index = SparseIndex::new();
         let mut file = File::open(&path)?;
         let mut offset = 0usize;
         for kv_i in 0usize.. {
@@ -82,15 +82,7 @@ impl SSTable {
     ///     If found within this sstable, then return Some. The content of the Some may be a tombstone: i.e. Some(Value(None)).
     ///     If not found within this sstable, then return None.
     pub fn get(&self, k: &Key) -> Result<Option<Value>> {
-        // TODO what's the best way to bisect a BTreeMap?
-        let idx_pos = self.sparse_index.iter().rposition(|kv| kv.0 <= k);
-        let file_offset = match idx_pos {
-            None => 0u64,
-            Some(idx_pos) => {
-                let (_, file_offset) = self.sparse_index.iter().nth(idx_pos).unwrap();
-                *file_offset
-            }
-        };
+        let file_offset = self.sparse_index.find_file_offset(k);
 
         let mut file = File::open(&self.path)?;
         file.seek(SeekFrom::Start(file_offset))?;
@@ -178,5 +170,34 @@ impl SSTable {
         let t = Self::read_from_file(path)?;
 
         Ok(vec![t])
+    }
+}
+
+#[derive(Debug)]
+struct SparseIndex {
+    map: BTreeMap<Key, FileOffset>
+}
+
+impl SparseIndex {
+    fn new() -> Self {
+        Self {
+            map: Default::default(),
+        }
+    }
+
+    fn insert(&mut self, key: Key, offset: FileOffset) {
+        self.map.insert(key, offset);
+    }
+
+    fn find_file_offset(&self, key: &Key) -> FileOffset {
+        // TODO what's the best way to bisect a BTreeMap?
+        let idx_pos = self.map.iter().rposition(|kv| kv.0 <= k);
+        match idx_pos {
+            None => 0u64,
+            Some(idx_pos) => {
+                let (_, file_offset) = self.map.iter().nth(idx_pos).unwrap();
+                *file_offset
+            }
+        }
     }
 }
