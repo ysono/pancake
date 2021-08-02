@@ -82,7 +82,7 @@ impl SSTable {
     ///     If found within this sstable, then return Some. The content of the Some may be a tombstone: i.e. Some(Value(None)).
     ///     If not found within this sstable, then return None.
     pub fn get(&self, k: &Key) -> Result<Option<Value>> {
-        let file_offset = self.sparse_index.find_file_offset(k);
+        let file_offset = self.sparse_index.nearest_preceding_file_offset(k);
 
         let mut file = File::open(&self.path)?;
         file.seek(SeekFrom::Start(file_offset))?;
@@ -189,9 +189,9 @@ impl SparseIndex {
         self.map.insert(key, offset);
     }
 
-    fn find_file_offset(&self, key: &Key) -> FileOffset {
+    fn nearest_preceding_file_offset(&self, key: &Key) -> FileOffset {
         // TODO what's the best way to bisect a BTreeMap?
-        let idx_pos = self.map.iter().rposition(|kv| kv.0 <= k);
+        let idx_pos = self.map.iter().rposition(|kv| kv.0 <= key);
         match idx_pos {
             None => 0u64,
             Some(idx_pos) => {
