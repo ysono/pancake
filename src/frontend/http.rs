@@ -88,7 +88,7 @@ async fn error_handler(err: routerify::RouteError, _: RequestInfo) -> Response<B
 }
 
 fn router() -> Router<Body, Error> {
-    let lsm: Arc<RwLock<LSM>> = Arc::new(RwLock::new(LSM::init().unwrap()));
+    let lsm: Arc<RwLock<LSM>> = Arc::new(RwLock::new(LSM::open("/tmp/pancake").unwrap()));
 
     Router::builder()
         .data(lsm)

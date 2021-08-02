@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::mem;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
@@ -11,8 +11,8 @@ use super::serde;
 use super::utils;
 use crate::storage::sstable::SSTable;
 
-static COMMIT_LOGS_DIR_PATH: &'static str = "/tmp/pancake/commit_logs";
-static SSTABLES_DIR_PATH: &'static str = "/tmp/pancake/sstables";
+static COMMIT_LOGS_DIR_PATH: &'static str = "commit_logs";
+static SSTABLES_DIR_PATH: &'static str = "sstables";
 static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;
 static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 
@@ -35,6 +35,7 @@ impl Memtable {
 }
 
 pub struct LSM {
+    path: PathBuf,
     memtable: Memtable,
     commit_log_path: PathBuf,
     commit_log: File,
@@ -43,32 +44,33 @@ pub struct LSM {
 }
 
 impl LSM {
-    pub fn init() -> Result<LSM> {
-        std::fs::create_dir_all(COMMIT_LOGS_DIR_PATH)?;
-        std::fs::create_dir_all(SSTABLES_DIR_PATH)?;
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<LSM> {
+        std::fs::create_dir_all(path.as_ref().join(COMMIT_LOGS_DIR_PATH))?;
+        std::fs::create_dir_all(path.as_ref().join(SSTABLES_DIR_PATH))?;
 
         let mut memtable = Memtable::default();
         let mut commit_log_path = None;
-        for path in utils::read_dir_sorted(COMMIT_LOGS_DIR_PATH)? {
+        for path in utils::read_dir_sorted(path.as_ref().join(COMMIT_LOGS_DIR_PATH))? {
             memtable.update_from_commit_log(&path)?;
             commit_log_path = Some(path);
         }
 
         let commit_log_path =
-            commit_log_path.unwrap_or(utils::timestamped_path(COMMIT_LOGS_DIR_PATH));
+            commit_log_path.unwrap_or(utils::new_timestamped_path(path.as_ref().join(COMMIT_LOGS_DIR_PATH)));
         let commit_log = OpenOptions::new()
             .create(true)
             .write(true)
             .append(true)
             .open(&commit_log_path)?;
 
-        let sstables: Result<Vec<SSTable>> = utils::read_dir_sorted(SSTABLES_DIR_PATH)?
+        let sstables: Result<Vec<SSTable>> = utils::read_dir_sorted(path.as_ref().join(SSTABLES_DIR_PATH))?
             .into_iter()
             .map(SSTable::read_from_file)
             .collect();
         let sstables = sstables?;
 
         let ret = LSM {
+            path: path.as_ref().into(),
             memtable,
             commit_log_path,
             commit_log,
@@ -79,7 +81,7 @@ impl LSM {
     }
 
     fn flush_memtable(&mut self) -> Result<()> {
-        let new_cl_path = utils::timestamped_path(COMMIT_LOGS_DIR_PATH);
+        let new_cl_path = utils::new_timestamped_path(self.path.join(COMMIT_LOGS_DIR_PATH));
         let new_cl = OpenOptions::new()
             .create(true)
             .write(true)
@@ -100,7 +102,7 @@ impl LSM {
             .as_ref()
             .ok_or(anyhow!("Unexpected error: no memtable being flushed"))?;
         let new_sst =
-            SSTable::write_from_memtable(mtf, utils::timestamped_path(SSTABLES_DIR_PATH))?;
+            SSTable::write_from_memtable(mtf, utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH)))?;
 
         {
             // TODO MutexGuard here

@@ -3,9 +3,10 @@ use pancake::storage::api::*;
 use pancake::storage::lsm;
 use rand;
 use std::collections::BTreeMap;
+use std::env::temp_dir;
 
 fn put_then_tomb() -> Result<()> {
-    let mut lsm = lsm::LSM::init()?;
+    let mut lsm = lsm::LSM::open(temp_dir())?;
 
     let mut k_to_expected_v = BTreeMap::<Key, Value>::new();
 
@@ -37,7 +38,7 @@ fn put_then_tomb() -> Result<()> {
 }
 
 fn nonexistent() -> Result<()> {
-    let lsm = lsm::LSM::init()?;
+    let lsm = lsm::LSM::open(temp_dir())?;
 
     let key = Key(Datum::Str(String::from("nonexistent")));
 
@@ -49,7 +50,7 @@ fn nonexistent() -> Result<()> {
 }
 
 fn zero_byte_value() -> Result<()> {
-    let mut lsm = lsm::LSM::init()?;
+    let mut lsm = lsm::LSM::open(temp_dir())?;
 
     let key = Key(Datum::Str(String::from("empty")));
 
@@ -66,8 +67,8 @@ fn zero_byte_value() -> Result<()> {
     Ok(())
 }
 
-fn tuple() -> Result<()> {
-    let mut lsm = lsm::LSM::init()?;
+fn tuple(p: P) -> Result<()> {
+    let mut lsm = lsm::LSM::open(p)?;
 
     let key = Key(Datum::Tuple(vec![
         Datum::Bytes(vec![16u8, 17u8, 18u8]),
@@ -100,10 +101,11 @@ fn tuple() -> Result<()> {
 
 #[test]
 fn test_in_single_thread() -> Result<()> {
-    put_then_tomb()?;
-    nonexistent()?;
-    zero_byte_value()?;
-    tuple()?;
-    put_then_tomb()?;
+    let p = temp_dir();
+    put_then_tomb(p)?;
+    nonexistent(p)?;
+    zero_byte_value(p)?;
+    tuple(p)?;
+    put_then_tomb(p)?;
     Ok(())
 }
