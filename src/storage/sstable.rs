@@ -192,10 +192,14 @@ impl SparseIndex {
 
     fn nearest_preceding_file_offset(&self, key: &Key) -> FileOffset {
         // TODO what's the best way to bisect a BTreeMap? this appears to have O(n) cost
-        let idx_pos = self.map.iter().rposition(|kv| kv.0 <= key).unwrap_or(0u64);
-
+        let idx_pos = self.map.iter().rposition(|kv| kv.0 <= key);
+        match idx_pos {
+            None => 0u64,
+            Some(idx_pos) => {
+                let (_, file_offset) = self.map.iter().nth(idx_pos).unwrap();
+                *file_offset
+            }
+        }
         // TODO/FIXME: iter().nth appears to incur a O(n) cost
-        let (_, file_offset) = self.map.iter().nth(idx_pos).unwrap();
-        return *file_offset;
     }
 }
