@@ -111,7 +111,7 @@ impl SSTable {
     }
 
     pub fn compact<'a, I: Iterator<Item = &'a Self>>(tables: I) -> Result<Vec<Self>> {
-        let path = utils::timestamped_path(SSTABLES_DIR_PATH);
+        let path = utils::new_timestamped_path(SSTABLES_DIR_PATH);
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)

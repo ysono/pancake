@@ -1,9 +1,9 @@
 use anyhow::Result;
 use std::io::Error as IOError;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub fn timestamped_path(parent_path: &str) -> PathBuf {
+pub fn new_timestamped_path<P: AsRef<Path>>(parent_path: P) -> PathBuf {
     let micros = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -16,12 +16,10 @@ pub fn timestamped_path(parent_path: &str) -> PathBuf {
     // This may be useful on a system with misconfigured time.
     let filename = format!("{:0>18}.data", micros);
 
-    let mut path = PathBuf::from(parent_path);
-    path.push(filename);
-    path
+    parent_path.as_ref().join(filename)
 }
 
-pub fn read_dir_sorted(parent_path: &str) -> Result<Vec<PathBuf>, IOError> {
+pub fn read_dir_sorted<P: AsRef<Path>>(parent_path: P) -> Result<Vec<PathBuf>, IOError> {
     let dir_iter = std::fs::read_dir(parent_path)?;
 
     let paths_result: Result<Vec<_>, _> = dir_iter
