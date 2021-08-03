@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
 
-use crate::storage::api::{Key, OptDatum, Value};
+use crate::storage::api::{Datum, OptDatum};
 use crate::storage::serde::{KeyValueIterator, Serializable};
 use crate::storage::sstable::SSTable;
 use crate::storage::utils;
@@ -20,7 +20,7 @@ static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 /// Its content corresponds to the append-only commit log.
 /// The memtable and commit log will be flushed to a (on-disk SSTable, in-memory sparse seeks of this SSTable) pair, at a later time.
 #[derive(Default, Deref, DerefMut)]
-pub struct Memtable(BTreeMap<Key, Value>);
+pub struct Memtable(BTreeMap<Datum, OptDatum>);
 
 impl Memtable {
     fn update_from_commit_log(&mut self, path: &PathBuf) -> Result<()> {
@@ -136,7 +136,7 @@ impl LSMTree {
         Ok(())
     }
 
-    pub fn put(&mut self, k: Key, v: Value) -> Result<()> {
+    pub fn put(&mut self, k: Datum, v: OptDatum) -> Result<()> {
         k.ser(&mut self.commit_log)?;
         v.ser(&mut self.commit_log)?;
 
@@ -149,22 +149,29 @@ impl LSMTree {
         Ok(())
     }
 
-    pub fn get(&self, k: Key) -> Result<Value> {
+    pub fn get(&self, k: Datum) -> Result<Option<Datum>> {
+        let to_ret_type = |x: OptDatum| -> Result<Option<Datum>> {
+            match x {
+                OptDatum::Tombstone => return Ok(None),
+                OptDatum::Some(dat) => return Ok(Some(dat.clone())),
+            }
+        };
+
         if let Some(v) = self.memtable.get(&k) {
-            return Ok(v.clone());
+            return to_ret_type(v.clone());
         }
         if let Some(mtf) = &self.memtable_in_flush {
             if let Some(v) = mtf.get(&k) {
-                return Ok(v.clone());
+                return to_ret_type(v.clone());
             }
         }
         // TODO bloom filter here
         for ss in self.sstables.iter().rev() {
             let v = ss.get(&k)?;
             if let Some(v) = v {
-                return Ok(v);
+                return to_ret_type(v.clone());
             }
         }
-        Ok(Value(OptDatum::Tombstone))
+        Ok(None)
     }
 }

@@ -48,7 +48,7 @@
 //! }
 //! ```
 
-use super::api::{Datum, Key, OptDatum, Value};
+use super::api::{Datum, OptDatum};
 use anyhow::{anyhow, Result};
 use derive_more::From;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -163,29 +163,29 @@ impl Serializable for OptDatum {
     }
 }
 
-impl Serializable for Key {
-    fn ser(&self, w: &mut impl Write) -> Result<usize> {
-        self.0.ser(w)
-    }
+// impl Serializable for Key {
+//     fn ser(&self, w: &mut impl Write) -> Result<usize> {
+//         self.0.ser(w)
+//     }
 
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
-        let dat = Datum::deser(datum_size, datum_type, r)?;
-        let obj = Self(dat);
-        Ok(obj)
-    }
-}
+//     fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
+//         let dat = Datum::deser(datum_size, datum_type, r)?;
+//         let obj = Self(dat);
+//         Ok(obj)
+//     }
+// }
 
-impl Serializable for Value {
-    fn ser(&self, w: &mut impl Write) -> Result<usize> {
-        self.0.ser(w)
-    }
+// impl Serializable for Value {
+//     fn ser(&self, w: &mut impl Write) -> Result<usize> {
+//         self.0.ser(w)
+//     }
 
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
-        let dat = OptDatum::deser(datum_size, datum_type, r)?;
-        let obj = Self(dat);
-        Ok(obj)
-    }
-}
+//     fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
+//         let dat = OptDatum::deser(datum_size, datum_type, r)?;
+//         let obj = Self(dat);
+//         Ok(obj)
+//     }
+// }
 
 /// @return Total count of bytes that are written to file.
 fn write_item(datum_type: DatumType, datum_bytes: &[u8], w: &mut impl Write) -> Result<usize> {
@@ -280,17 +280,17 @@ pub struct KeyValueIterator {
 }
 
 impl Iterator for KeyValueIterator {
-    type Item = Result<(Key, Value)>;
+    type Item = Result<(Datum, OptDatum)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // TODO(btc): if read_kv returns an error, perhaps it should continue to return errors for all subsequent calls?
-        let key: Key = match read_item::<Key>(&mut self.file) {
+        let key: Datum = match read_item::<Datum>(&mut self.file) {
             Err(e) => return Some(Err(anyhow!(e))),
             Ok(ReadItem::EOF) => return None,
             Ok(ReadItem::Some { read_size: _, obj }) => obj,
         };
 
-        let val: Value = match read_item::<Value>(&mut self.file) {
+        let val: OptDatum = match read_item::<OptDatum>(&mut self.file) {
             Err(e) => return Some(Err(anyhow!(e))),
             Ok(ReadItem::EOF) => {
                 return Some(Err(anyhow!(

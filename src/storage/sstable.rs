@@ -1,4 +1,4 @@
-use crate::storage::api::{Key, Value};
+use crate::storage::api::{Datum, OptDatum};
 use crate::storage::lsm::Memtable;
 use crate::storage::serde::{self, KeyValueIterator, ReadItem, Serializable, SkipItem};
 use anyhow::{anyhow, Result};
@@ -59,7 +59,7 @@ impl SSTable {
         for kv_i in 0usize.. {
             // Key
             if SSTable::is_kv_in_mem(kv_i) {
-                match serde::read_item::<Key>(&mut file)? {
+                match serde::read_item::<Datum>(&mut file)? {
                     ReadItem::EOF => break,
                     ReadItem::Some { read_size, obj } => {
                         sparse_index.insert(obj, offset as FileOffset);
@@ -88,14 +88,16 @@ impl SSTable {
     }
 
     /// Both the in-memory index and the file are sorted by key.
-    /// The index maps { key (sparse) => file offset }.
+    /// The index maps { key : file offset } for a sparse subsequence of keys.
     /// 1. Bisect in the in-memory sparse index, to find the lower-bound file offset.
     /// 1. Seek the offset in the file. Then read linearlly in file until either EOF or the last-read key is greater than the sought key.
     ///
     /// @return
-    ///     If found within this sstable, then return Some. The content of the Some may be a tombstone: i.e. Some(Value(None)).
-    ///     If not found within this sstable, then return None.
-    pub fn get(&self, k: &Key) -> Result<Option<Value>> {
+    ///     `None` if not found within this sstable.
+    ///     `Some(_)` if found.
+    ///     `Some(OptDatum::Tombstone)` if found and value is tombstone.
+    ///     `Some(OptDatum::Some(_))` if found and value is non-tombstone.
+    pub fn get(&self, k: &Datum) -> Result<Option<OptDatum>> {
         let file_offset = self.sparse_index.nearest_preceding_file_offset(k);
 
         let mut file = File::open(&self.path)?;
@@ -103,14 +105,14 @@ impl SSTable {
 
         loop {
             // Key
-            let found = match serde::read_item::<Key>(&mut file)? {
+            let found = match serde::read_item::<Datum>(&mut file)? {
                 ReadItem::EOF => break,
                 ReadItem::Some { read_size: _, obj } => &obj == k,
             };
 
             // Value
             if found {
-                match serde::read_item::<Value>(&mut file)? {
+                match serde::read_item::<OptDatum>(&mut file)? {
                     ReadItem::EOF => return Err(anyhow!("Unexpected EOF while reading a value.")),
                     ReadItem::Some { read_size: _, obj } => return Ok(Some(obj)),
                 }
@@ -181,7 +183,6 @@ impl SSTable {
         // .unique_by(|(k, _)| k.0.clone()); // keep first instance of |k|
         let mut prev = None;
         for result in compacted {
-            // eprintln!("compact output: {:?}", result);
             let (k, v) = result?;
             if prev.is_some() && &k == prev.as_ref().unwrap() {
                 continue;
@@ -203,7 +204,7 @@ impl SSTable {
 #[derive(Debug)]
 struct SparseIndex {
     // this version of the index is backed by an ordered map.
-    map: BTreeMap<Key, FileOffset>,
+    map: BTreeMap<Datum, FileOffset>,
 }
 
 impl SparseIndex {
@@ -213,11 +214,11 @@ impl SparseIndex {
         }
     }
 
-    fn insert(&mut self, key: Key, offset: FileOffset) {
+    fn insert(&mut self, key: Datum, offset: FileOffset) {
         self.map.insert(key, offset);
     }
 
-    fn nearest_preceding_file_offset(&self, key: &Key) -> FileOffset {
+    fn nearest_preceding_file_offset(&self, key: &Datum) -> FileOffset {
         // TODO what's the best way to bisect a BTreeMap? this appears to have O(n) cost
         let idx_pos = self.map.iter().rposition(|kv| kv.0 <= key);
         match idx_pos {

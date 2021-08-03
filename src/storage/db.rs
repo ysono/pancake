@@ -1,4 +1,4 @@
-use crate::storage::api::{Key, Value};
+use crate::storage::api::{Datum, OptDatum};
 use crate::storage::lsm::LSMTree;
 use anyhow::Result;
 use std::path::Path;
@@ -18,11 +18,15 @@ impl DB {
         Ok(db)
     }
 
-    pub fn put(&mut self, k: Key, v: Value) -> Result<()> {
-        self.primary_index.put(k, v)
+    pub fn put(&mut self, k: Datum, v: Datum) -> Result<()> {
+        self.primary_index.put(k, OptDatum::Some(v))
     }
 
-    pub fn get(&self, k: Key) -> Result<Value> {
+    pub fn get(&self, k: Datum) -> Result<Option<Datum>> {
         self.primary_index.get(k)
+    }
+
+    pub fn delete(&mut self, k: Datum) -> Result<()> {
+        self.primary_index.put(k, OptDatum::Tombstone)
     }
 }
