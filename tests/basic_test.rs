@@ -8,7 +8,7 @@ use std::env::temp_dir;
 
 #[test]
 fn test_in_single_thread() -> Result<()> {
-    let dir = temp_dir();
+    let dir = temp_dir().join("pancake");
     let mut lsm = lsm::LSM::open(dir)?;
 
     put_then_tomb(&mut lsm)?;
