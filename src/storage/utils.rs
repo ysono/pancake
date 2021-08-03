@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::io::Error as IOError;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn new_timestamped_path<P: AsRef<Path>>(parent_path: P) -> PathBuf {

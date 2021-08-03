@@ -51,8 +51,8 @@
 use super::api::{Datum, Key, Value};
 use anyhow::{anyhow, Result};
 use derive_more::From;
-use num_derive::{FromPrimitive};
-use num_traits::{FromPrimitive};
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem::size_of;
@@ -126,8 +126,8 @@ fn deserialize_optdat(
     datum_size: usize,
     r: &mut File,
 ) -> Result<Option<Datum>> {
-    let datum_type = DatumType::from_u8(datum_type)
-        .ok_or(anyhow!("Unknown datum type {}", datum_type))?;
+    let datum_type =
+        DatumType::from_u8(datum_type).ok_or(anyhow!("Unknown datum type {}", datum_type))?;
     match datum_type {
         DatumType::Tombstone => Ok(None),
         DatumType::Bytes => {
@@ -170,7 +170,7 @@ fn deserialize_optdat(
 
 /// `Skip`:  The result when caller requested not to deserialize.
 /// `Item`:  The result when caller requested to deserialize. `None` means a tombstone.
-/// 
+///
 /// The `usize` item: Total count of bytes that are read from file.
 enum FileItem {
     EOF,
