@@ -5,7 +5,6 @@ use rand;
 use std::collections::BTreeMap;
 use std::env::temp_dir;
 
-
 #[test]
 fn test_in_single_thread() -> Result<()> {
     let dir = temp_dir().join("pancake");
@@ -20,7 +19,6 @@ fn test_in_single_thread() -> Result<()> {
 }
 
 fn put_then_tomb(db: &mut DB) -> Result<()> {
-
     let mut k_to_expected_v = BTreeMap::<Key, Value>::new();
 
     for _ in 0..100 {
@@ -51,7 +49,6 @@ fn put_then_tomb(db: &mut DB) -> Result<()> {
 }
 
 fn nonexistent(db: &mut DB) -> Result<()> {
-
     let key = Key(Datum::Str(String::from("nonexistent")));
 
     let res = db.get(key)?;
@@ -62,7 +59,6 @@ fn nonexistent(db: &mut DB) -> Result<()> {
 }
 
 fn zero_byte_value(db: &mut DB) -> Result<()> {
-
     let key = Key(Datum::Str(String::from("empty")));
 
     let val = Value::from(Datum::Bytes(vec![]));
@@ -79,7 +75,6 @@ fn zero_byte_value(db: &mut DB) -> Result<()> {
 }
 
 fn tuple(db: &mut DB) -> Result<()> {
-
     let key = Key(Datum::Tuple(vec![
         Datum::Bytes(vec![16u8, 17u8, 18u8]),
         Datum::I64(0x123456789abcdef),

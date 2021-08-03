@@ -5,9 +5,9 @@ use futures::executor::block_on;
 use hyper::{Body, Request, Response, Server, StatusCode};
 use routerify::prelude::*;
 use routerify::{Middleware, RequestInfo, Router, RouterService};
+use std::env;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
-use std::env;
 
 async fn logger(req: Request<Body>) -> Result<Request<Body>> {
     println!(
