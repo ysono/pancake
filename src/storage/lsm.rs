@@ -1,15 +1,15 @@
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::mem;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
 
-use crate::storage::api::{Key, Value, OptDatum};
+use crate::storage::api::{Key, OptDatum, Value};
 use crate::storage::serde::{KeyValueIterator, Serializable};
-use crate::storage::utils;
 use crate::storage::sstable::SSTable;
+use crate::storage::utils;
 
 static COMMIT_LOGS_DIR_PATH: &'static str = "commit_logs";
 static SSTABLES_DIR_PATH: &'static str = "sstables";
@@ -34,7 +34,7 @@ impl Memtable {
     }
 }
 
-pub struct LSM {
+pub struct LSMTree {
     path: PathBuf,
     memtable: Memtable,
     commit_log_path: PathBuf,
@@ -43,8 +43,8 @@ pub struct LSM {
     sstables: Vec<SSTable>,
 }
 
-impl LSM {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<LSM> {
+impl LSMTree {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<LSMTree> {
         std::fs::create_dir_all(path.as_ref().join(COMMIT_LOGS_DIR_PATH))?;
         std::fs::create_dir_all(path.as_ref().join(SSTABLES_DIR_PATH))?;
 
@@ -55,21 +55,23 @@ impl LSM {
             commit_log_path = Some(path);
         }
 
-        let commit_log_path =
-            commit_log_path.unwrap_or(utils::new_timestamped_path(path.as_ref().join(COMMIT_LOGS_DIR_PATH)));
+        let commit_log_path = commit_log_path.unwrap_or(utils::new_timestamped_path(
+            path.as_ref().join(COMMIT_LOGS_DIR_PATH),
+        ));
         let commit_log = OpenOptions::new()
             .create(true)
             .write(true)
             .append(true)
             .open(&commit_log_path)?;
 
-        let sstables: Result<Vec<SSTable>> = utils::read_dir_sorted(path.as_ref().join(SSTABLES_DIR_PATH))?
-            .into_iter()
-            .map(SSTable::read_from_file)
-            .collect();
+        let sstables: Result<Vec<SSTable>> =
+            utils::read_dir_sorted(path.as_ref().join(SSTABLES_DIR_PATH))?
+                .into_iter()
+                .map(SSTable::read_from_file)
+                .collect();
         let sstables = sstables?;
 
-        let ret = LSM {
+        let ret = LSMTree {
             path: path.as_ref().into(),
             memtable,
             commit_log_path,
@@ -101,8 +103,10 @@ impl LSM {
             .memtable_in_flush
             .as_ref()
             .ok_or(anyhow!("Unexpected error: no memtable being flushed"))?;
-        let new_sst =
-            SSTable::write_from_memtable(mtf, utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH)))?;
+        let new_sst = SSTable::write_from_memtable(
+            mtf,
+            utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH)),
+        )?;
 
         {
             // TODO MutexGuard here
@@ -119,7 +123,8 @@ impl LSM {
     }
 
     fn compact_sstables(&mut self) -> Result<()> {
-        let new_tables = SSTable::compact(self.sstables.iter())?;
+        let new_table_path = utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH));
+        let new_tables = SSTable::compact(new_table_path, self.sstables.iter())?;
 
         // TODO MutexGuard here
         // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.

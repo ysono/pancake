@@ -1,7 +1,6 @@
 use crate::storage::api::{Key, Value};
 use crate::storage::lsm::Memtable;
-use crate::storage::serde::{KeyValueIterator, Serializable, ReadItem, SkipItem};
-use crate::storage::{serde, utils};
+use crate::storage::serde::{self, KeyValueIterator, ReadItem, Serializable, SkipItem};
 use anyhow::{anyhow, Result};
 use core::option::Option;
 use core::option::Option::{None, Some};
@@ -16,14 +15,13 @@ use std::path::PathBuf;
 
 type FileOffset = u64;
 
-static SSTABLES_DIR_PATH: &'static str = "/tmp/pancake/sstables";
 static SSTABLE_IDX_SPARSENESS: usize = 3;
 
 /// One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file.
 #[derive(Debug)]
 pub struct SSTable {
     path: PathBuf,
-    sparse_index: BTreeMap<Key, FileOffset>,
+    sparse_index: SparseIndex,
 }
 
 impl SSTable {
@@ -32,7 +30,7 @@ impl SSTable {
     }
 
     pub fn write_from_memtable(memtable: &Memtable, path: PathBuf) -> Result<SSTable> {
-        let mut sparse_index = BTreeMap::<Key, FileOffset>::new();
+        let mut sparse_index = SparseIndex::new();
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -55,7 +53,7 @@ impl SSTable {
     }
 
     pub fn read_from_file(path: PathBuf) -> Result<SSTable> {
-        let mut sparse_index = BTreeMap::<Key, FileOffset>::new();
+        let mut sparse_index = SparseIndex::new();
         let mut file = File::open(&path)?;
         let mut offset = 0usize;
         for kv_i in 0usize.. {
@@ -63,7 +61,7 @@ impl SSTable {
             if SSTable::is_kv_in_mem(kv_i) {
                 match serde::read_item::<Key>(&mut file)? {
                     ReadItem::EOF => break,
-                    ReadItem::Some{read_size, obj} => {
+                    ReadItem::Some { read_size, obj } => {
                         sparse_index.insert(obj, offset as FileOffset);
                         offset += read_size;
                     }
@@ -71,16 +69,16 @@ impl SSTable {
             } else {
                 match serde::skip_item(&mut file)? {
                     SkipItem::EOF => break,
-                    SkipItem::Some{read_size} => {
+                    SkipItem::Some { read_size } => {
                         offset += read_size;
                     }
                 }
             }
-            
+
             // Value
             match serde::skip_item(&mut file)? {
                 SkipItem::EOF => return Err(anyhow!("Unexpected EOF while reading a value.")),
-                SkipItem::Some{read_size} => {
+                SkipItem::Some { read_size } => {
                     offset += read_size;
                 }
             }
@@ -98,15 +96,7 @@ impl SSTable {
     ///     If found within this sstable, then return Some. The content of the Some may be a tombstone: i.e. Some(Value(None)).
     ///     If not found within this sstable, then return None.
     pub fn get(&self, k: &Key) -> Result<Option<Value>> {
-        // TODO what's the best way to bisect a BTreeMap?
-        let idx_pos = self.sparse_index.iter().rposition(|kv| kv.0 <= k);
-        let file_offset = match idx_pos {
-            None => 0u64,
-            Some(idx_pos) => {
-                let (_, file_offset) = self.sparse_index.iter().nth(idx_pos).unwrap();
-                *file_offset
-            }
-        };
+        let file_offset = self.sparse_index.nearest_preceding_file_offset(k);
 
         let mut file = File::open(&self.path)?;
         file.seek(SeekFrom::Start(file_offset))?;
@@ -115,14 +105,14 @@ impl SSTable {
             // Key
             let found = match serde::read_item::<Key>(&mut file)? {
                 ReadItem::EOF => break,
-                ReadItem::Some{read_size: _, obj} => &obj == k
+                ReadItem::Some { read_size: _, obj } => &obj == k,
             };
 
             // Value
             if found {
                 match serde::read_item::<Value>(&mut file)? {
                     ReadItem::EOF => return Err(anyhow!("Unexpected EOF while reading a value.")),
-                    ReadItem::Some{read_size: _, obj} => return Ok(Some(obj)),
+                    ReadItem::Some { read_size: _, obj } => return Ok(Some(obj)),
                 }
             } else {
                 serde::skip_item(&mut file)?;
@@ -136,12 +126,13 @@ impl SSTable {
         Ok(())
     }
 
-    pub fn compact<'a, I: Iterator<Item = &'a Self>>(tables: I) -> Result<Vec<Self>> {
-        let path = utils::new_timestamped_path(SSTABLES_DIR_PATH);
+    pub fn compact<'a, I: Iterator<Item = &'a Self>>(
+        path: PathBuf,
+        tables: I,
+    ) -> Result<Vec<Self>> {
         let mut file = OpenOptions::new()
-            .create(true)
+            .create_new(true)
             .write(true)
-            .truncate(true)
             .open(&path)?;
 
         let mut key_value_iterators = Vec::new();
@@ -190,6 +181,7 @@ impl SSTable {
         // .unique_by(|(k, _)| k.0.clone()); // keep first instance of |k|
         let mut prev = None;
         for result in compacted {
+            // eprintln!("compact output: {:?}", result);
             let (k, v) = result?;
             if prev.is_some() && &k == prev.as_ref().unwrap() {
                 continue;
@@ -205,5 +197,36 @@ impl SSTable {
         let t = Self::read_from_file(path)?;
 
         Ok(vec![t])
+    }
+}
+
+#[derive(Debug)]
+struct SparseIndex {
+    // this version of the index is backed by an ordered map.
+    map: BTreeMap<Key, FileOffset>,
+}
+
+impl SparseIndex {
+    fn new() -> Self {
+        Self {
+            map: Default::default(),
+        }
+    }
+
+    fn insert(&mut self, key: Key, offset: FileOffset) {
+        self.map.insert(key, offset);
+    }
+
+    fn nearest_preceding_file_offset(&self, key: &Key) -> FileOffset {
+        // TODO what's the best way to bisect a BTreeMap? this appears to have O(n) cost
+        let idx_pos = self.map.iter().rposition(|kv| kv.0 <= key);
+        match idx_pos {
+            None => 0u64,
+            Some(idx_pos) => {
+                let (_, file_offset) = self.map.iter().nth(idx_pos).unwrap();
+                *file_offset
+            }
+        }
+        // TODO/FIXME: iter().nth appears to incur a O(n) cost
     }
 }

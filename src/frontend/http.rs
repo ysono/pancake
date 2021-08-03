@@ -1,10 +1,11 @@
-use crate::storage::api::{Datum, Key, Value, OptDatum};
-use crate::storage::LSM;
+use crate::storage::api::{Datum, Key, OptDatum, Value};
+use crate::storage::db::DB;
 use anyhow::{anyhow, Error, Result};
 use futures::executor::block_on;
 use hyper::{Body, Request, Response, Server, StatusCode};
 use routerify::prelude::*;
 use routerify::{Middleware, RequestInfo, Router, RouterService};
+use std::env;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
@@ -22,10 +23,10 @@ async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key: &String = req.param("key").unwrap();
     let key = Key(Datum::Str(key.clone()));
 
-    let lsm = req.data::<Arc<RwLock<LSM>>>().unwrap();
-    let lsm = lsm.read().unwrap();
+    let db = req.data::<Arc<RwLock<DB>>>().unwrap();
+    let db = db.read().unwrap();
 
-    let val: Value = lsm.get(key)?;
+    let val: Value = db.get(key)?;
 
     match val.0 {
         OptDatum::Tombstone => Response::builder()
@@ -53,10 +54,10 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
     let val: Vec<u8> = block_on(hyper::body::to_bytes(body))?.to_vec();
     let val = Value::from(Datum::Bytes(val));
 
-    let lsm = parts.data::<Arc<RwLock<LSM>>>().unwrap();
-    let mut lsm = lsm.write().unwrap();
+    let db = parts.data::<Arc<RwLock<DB>>>().unwrap();
+    let mut db = db.write().unwrap();
 
-    lsm.put(key, val)?;
+    db.put(key, val)?;
 
     Response::builder()
         .status(StatusCode::NO_CONTENT)
@@ -68,10 +69,10 @@ async fn delete_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key: &String = req.param("key").unwrap();
     let key = Key(Datum::Str(key.clone()));
 
-    let lsm = req.data::<Arc<RwLock<LSM>>>().unwrap();
-    let mut lsm = lsm.write().unwrap();
+    let db = req.data::<Arc<RwLock<DB>>>().unwrap();
+    let mut db = db.write().unwrap();
 
-    lsm.put(key, Value(OptDatum::Tombstone))?;
+    db.put(key, Value(OptDatum::Tombstone))?;
 
     Response::builder()
         .status(StatusCode::NO_CONTENT)
@@ -88,11 +89,12 @@ async fn error_handler(err: routerify::RouteError, _: RequestInfo) -> Response<B
 }
 
 fn router() -> Router<Body, Error> {
-    let path = "/tmp/pancake";
-    let lsm: Arc<RwLock<LSM>> = Arc::new(RwLock::new(LSM::open(path).unwrap()));
+    let path = env::temp_dir().join("pancake");
+    let db = DB::open(path).unwrap();
+    let db: Arc<RwLock<DB>> = Arc::new(RwLock::new(db));
 
     Router::builder()
-        .data(lsm)
+        .data(db)
         .middleware(Middleware::pre(logger))
         .get("/key/:key", get_handler)
         .put("/key/:key", put_handler)
