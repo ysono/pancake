@@ -9,15 +9,20 @@ pub enum Datum {
     Tuple(Vec<Datum>),
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+pub enum OptDatum {
+    Tombstone,
+    Some(Datum),
+}
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Deref, From, Debug)]
 pub struct Key(pub Datum);
 
-/// Newtype for `Option<Datum>`. A `Value(None)` specifies a tombstone entry -- either writing a tombstone or reading a tombstone.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Deref, Debug)]
-pub struct Value(pub Option<Datum>);
+pub struct Value(pub OptDatum);
 
 impl From<Datum> for Value {
     fn from(dat: Datum) -> Self {
-        Self(Some(dat))
+        Self(OptDatum::Some(dat))
     }
 }

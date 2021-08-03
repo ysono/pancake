@@ -8,7 +8,7 @@ use std::env::temp_dir;
 
 #[test]
 fn test_in_single_thread() -> Result<()> {
-    let dir = temp_dir();
+    let dir = temp_dir().join("pancake");
     let mut lsm = lsm::LSM::open(dir)?;
 
     put_then_tomb(&mut lsm)?;
@@ -33,7 +33,7 @@ fn put_then_tomb(lsm: &mut LSM) -> Result<()> {
 
         let keep = rand::random::<f32>() < 0.7;
         if !keep {
-            val = Value(None);
+            val = Value(OptDatum::Tombstone);
             lsm.put(key.clone(), val.clone())?;
         }
 
@@ -56,7 +56,7 @@ fn nonexistent(lsm: &mut LSM) -> Result<()> {
 
     let res = lsm.get(key)?;
 
-    assert!(res.is_none());
+    assert!(res == Value(OptDatum::Tombstone));
 
     Ok(())
 }

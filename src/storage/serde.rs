@@ -48,11 +48,11 @@
 //! }
 //! ```
 
-use super::api::{Datum, Key, Value};
+use super::api::{Datum, Key, OptDatum, Value};
 use anyhow::{anyhow, Result};
 use derive_more::From;
-use num_derive::{FromPrimitive};
-use num_traits::{FromPrimitive};
+use num_derive::{FromPrimitive, ToPrimitive};
+use num_traits::FromPrimitive;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem::size_of;
@@ -63,8 +63,8 @@ We manually map enum members to data_type integers because:
 - One member, Tombstone, is outside the Datum enum.
 - An automatic discriminant may change w/ enum definition change or compilation, according to [`std::mem::discriminant()`] doc.
 */
-#[derive(FromPrimitive)]
-enum DatumType {
+#[derive(PartialEq, Eq, PartialOrd, Ord, FromPrimitive, ToPrimitive, Debug)]
+pub enum DatumType {
     Tombstone = 0,
     Bytes = 1,
     I64 = 2,
@@ -73,6 +73,119 @@ enum DatumType {
 }
 
 type DatumTypeInt = u8;
+
+pub trait Serializable: Sized {
+    fn ser(&self, w: &mut impl Write) -> Result<usize>;
+    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self>;
+}
+
+impl Serializable for Datum {
+    fn ser(&self, w: &mut impl Write) -> Result<usize> {
+        let write_size: usize = match self {
+            Datum::Bytes(b) => write_item(DatumType::Bytes, b, w)?,
+            Datum::I64(i) => write_item(DatumType::I64, &i.to_le_bytes(), w)?,
+            Datum::Str(s) => write_item(DatumType::Str, s.as_bytes(), w)?,
+            Datum::Tuple(vec) => {
+                let mut b: Vec<u8> = vec![];
+
+                b.write(&vec.len().to_le_bytes())?;
+
+                for dat in vec.iter() {
+                    dat.ser(&mut b)?;
+                }
+
+                write_item(DatumType::Tuple, &b, w)?
+            }
+        };
+        Ok(write_size)
+    }
+
+    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
+        let obj: Self = match datum_type {
+            DatumType::Bytes => {
+                let mut buf = vec![0u8; datum_size];
+                r.read_exact(&mut buf)?;
+                Datum::Bytes(buf)
+            }
+            DatumType::I64 => {
+                let mut buf = [0u8; size_of::<i64>()];
+                r.read_exact(&mut buf)?;
+                Datum::I64(i64::from_le_bytes(buf))
+            }
+            DatumType::Str => {
+                let mut buf = vec![0u8; datum_size];
+                r.read_exact(&mut buf)?;
+                Datum::Str(String::from_utf8(buf)?)
+            }
+            DatumType::Tuple => {
+                let mut tup_len_buf = [0u8; size_of::<usize>()];
+                r.read_exact(&mut tup_len_buf)?;
+                let tup_len = usize::from_le_bytes(tup_len_buf);
+
+                let mut members = Vec::<Datum>::with_capacity(tup_len);
+
+                for _ in 0..tup_len {
+                    match read_item(r)? {
+                        ReadItem::EOF => {
+                            return Err(anyhow!("Unexpected EOF while reading a tuple."))
+                        }
+                        ReadItem::Some { read_size: _, obj } => {
+                            members.push(obj);
+                        }
+                    }
+                }
+
+                Datum::Tuple(members)
+            }
+            _ => return Err(anyhow!("Unexpected datum_type {:?}", datum_type)),
+        };
+        Ok(obj)
+    }
+}
+
+impl Serializable for OptDatum {
+    fn ser(&self, w: &mut impl Write) -> Result<usize> {
+        match self {
+            OptDatum::Tombstone => write_item(DatumType::Tombstone, &[0u8; 0], w),
+            OptDatum::Some(dat) => dat.ser(w),
+        }
+    }
+
+    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
+        let obj: Self = match datum_type {
+            DatumType::Tombstone => OptDatum::Tombstone,
+            _ => {
+                let dat = Datum::deser(datum_size, datum_type, r)?;
+                OptDatum::Some(dat)
+            }
+        };
+        Ok(obj)
+    }
+}
+
+impl Serializable for Key {
+    fn ser(&self, w: &mut impl Write) -> Result<usize> {
+        self.0.ser(w)
+    }
+
+    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
+        let dat = Datum::deser(datum_size, datum_type, r)?;
+        let obj = Self(dat);
+        Ok(obj)
+    }
+}
+
+impl Serializable for Value {
+    fn ser(&self, w: &mut impl Write) -> Result<usize> {
+        self.0.ser(w)
+    }
+
+    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
+        let dat = OptDatum::deser(datum_size, datum_type, r)?;
+        let obj = Self(dat);
+        Ok(obj)
+    }
+}
 
 /// @return Total count of bytes that are written to file.
 fn write_item(datum_type: DatumType, datum_bytes: &[u8], w: &mut impl Write) -> Result<usize> {
@@ -88,155 +201,77 @@ fn write_item(datum_type: DatumType, datum_bytes: &[u8], w: &mut impl Write) -> 
     Ok(write_size)
 }
 
-fn serialize_dat(v: &Datum, w: &mut impl Write) -> Result<usize> {
-    match v {
-        Datum::Bytes(b) => write_item(DatumType::Bytes, b, w),
-        Datum::I64(i) => write_item(DatumType::I64, &i.to_le_bytes(), w),
-        Datum::Str(s) => write_item(DatumType::Str, s.as_bytes(), w),
-        Datum::Tuple(vec) => {
-            let mut b: Vec<u8> = vec![];
-
-            b.write(&vec.len().to_le_bytes())?;
-
-            for dat in vec.iter() {
-                serialize_dat(dat, &mut b)?;
-            }
-
-            write_item(DatumType::Tuple, &b, w)
-        }
-    }
-}
-
-fn serialize_optdat(v: &Option<Datum>, w: &mut impl Write) -> Result<usize> {
-    match v {
-        None => write_item(DatumType::Tombstone, &[0u8; 0], w),
-        Some(dat) => serialize_dat(dat, w),
-    }
-}
-
-pub fn serialize_kv(k: &Key, v: &Value, w: &mut impl Write) -> Result<usize> {
-    let mut write_size = 0usize;
-    write_size += serialize_dat(k, w)?;
-    write_size += serialize_optdat(v, w)?;
-    Ok(write_size)
-}
-
-fn deserialize_optdat(
-    datum_type: DatumTypeInt,
-    datum_size: usize,
-    r: &mut File,
-) -> Result<Option<Datum>> {
-    let datum_type = DatumType::from_u8(datum_type)
-        .ok_or(anyhow!("Unknown datum type {}", datum_type))?;
-    match datum_type {
-        DatumType::Tombstone => Ok(None),
-        DatumType::Bytes => {
-            let mut buf = vec![0u8; datum_size];
-            r.read_exact(&mut buf)?;
-            Ok(Some(Datum::Bytes(buf)))
-        }
-        DatumType::I64 => {
-            let mut buf = [0u8; size_of::<i64>()];
-            r.read_exact(&mut buf)?;
-            Ok(Some(Datum::I64(i64::from_le_bytes(buf))))
-        }
-        DatumType::Str => {
-            let mut buf = vec![0u8; datum_size];
-            r.read_exact(&mut buf)?;
-            Ok(Some(Datum::Str(String::from_utf8(buf)?)))
-        }
-        DatumType::Tuple => {
-            let mut tup_len_buf = [0u8; size_of::<usize>()];
-            r.read_exact(&mut tup_len_buf)?;
-            let tup_len = usize::from_le_bytes(tup_len_buf);
-
-            let mut datum = Vec::<Datum>::with_capacity(tup_len);
-
-            for _ in 0..tup_len {
-                match read_item(r, true)? {
-                    FileItem::EOF => return Err(anyhow!("Unexpected EOF while reading a tuple.")),
-                    FileItem::Skip(_) => return Err(anyhow!("Error in read_item() logic.")),
-                    FileItem::Item(_, None) => {
-                        return Err(anyhow!("Unexpected tombstone while reading a tuple."))
-                    }
-                    FileItem::Item(_, Some(dat)) => datum.push(dat),
-                }
-            }
-
-            Ok(Some(Datum::Tuple(datum)))
-        }
-    }
-}
-
-/// `Skip`:  The result when caller requested not to deserialize.
-/// `Item`:  The result when caller requested to deserialize. `None` means a tombstone.
-/// 
-/// The `usize` item: Total count of bytes that are read from file.
-enum FileItem {
+enum ReadSpanSize {
     EOF,
-    Skip(usize),
-    Item(usize, Option<Datum>),
+    Some { read_size: usize, span_size: usize },
 }
 
-fn read_item(file: &mut File, deser: bool) -> Result<FileItem> {
+fn read_span_size(file: &mut File) -> Result<ReadSpanSize> {
     let mut span_size_buf = [0u8; size_of::<usize>()];
-    let mut read_size = file.read(&mut span_size_buf)?;
+    let read_size = file.read(&mut span_size_buf)?;
     if read_size == 0 {
-        return Ok(FileItem::EOF);
+        return Ok(ReadSpanSize::EOF);
     } else if read_size != span_size_buf.len() {
-        return Err(anyhow!(
-            "Unexpected EOF while reading the beginning of an item."
-        ));
+        return Err(anyhow!("Unexpected EOF while reading a span_size."));
     }
 
     let span_size = usize::from_le_bytes(span_size_buf);
-    read_size += span_size;
-    if deser {
-        let mut datum_type_buf = [0u8; size_of::<DatumTypeInt>()];
-        file.read_exact(&mut datum_type_buf)?;
-        let datum_type = DatumTypeInt::from_le_bytes(datum_type_buf);
 
-        let datum_size = span_size - datum_type_buf.len();
-
-        let optdat = deserialize_optdat(datum_type, datum_size, file)?;
-
-        Ok(FileItem::Item(read_size, optdat))
-    } else {
-        file.seek(SeekFrom::Current(span_size as i64))?;
-        Ok(FileItem::Skip(read_size))
-    }
+    Ok(ReadSpanSize::Some {
+        read_size,
+        span_size,
+    })
 }
 
-/// `KV`: The key and value are each an `Option`, reflecting whether the caller requested to deserize that part. This optionality is separate from tombstone; tombstone is captured within the `Value` type.
-pub enum FileKeyValue {
+pub enum SkipItem {
     EOF,
-    KV(usize, Option<Key>, Option<Value>),
+    Some { read_size: usize },
 }
 
-/// @arg `deser_key`: Whether to deserialize the key.
-/// @arg `deser_val`: A callable that reads the just-deserialized key and returns whether to deserialize the value. If `deser_key` was false, then regardless of the `deser_val` argument, the value will _not_ be deserialized.
-pub fn read_kv<F>(file: &mut File, deser_key: bool, deser_val: F) -> Result<FileKeyValue>
-where
-    F: Fn(&Key) -> bool,
-{
-    let (key_sz, maybe_key) = match read_item(file, deser_key)? {
-        FileItem::EOF => return Ok(FileKeyValue::EOF),
-        FileItem::Skip(sz) => (sz, None),
-        FileItem::Item(_, None) => return Err(anyhow!("Key is tombstone.")),
-        FileItem::Item(sz, Some(dat)) => (sz, Some(Key(dat))),
+pub fn skip_item(file: &mut File) -> Result<SkipItem> {
+    let ret = match read_span_size(file)? {
+        ReadSpanSize::EOF => SkipItem::EOF,
+        ReadSpanSize::Some {
+            mut read_size,
+            span_size,
+        } => {
+            file.seek(SeekFrom::Current(span_size as i64))?;
+            read_size += span_size;
+            SkipItem::Some { read_size }
+        }
     };
+    Ok(ret)
+}
 
-    let deser_val: bool = maybe_key.as_ref().map(deser_val).unwrap_or(false);
+pub enum ReadItem<T> {
+    EOF,
+    Some { read_size: usize, obj: T },
+}
 
-    let (val_sz, maybe_val) = match read_item(file, deser_val)? {
-        FileItem::EOF => return Err(anyhow!("Key without value.")),
-        FileItem::Skip(sz) => (sz, None),
-        FileItem::Item(sz, optdat) => (sz, Some(Value(optdat))),
+pub fn read_item<T: Serializable>(file: &mut File) -> Result<ReadItem<T>> {
+    let ret = match read_span_size(file)? {
+        ReadSpanSize::EOF => ReadItem::EOF,
+        ReadSpanSize::Some {
+            mut read_size,
+            span_size,
+        } => {
+            let mut dtype_buf = [0u8; size_of::<DatumTypeInt>()];
+            file.read_exact(&mut dtype_buf)?;
+            let dtype_int = DatumTypeInt::from_le_bytes(dtype_buf);
+
+            let dtype =
+                DatumType::from_u8(dtype_int).ok_or(anyhow!("Unknown datum type {}", dtype_int))?;
+
+            let datum_size = span_size - dtype_buf.len();
+
+            let obj = T::deser(datum_size, dtype, file)?;
+
+            read_size += span_size;
+
+            ReadItem::Some { read_size, obj }
+        }
     };
-
-    let sz = key_sz + val_sz;
-
-    Ok(FileKeyValue::KV(sz, maybe_key, maybe_val))
+    Ok(ret)
 }
 
 #[derive(From)]
@@ -244,17 +279,27 @@ pub struct KeyValueIterator {
     file: File,
 }
 
-/// This iterator always deserializes both the key and the value.
 impl Iterator for KeyValueIterator {
     type Item = Result<(Key, Value)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // TODO(btc): if read_kv returns an error, perhaps it should continue to return errors for all subsequent calls?
-        match read_kv(&mut self.file, true, |_| true) {
-            Err(e) => Some(Err(e)),
-            Ok(FileKeyValue::EOF) => None,
-            Ok(FileKeyValue::KV(_, Some(key), Some(val))) => Some(Ok((key, val))),
-            _ => Some(Err(anyhow!("Error in read_kv logic"))),
-        }
+        let key: Key = match read_item::<Key>(&mut self.file) {
+            Err(e) => return Some(Err(anyhow!(e))),
+            Ok(ReadItem::EOF) => return None,
+            Ok(ReadItem::Some { read_size: _, obj }) => obj,
+        };
+
+        let val: Value = match read_item::<Value>(&mut self.file) {
+            Err(e) => return Some(Err(anyhow!(e))),
+            Ok(ReadItem::EOF) => {
+                return Some(Err(anyhow!(
+                    "KeyValueIterator ,, Unexpected EOF while reading a value."
+                )))
+            }
+            Ok(ReadItem::Some { read_size: _, obj }) => obj,
+        };
+
+        Some(Ok((key, val)))
     }
 }

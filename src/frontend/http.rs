@@ -1,4 +1,4 @@
-use crate::storage::api::{Datum, Key, Value};
+use crate::storage::api::{Datum, Key, Value, OptDatum};
 use crate::storage::LSM;
 use anyhow::{anyhow, Error, Result};
 use futures::executor::block_on;
@@ -28,11 +28,11 @@ async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
     let val: Value = lsm.get(key)?;
 
     match val.0 {
-        None => Response::builder()
+        OptDatum::Tombstone => Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())
             .map_err(|e| anyhow!(e)),
-        Some(val) => {
+        OptDatum::Some(val) => {
             let body: String = match val {
                 Datum::Bytes(bytes) => bytes.iter().map(|b| format!("{:#x}", b)).collect(),
                 Datum::I64(i) => i.to_string(),
@@ -71,7 +71,7 @@ async fn delete_handler(req: Request<Body>) -> Result<Response<Body>> {
     let lsm = req.data::<Arc<RwLock<LSM>>>().unwrap();
     let mut lsm = lsm.write().unwrap();
 
-    lsm.put(key, Value(None))?;
+    lsm.put(key, Value(OptDatum::Tombstone))?;
 
     Response::builder()
         .status(StatusCode::NO_CONTENT)

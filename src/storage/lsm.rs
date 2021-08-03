@@ -6,9 +6,9 @@ use std::path::{PathBuf, Path};
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
 
-use super::api::{Key, Value};
-use super::serde;
-use super::utils;
+use crate::storage::api::{Key, Value, OptDatum};
+use crate::storage::serde::{KeyValueIterator, Serializable};
+use crate::storage::utils;
 use crate::storage::sstable::SSTable;
 
 static COMMIT_LOGS_DIR_PATH: &'static str = "commit_logs";
@@ -25,7 +25,7 @@ pub struct Memtable(BTreeMap<Key, Value>);
 impl Memtable {
     fn update_from_commit_log(&mut self, path: &PathBuf) -> Result<()> {
         let file = File::open(path)?;
-        let iter = serde::KeyValueIterator::from(file);
+        let iter = KeyValueIterator::from(file);
         for file_data in iter {
             let (key, val) = file_data?;
             self.insert(key, val);
@@ -132,7 +132,8 @@ impl LSM {
     }
 
     pub fn put(&mut self, k: Key, v: Value) -> Result<()> {
-        serde::serialize_kv(&k, &v, &mut self.commit_log)?;
+        k.ser(&mut self.commit_log)?;
+        v.ser(&mut self.commit_log)?;
 
         self.memtable.insert(k, v);
 
@@ -159,6 +160,6 @@ impl LSM {
                 return Ok(v);
             }
         }
-        Ok(Value(None))
+        Ok(Value(OptDatum::Tombstone))
     }
 }

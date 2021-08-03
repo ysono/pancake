@@ -1,8 +1,8 @@
 use crate::storage::api::{Key, Value};
 use crate::storage::lsm::Memtable;
-use crate::storage::serde::KeyValueIterator;
+use crate::storage::serde::{KeyValueIterator, Serializable, ReadItem, SkipItem};
 use crate::storage::{serde, utils};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use core::option::Option;
 use core::option::Option::{None, Some};
 use core::result::Result::Ok;
@@ -40,7 +40,9 @@ impl SSTable {
             .open(&path)?;
         let mut offset = 0usize;
         for (kv_i, (k, v)) in memtable.iter().enumerate() {
-            let delta_offset = serde::serialize_kv(k, v, &mut file)?;
+            let mut delta_offset = 0usize;
+            delta_offset += k.ser(&mut file)?;
+            delta_offset += v.ser(&mut file)?;
 
             if SSTable::is_kv_in_mem(kv_i) {
                 sparse_index.insert((*k).clone(), offset as FileOffset);
@@ -57,15 +59,29 @@ impl SSTable {
         let mut file = File::open(&path)?;
         let mut offset = 0usize;
         for kv_i in 0usize.. {
-            let deser_key = SSTable::is_kv_in_mem(kv_i);
-            match serde::read_kv(&mut file, deser_key, |_| false)? {
-                serde::FileKeyValue::EOF => break,
-                serde::FileKeyValue::KV(delta_offset, maybe_key, _) => {
-                    if let Some(key) = maybe_key {
-                        sparse_index.insert(key, offset as FileOffset);
+            // Key
+            if SSTable::is_kv_in_mem(kv_i) {
+                match serde::read_item::<Key>(&mut file)? {
+                    ReadItem::EOF => break,
+                    ReadItem::Some{read_size, obj} => {
+                        sparse_index.insert(obj, offset as FileOffset);
+                        offset += read_size;
                     }
-
-                    offset += delta_offset;
+                }
+            } else {
+                match serde::skip_item(&mut file)? {
+                    SkipItem::EOF => break,
+                    SkipItem::Some{read_size} => {
+                        offset += read_size;
+                    }
+                }
+            }
+            
+            // Value
+            match serde::skip_item(&mut file)? {
+                SkipItem::EOF => return Err(anyhow!("Unexpected EOF while reading a value.")),
+                SkipItem::Some{read_size} => {
+                    offset += read_size;
                 }
             }
         }
@@ -96,10 +112,20 @@ impl SSTable {
         file.seek(SeekFrom::Start(file_offset))?;
 
         loop {
-            match serde::read_kv(&mut file, true, |read_key| read_key == k)? {
-                serde::FileKeyValue::EOF => break,
-                serde::FileKeyValue::KV(_, _, found @ Some(_)) => return Ok(found),
-                _ => continue,
+            // Key
+            let found = match serde::read_item::<Key>(&mut file)? {
+                ReadItem::EOF => break,
+                ReadItem::Some{read_size: _, obj} => &obj == k
+            };
+
+            // Value
+            if found {
+                match serde::read_item::<Value>(&mut file)? {
+                    ReadItem::EOF => return Err(anyhow!("Unexpected EOF while reading a value.")),
+                    ReadItem::Some{read_size: _, obj} => return Ok(Some(obj)),
+                }
+            } else {
+                serde::skip_item(&mut file)?;
             }
         }
         Ok(None)
@@ -168,7 +194,8 @@ impl SSTable {
             if prev.is_some() && &k == prev.as_ref().unwrap() {
                 continue;
             }
-            serde::serialize_kv(&k, &v, &mut file)?;
+            k.ser(&mut file)?;
+            v.ser(&mut file)?;
             prev = Some(k);
         }
 
