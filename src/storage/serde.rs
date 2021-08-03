@@ -163,30 +163,6 @@ impl Serializable for OptDatum {
     }
 }
 
-// impl Serializable for Key {
-//     fn ser(&self, w: &mut impl Write) -> Result<usize> {
-//         self.0.ser(w)
-//     }
-
-//     fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
-//         let dat = Datum::deser(datum_size, datum_type, r)?;
-//         let obj = Self(dat);
-//         Ok(obj)
-//     }
-// }
-
-// impl Serializable for Value {
-//     fn ser(&self, w: &mut impl Write) -> Result<usize> {
-//         self.0.ser(w)
-//     }
-
-//     fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
-//         let dat = OptDatum::deser(datum_size, datum_type, r)?;
-//         let obj = Self(dat);
-//         Ok(obj)
-//     }
-// }
-
 /// @return Total count of bytes that are written to file.
 fn write_item(datum_type: DatumType, datum_bytes: &[u8], w: &mut impl Write) -> Result<usize> {
     let mut span_size = 0usize;
@@ -198,6 +174,17 @@ fn write_item(datum_type: DatumType, datum_bytes: &[u8], w: &mut impl Write) -> 
     write_size += w.write(&(datum_type as DatumTypeInt).to_le_bytes())?;
     write_size += w.write(datum_bytes)?;
 
+    Ok(write_size)
+}
+
+pub fn serialize_kv<K: Serializable, V: Serializable>(
+    k: &K,
+    v: &V,
+    w: &mut impl Write,
+) -> Result<usize> {
+    let mut write_size = 0usize;
+    write_size += k.ser(w)?;
+    write_size += v.ser(w)?;
     Ok(write_size)
 }
 

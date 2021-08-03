@@ -1,6 +1,6 @@
 use crate::storage::api::{Datum, OptDatum};
 use crate::storage::lsm::Memtable;
-use crate::storage::serde::{self, KeyValueIterator, ReadItem, Serializable, SkipItem};
+use crate::storage::serde::{self, KeyValueIterator, ReadItem, SkipItem};
 use anyhow::{anyhow, Result};
 use core::option::Option;
 use core::option::Option::{None, Some};
@@ -38,9 +38,7 @@ impl SSTable {
             .open(&path)?;
         let mut offset = 0usize;
         for (kv_i, (k, v)) in memtable.iter().enumerate() {
-            let mut delta_offset = 0usize;
-            delta_offset += k.ser(&mut file)?;
-            delta_offset += v.ser(&mut file)?;
+            let delta_offset = serde::serialize_kv(k, v, &mut file)?;
 
             if SSTable::is_kv_in_mem(kv_i) {
                 sparse_index.insert((*k).clone(), offset as FileOffset);
@@ -187,8 +185,7 @@ impl SSTable {
             if prev.is_some() && &k == prev.as_ref().unwrap() {
                 continue;
             }
-            k.ser(&mut file)?;
-            v.ser(&mut file)?;
+            serde::serialize_kv(&k, &v, &mut file)?;
             prev = Some(k);
         }
 

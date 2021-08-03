@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
 
 use crate::storage::api::{Datum, OptDatum};
-use crate::storage::serde::{KeyValueIterator, Serializable};
+use crate::storage::serde::{self, KeyValueIterator};
 use crate::storage::sstable::SSTable;
 use crate::storage::utils;
 
@@ -137,8 +137,7 @@ impl LSMTree {
     }
 
     pub fn put(&mut self, k: Datum, v: OptDatum) -> Result<()> {
-        k.ser(&mut self.commit_log)?;
-        v.ser(&mut self.commit_log)?;
+        serde::serialize_kv(&k, &v, &mut self.commit_log)?;
 
         self.memtable.insert(k, v);
 
