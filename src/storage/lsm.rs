@@ -34,7 +34,7 @@ impl Memtable {
     }
 }
 
-pub struct LSM {
+pub struct LSMTree {
     path: PathBuf,
     memtable: Memtable,
     commit_log_path: PathBuf,
@@ -43,8 +43,8 @@ pub struct LSM {
     sstables: Vec<SSTable>,
 }
 
-impl LSM {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<LSM> {
+impl LSMTree {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<LSMTree> {
         std::fs::create_dir_all(path.as_ref().join(COMMIT_LOGS_DIR_PATH))?;
         std::fs::create_dir_all(path.as_ref().join(SSTABLES_DIR_PATH))?;
 
@@ -71,7 +71,7 @@ impl LSM {
                 .collect();
         let sstables = sstables?;
 
-        let ret = LSM {
+        let ret = LSMTree {
             path: path.as_ref().into(),
             memtable,
             commit_log_path,
