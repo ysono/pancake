@@ -177,9 +177,9 @@ fn write_item(datum_type: DatumType, datum_bytes: &[u8], w: &mut impl Write) -> 
     Ok(write_size)
 }
 
-pub fn serialize_kv<K: Serializable, V: Serializable>(
-    k: &K,
-    v: &V,
+pub fn serialize_kv(
+    k: &impl Serializable,
+    v: &impl Serializable,
     w: &mut impl Write,
 ) -> Result<usize> {
     let mut write_size = 0usize;
@@ -280,9 +280,7 @@ impl Iterator for KeyValueIterator {
         let val: OptDatum = match read_item::<OptDatum>(&mut self.file) {
             Err(e) => return Some(Err(anyhow!(e))),
             Ok(ReadItem::EOF) => {
-                return Some(Err(anyhow!(
-                    "KeyValueIterator ,, Unexpected EOF while reading a value."
-                )))
+                return Some(Err(anyhow!("Unexpected EOF while reading a value.")))
             }
             Ok(ReadItem::Some { read_size: _, obj }) => obj,
         };

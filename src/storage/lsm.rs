@@ -136,7 +136,7 @@ impl LSMTree {
         Ok(())
     }
 
-    pub fn put(&mut self, k: Datum, v: OptDatum) -> Result<()> {
+    fn put_impl(&mut self, k: Datum, v: OptDatum) -> Result<()> {
         serde::serialize_kv(&k, &v, &mut self.commit_log)?;
 
         self.memtable.insert(k, v);
@@ -146,6 +146,10 @@ impl LSMTree {
         }
 
         Ok(())
+    }
+
+    pub fn put(&mut self, k: Datum, v: Datum) -> Result<()> {
+        self.put_impl(k, OptDatum::Some(v))
     }
 
     pub fn get(&self, k: Datum) -> Result<Option<Datum>> {
@@ -172,5 +176,9 @@ impl LSMTree {
             }
         }
         Ok(None)
+    }
+
+    pub fn delete(&mut self, k: Datum) -> Result<()> {
+        self.put_impl(k, OptDatum::Tombstone)
     }
 }
