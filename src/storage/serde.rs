@@ -48,7 +48,7 @@
 //! }
 //! ```
 
-use super::api::{Datum, OptDatum};
+use super::api::Datum;
 use anyhow::{anyhow, Result};
 use derive_more::From;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -56,6 +56,12 @@ use num_traits::FromPrimitive;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem::size_of;
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+pub enum OptDatum {
+    Tombstone,
+    Some(Datum),
+}
 
 /*
 We manually map enum members to data_type integers because:

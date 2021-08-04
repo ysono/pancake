@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
 
-use crate::storage::api::{Datum, OptDatum};
-use crate::storage::serde::{self, KeyValueIterator};
+use crate::storage::api::Datum;
+use crate::storage::serde::{self, KeyValueIterator, OptDatum};
 use crate::storage::sstable::SSTable;
 use crate::storage::utils;
 
@@ -20,7 +20,7 @@ static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 /// Its content corresponds to the append-only commit log.
 /// The memtable and commit log will be flushed to a (on-disk SSTable, in-memory sparse seeks of this SSTable) pair, at a later time.
 #[derive(Default, Deref, DerefMut)]
-pub struct Memtable(BTreeMap<Datum, OptDatum>);
+struct Memtable(BTreeMap<Datum, OptDatum>);
 
 impl Memtable {
     fn update_from_commit_log(&mut self, path: &PathBuf) -> Result<()> {
@@ -40,7 +40,7 @@ pub struct LSMTree {
     commit_log_path: PathBuf,
     commit_log: File,
     memtable_in_flush: Option<Memtable>,
-    sstables: Vec<SSTable>,
+    sstables: Vec<SSTable<Datum>>,
 }
 
 impl LSMTree {
@@ -64,7 +64,7 @@ impl LSMTree {
             .append(true)
             .open(&commit_log_path)?;
 
-        let sstables: Result<Vec<SSTable>> =
+        let sstables: Result<Vec<SSTable<Datum>>> =
             utils::read_dir_sorted(path.as_ref().join(SSTABLES_DIR_PATH))?
                 .into_iter()
                 .map(SSTable::read_from_file)
@@ -103,7 +103,7 @@ impl LSMTree {
             .memtable_in_flush
             .as_ref()
             .ok_or(anyhow!("Unexpected error: no memtable being flushed"))?;
-        let new_sst = SSTable::write_from_memtable(
+        let new_sst = SSTable::write_from_mem(
             mtf,
             utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH)),
         )?;
@@ -124,7 +124,7 @@ impl LSMTree {
 
     fn compact_sstables(&mut self) -> Result<()> {
         let new_table_path = utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH));
-        let new_tables = SSTable::compact(new_table_path, self.sstables.iter())?;
+        let new_tables = SSTable::compact(new_table_path, &self.sstables)?;
 
         // TODO MutexGuard here
         // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
@@ -170,7 +170,7 @@ impl LSMTree {
         }
         // TODO bloom filter here
         for ss in self.sstables.iter().rev() {
-            let v = ss.get(&k)?;
+            let v = ss.get::<OptDatum>(&k)?;
             if let Some(v) = v {
                 return to_ret_type(v.clone());
             }

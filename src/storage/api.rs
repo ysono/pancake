@@ -7,9 +7,3 @@ pub enum Datum {
     Str(String),
     Tuple(Vec<Datum>),
 }
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
-pub enum OptDatum {
-    Tombstone,
-    Some(Datum),
-}
