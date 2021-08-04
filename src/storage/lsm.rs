@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};
 
-use super::api::{Key, Value};
-use super::serde;
-use super::utils;
+use crate::storage::api::{Datum, OptDatum};
+use crate::storage::serde::{self, KeyValueIterator};
 use crate::storage::sstable::SSTable;
+use crate::storage::utils;
 
 static COMMIT_LOGS_DIR_PATH: &'static str = "commit_logs";
 static SSTABLES_DIR_PATH: &'static str = "sstables";
@@ -20,12 +20,12 @@ static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 /// Its content corresponds to the append-only commit log.
 /// The memtable and commit log will be flushed to a (on-disk SSTable, in-memory sparse seeks of this SSTable) pair, at a later time.
 #[derive(Default, Deref, DerefMut)]
-pub struct Memtable(BTreeMap<Key, Value>);
+pub struct Memtable(BTreeMap<Datum, OptDatum>);
 
 impl Memtable {
     fn update_from_commit_log(&mut self, path: &PathBuf) -> Result<()> {
         let file = File::open(path)?;
-        let iter = serde::KeyValueIterator::from(file);
+        let iter = KeyValueIterator::from(file);
         for file_data in iter {
             let (key, val) = file_data?;
             self.insert(key, val);
@@ -123,7 +123,8 @@ impl LSMTree {
     }
 
     fn compact_sstables(&mut self) -> Result<()> {
-        let new_tables = SSTable::compact(self.sstables.iter())?;
+        let new_table_path = utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH));
+        let new_tables = SSTable::compact(new_table_path, self.sstables.iter())?;
 
         // TODO MutexGuard here
         // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
@@ -135,7 +136,7 @@ impl LSMTree {
         Ok(())
     }
 
-    pub fn put(&mut self, k: Key, v: Value) -> Result<()> {
+    fn put_impl(&mut self, k: Datum, v: OptDatum) -> Result<()> {
         serde::serialize_kv(&k, &v, &mut self.commit_log)?;
 
         self.memtable.insert(k, v);
@@ -147,22 +148,37 @@ impl LSMTree {
         Ok(())
     }
 
-    pub fn get(&self, k: Key) -> Result<Value> {
+    pub fn put(&mut self, k: Datum, v: Datum) -> Result<()> {
+        self.put_impl(k, OptDatum::Some(v))
+    }
+
+    pub fn get(&self, k: Datum) -> Result<Option<Datum>> {
+        let to_ret_type = |x: OptDatum| -> Result<Option<Datum>> {
+            match x {
+                OptDatum::Tombstone => return Ok(None),
+                OptDatum::Some(dat) => return Ok(Some(dat.clone())),
+            }
+        };
+
         if let Some(v) = self.memtable.get(&k) {
-            return Ok(v.clone());
+            return to_ret_type(v.clone());
         }
         if let Some(mtf) = &self.memtable_in_flush {
             if let Some(v) = mtf.get(&k) {
-                return Ok(v.clone());
+                return to_ret_type(v.clone());
             }
         }
         // TODO bloom filter here
         for ss in self.sstables.iter().rev() {
             let v = ss.get(&k)?;
             if let Some(v) = v {
-                return Ok(v);
+                return to_ret_type(v.clone());
             }
         }
-        Ok(Value(None))
+        Ok(None)
+    }
+
+    pub fn delete(&mut self, k: Datum) -> Result<()> {
+        self.put_impl(k, OptDatum::Tombstone)
     }
 }

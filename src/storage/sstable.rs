@@ -1,8 +1,7 @@
-use crate::storage::api::{Key, Value};
+use crate::storage::api::{Datum, OptDatum};
 use crate::storage::lsm::Memtable;
-use crate::storage::serde::KeyValueIterator;
-use crate::storage::{serde, utils};
-use anyhow::Result;
+use crate::storage::serde::{self, KeyValueIterator, ReadItem, SkipItem};
+use anyhow::{anyhow, Result};
 use core::option::Option;
 use core::option::Option::{None, Some};
 use core::result::Result::Ok;
@@ -16,7 +15,6 @@ use std::path::PathBuf;
 
 type FileOffset = u64;
 
-static SSTABLES_DIR_PATH: &'static str = "/tmp/pancake/sstables";
 static SSTABLE_IDX_SPARSENESS: usize = 3;
 
 /// One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file.
@@ -57,15 +55,29 @@ impl SSTable {
         let mut file = File::open(&path)?;
         let mut offset = 0usize;
         for kv_i in 0usize.. {
-            let deser_key = SSTable::is_kv_in_mem(kv_i);
-            match serde::read_kv(&mut file, deser_key, |_| false)? {
-                serde::FileKeyValue::EOF => break,
-                serde::FileKeyValue::KV(delta_offset, maybe_key, _) => {
-                    if let Some(key) = maybe_key {
-                        sparse_index.insert(key, offset as FileOffset);
+            // Key
+            if SSTable::is_kv_in_mem(kv_i) {
+                match serde::read_item::<Datum>(&mut file)? {
+                    ReadItem::EOF => break,
+                    ReadItem::Some { read_size, obj } => {
+                        sparse_index.insert(obj, offset as FileOffset);
+                        offset += read_size;
                     }
+                }
+            } else {
+                match serde::skip_item(&mut file)? {
+                    SkipItem::EOF => break,
+                    SkipItem::Some { read_size } => {
+                        offset += read_size;
+                    }
+                }
+            }
 
-                    offset += delta_offset;
+            // Value
+            match serde::skip_item(&mut file)? {
+                SkipItem::EOF => return Err(anyhow!("Unexpected EOF while reading a value.")),
+                SkipItem::Some { read_size } => {
+                    offset += read_size;
                 }
             }
         }
@@ -74,24 +86,36 @@ impl SSTable {
     }
 
     /// Both the in-memory index and the file are sorted by key.
-    /// The index maps { key (sparse) => file offset }.
+    /// The index maps { key : file offset } for a sparse subsequence of keys.
     /// 1. Bisect in the in-memory sparse index, to find the lower-bound file offset.
     /// 1. Seek the offset in the file. Then read linearlly in file until either EOF or the last-read key is greater than the sought key.
     ///
     /// @return
-    ///     If found within this sstable, then return Some. The content of the Some may be a tombstone: i.e. Some(Value(None)).
-    ///     If not found within this sstable, then return None.
-    pub fn get(&self, k: &Key) -> Result<Option<Value>> {
+    ///     `None` if not found within this sstable.
+    ///     `Some(_)` if found.
+    ///     `Some(OptDatum::Tombstone)` if found and value is tombstone.
+    ///     `Some(OptDatum::Some(_))` if found and value is non-tombstone.
+    pub fn get(&self, k: &Datum) -> Result<Option<OptDatum>> {
         let file_offset = self.sparse_index.nearest_preceding_file_offset(k);
 
         let mut file = File::open(&self.path)?;
         file.seek(SeekFrom::Start(file_offset))?;
 
         loop {
-            match serde::read_kv(&mut file, true, |read_key| read_key == k)? {
-                serde::FileKeyValue::EOF => break,
-                serde::FileKeyValue::KV(_, _, found @ Some(_)) => return Ok(found),
-                _ => continue,
+            // Key
+            let found = match serde::read_item::<Datum>(&mut file)? {
+                ReadItem::EOF => break,
+                ReadItem::Some { read_size: _, obj } => &obj == k,
+            };
+
+            // Value
+            if found {
+                match serde::read_item::<OptDatum>(&mut file)? {
+                    ReadItem::EOF => return Err(anyhow!("Unexpected EOF while reading a value.")),
+                    ReadItem::Some { read_size: _, obj } => return Ok(Some(obj)),
+                }
+            } else {
+                serde::skip_item(&mut file)?;
             }
         }
         Ok(None)
@@ -102,12 +126,13 @@ impl SSTable {
         Ok(())
     }
 
-    pub fn compact<'a, I: Iterator<Item = &'a Self>>(tables: I) -> Result<Vec<Self>> {
-        let path = utils::new_timestamped_path(SSTABLES_DIR_PATH);
+    pub fn compact<'a, I: Iterator<Item = &'a Self>>(
+        path: PathBuf,
+        tables: I,
+    ) -> Result<Vec<Self>> {
         let mut file = OpenOptions::new()
-            .create(true)
+            .create_new(true)
             .write(true)
-            .truncate(true)
             .open(&path)?;
 
         let mut key_value_iterators = Vec::new();
@@ -176,7 +201,7 @@ impl SSTable {
 #[derive(Debug)]
 struct SparseIndex {
     // this version of the index is backed by an ordered map.
-    map: BTreeMap<Key, FileOffset>,
+    map: BTreeMap<Datum, FileOffset>,
 }
 
 impl SparseIndex {
@@ -186,11 +211,11 @@ impl SparseIndex {
         }
     }
 
-    fn insert(&mut self, key: Key, offset: FileOffset) {
+    fn insert(&mut self, key: Datum, offset: FileOffset) {
         self.map.insert(key, offset);
     }
 
-    fn nearest_preceding_file_offset(&self, key: &Key) -> FileOffset {
+    fn nearest_preceding_file_offset(&self, key: &Datum) -> FileOffset {
         // TODO what's the best way to bisect a BTreeMap? this appears to have O(n) cost
         let idx_pos = self.map.iter().rposition(|kv| kv.0 <= key);
         match idx_pos {

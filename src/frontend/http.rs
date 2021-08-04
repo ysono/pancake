@@ -1,4 +1,4 @@
-use crate::storage::api::{Datum, Key, Value};
+use crate::storage::api::Datum;
 use crate::storage::db::DB;
 use anyhow::{anyhow, Error, Result};
 use futures::executor::block_on;
@@ -21,20 +21,18 @@ async fn logger(req: Request<Body>) -> Result<Request<Body>> {
 
 async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key: &String = req.param("key").unwrap();
-    let key = Key(Datum::Str(key.clone()));
+    let key = Datum::Str(key.clone());
 
     let db = req.data::<Arc<RwLock<DB>>>().unwrap();
     let db = db.read().unwrap();
 
-    let val: Value = db.get(key)?;
-
-    match val.0 {
+    match db.get(key)? {
         None => Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())
             .map_err(|e| anyhow!(e)),
-        Some(val) => {
-            let body: String = match val {
+        Some(dat) => {
+            let body: String = match dat {
                 Datum::Bytes(bytes) => bytes.iter().map(|b| format!("{:#x}", b)).collect(),
                 Datum::I64(i) => i.to_string(),
                 Datum::Str(s) => s,
@@ -49,10 +47,10 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
     let (parts, body) = req.into_parts();
 
     let key: &String = parts.param("key").unwrap();
-    let key = Key(Datum::Str(key.clone()));
+    let key = Datum::Str(key.clone());
 
     let val: Vec<u8> = block_on(hyper::body::to_bytes(body))?.to_vec();
-    let val = Value::from(Datum::Bytes(val));
+    let val = Datum::Bytes(val);
 
     let db = parts.data::<Arc<RwLock<DB>>>().unwrap();
     let mut db = db.write().unwrap();
@@ -67,12 +65,12 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
 
 async fn delete_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key: &String = req.param("key").unwrap();
-    let key = Key(Datum::Str(key.clone()));
+    let key = Datum::Str(key.clone());
 
     let db = req.data::<Arc<RwLock<DB>>>().unwrap();
     let mut db = db.write().unwrap();
 
-    db.put(key, Value(None))?;
+    db.delete(key)?;
 
     Response::builder()
         .status(StatusCode::NO_CONTENT)
