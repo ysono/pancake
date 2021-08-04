@@ -4,10 +4,8 @@ use std::mem;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
-use derive_more::{Deref, DerefMut};
 
-use crate::storage::api::Datum;
-use crate::storage::serde::{self, KeyValueIterator, OptDatum};
+use crate::storage::serde::{self, KeyValueIterator, Serializable};
 use crate::storage::sstable::SSTable;
 use crate::storage::utils;
 
@@ -16,42 +14,28 @@ static SSTABLES_DIR_PATH: &'static str = "sstables";
 static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;
 static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 
-/// The memtable: in-memory sorted map of the most recently put items.
-/// Its content corresponds to the append-only commit log.
-/// The memtable and commit log will be flushed to a (on-disk SSTable, in-memory sparse seeks of this SSTable) pair, at a later time.
-#[derive(Default, Deref, DerefMut)]
-struct Memtable(BTreeMap<Datum, OptDatum>);
-
-impl Memtable {
-    fn update_from_commit_log(&mut self, path: &PathBuf) -> Result<()> {
-        let file = File::open(path)?;
-        let iter = KeyValueIterator::from(file);
-        for file_data in iter {
-            let (key, val) = file_data?;
-            self.insert(key, val);
-        }
-        Ok(())
-    }
-}
-
-pub struct LSMTree {
+pub struct LSMTree<K, V> {
     path: PathBuf,
-    memtable: Memtable,
+    memtable: BTreeMap<K, V>,
     commit_log_path: PathBuf,
     commit_log: File,
-    memtable_in_flush: Option<Memtable>,
-    sstables: Vec<SSTable<Datum>>,
+    memtable_in_flush: Option<BTreeMap<K, V>>,
+    sstables: Vec<SSTable<K, V>>,
 }
 
-impl LSMTree {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<LSMTree> {
+impl<K, V> LSMTree<K, V>
+where
+    K: Serializable + Ord + Clone,
+    V: Serializable + Clone,
+{
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         std::fs::create_dir_all(path.as_ref().join(COMMIT_LOGS_DIR_PATH))?;
         std::fs::create_dir_all(path.as_ref().join(SSTABLES_DIR_PATH))?;
 
-        let mut memtable = Memtable::default();
+        let mut memtable = BTreeMap::<K, V>::new();
         let mut commit_log_path = None;
         for path in utils::read_dir_sorted(path.as_ref().join(COMMIT_LOGS_DIR_PATH))? {
-            memtable.update_from_commit_log(&path)?;
+            Self::read_commit_log(&path, &mut memtable)?;
             commit_log_path = Some(path);
         }
 
@@ -64,14 +48,12 @@ impl LSMTree {
             .append(true)
             .open(&commit_log_path)?;
 
-        let sstables: Result<Vec<SSTable<Datum>>> =
-            utils::read_dir_sorted(path.as_ref().join(SSTABLES_DIR_PATH))?
-                .into_iter()
-                .map(SSTable::read_from_file)
-                .collect();
-        let sstables = sstables?;
+        let sstables = utils::read_dir_sorted(path.as_ref().join(SSTABLES_DIR_PATH))?
+            .into_iter()
+            .map(SSTable::read_from_file)
+            .collect::<Result<Vec<_>>>()?;
 
-        let ret = LSMTree {
+        let ret = Self {
             path: path.as_ref().into(),
             memtable,
             commit_log_path,
@@ -80,6 +62,16 @@ impl LSMTree {
             sstables,
         };
         Ok(ret)
+    }
+
+    fn read_commit_log(path: &PathBuf, memtable: &mut BTreeMap<K, V>) -> Result<()> {
+        let file = File::open(path)?;
+        let iter = KeyValueIterator::<K, V>::from(file);
+        for file_data in iter {
+            let (key, val) = file_data?;
+            memtable.insert(key, val);
+        }
+        Ok(())
     }
 
     fn flush_memtable(&mut self) -> Result<()> {
@@ -92,7 +84,7 @@ impl LSMTree {
         let old_cl_path: PathBuf;
         {
             // TODO MutexGuard here
-            let old_mt = mem::replace(&mut self.memtable, Memtable::default());
+            let old_mt = mem::replace(&mut self.memtable, Default::default());
             self.memtable_in_flush = Some(old_mt);
 
             self.commit_log = new_cl;
@@ -136,7 +128,7 @@ impl LSMTree {
         Ok(())
     }
 
-    fn put_impl(&mut self, k: Datum, v: OptDatum) -> Result<()> {
+    fn put_impl(&mut self, k: K, v: V) -> Result<()> {
         serde::serialize_kv(&k, &v, &mut self.commit_log)?;
 
         self.memtable.insert(k, v);
@@ -148,37 +140,26 @@ impl LSMTree {
         Ok(())
     }
 
-    pub fn put(&mut self, k: Datum, v: Datum) -> Result<()> {
-        self.put_impl(k, OptDatum::Some(v))
+    pub fn put(&mut self, k: K, v: V) -> Result<()> {
+        self.put_impl(k, v)
     }
 
-    pub fn get(&self, k: Datum) -> Result<Option<Datum>> {
-        let to_ret_type = |x: OptDatum| -> Result<Option<Datum>> {
-            match x {
-                OptDatum::Tombstone => return Ok(None),
-                OptDatum::Some(dat) => return Ok(Some(dat.clone())),
-            }
-        };
-
+    pub fn get(&self, k: K) -> Result<Option<V>> {
         if let Some(v) = self.memtable.get(&k) {
-            return to_ret_type(v.clone());
+            return Ok(Some(v.clone()));
         }
         if let Some(mtf) = &self.memtable_in_flush {
             if let Some(v) = mtf.get(&k) {
-                return to_ret_type(v.clone());
+                return Ok(Some(v.clone()));
             }
         }
         // TODO bloom filter here
         for ss in self.sstables.iter().rev() {
-            let v = ss.get::<OptDatum>(&k)?;
-            if let Some(v) = v {
-                return to_ret_type(v.clone());
+            let v = ss.get(&k)?;
+            if v.is_some() {
+                return Ok(v);
             }
         }
         Ok(None)
-    }
-
-    pub fn delete(&mut self, k: Datum) -> Result<()> {
-        self.put_impl(k, OptDatum::Tombstone)
     }
 }

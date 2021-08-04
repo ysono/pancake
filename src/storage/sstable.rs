@@ -10,6 +10,7 @@ use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Seek;
 use std::io::SeekFrom;
+use std::marker::PhantomData;
 use std::path::PathBuf;
 
 type FileOffset = u64;
@@ -22,16 +23,18 @@ fn is_kv_sparsely_captured(kv_i: usize) -> bool {
 
 /// One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file.
 #[derive(Debug)]
-pub struct SSTable<K: Serializable + Ord + Clone> {
+pub struct SSTable<K, V> {
     path: PathBuf,
     sparse_index: SparseIndex<K>,
+    phantom: PhantomData<V>,
 }
 
-impl<K: Serializable + Ord + Clone> SSTable<K> {
-    pub fn write_from_mem<V>(mem: &BTreeMap<K, V>, path: PathBuf) -> Result<SSTable<K>>
-    where
-        V: Serializable,
-    {
+impl<K, V> SSTable<K, V>
+where
+    K: Serializable + Ord + Clone,
+    V: Serializable + Clone,
+{
+    pub fn write_from_mem(mem: &BTreeMap<K, V>, path: PathBuf) -> Result<Self> {
         let mut sparse_index = SparseIndex::<K>::new();
         let mut file = OpenOptions::new()
             .create(true)
@@ -49,10 +52,14 @@ impl<K: Serializable + Ord + Clone> SSTable<K> {
             offset += delta_offset;
         }
 
-        Ok(SSTable::<K> { path, sparse_index })
+        Ok(Self {
+            path,
+            sparse_index,
+            phantom: PhantomData,
+        })
     }
 
-    pub fn read_from_file(path: PathBuf) -> Result<SSTable<K>> {
+    pub fn read_from_file(path: PathBuf) -> Result<Self> {
         let mut sparse_index = SparseIndex::<K>::new();
         let mut file = File::open(&path)?;
         let mut offset = 0usize;
@@ -84,7 +91,11 @@ impl<K: Serializable + Ord + Clone> SSTable<K> {
             }
         }
 
-        Ok(SSTable::<K> { path, sparse_index })
+        Ok(Self {
+            path,
+            sparse_index,
+            phantom: PhantomData,
+        })
     }
 
     /// Both the in-memory index and the file are sorted by key.
@@ -95,10 +106,7 @@ impl<K: Serializable + Ord + Clone> SSTable<K> {
     /// @return
     ///     `None` if not found within this sstable.
     ///     `Some(_: V)` if found.
-    pub fn get<V>(&self, k: &K) -> Result<Option<V>>
-    where
-        V: Serializable,
-    {
+    pub fn get(&self, k: &K) -> Result<Option<V>> {
         let file_offset = self.sparse_index.nearest_preceding_file_offset(k);
 
         let mut file = File::open(&self.path)?;
@@ -142,7 +150,7 @@ impl<K: Serializable + Ord + Clone> SSTable<K> {
 
             // NB: the index/position of the sstable is included for the purpose of breaking ties
             // on duplicate keys.
-            let iter = KeyValueIterator::from(file).zip(std::iter::repeat(index));
+            let iter = KeyValueIterator::<K, V>::from(file).zip(std::iter::repeat(index));
             key_value_iterators.push(iter);
         }
 
@@ -199,7 +207,7 @@ impl<K: Serializable + Ord + Clone> SSTable<K> {
 }
 
 #[derive(Deref, DerefMut, Debug)]
-struct SparseIndex<K: Serializable + Ord> {
+struct SparseIndex<K> {
     // this version of the index is backed by an ordered map.
     map: BTreeMap<K, FileOffset>,
 }

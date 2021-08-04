@@ -50,17 +50,17 @@
 
 use super::api::Datum;
 use anyhow::{anyhow, Result};
-use derive_more::From;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::marker::PhantomData;
 use std::mem::size_of;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
-pub enum OptDatum {
+#[derive(Clone)]
+pub enum OptDatum<T: Serializable> {
     Tombstone,
-    Some(Datum),
+    Some(T),
 }
 
 /*
@@ -149,7 +149,7 @@ impl Serializable for Datum {
     }
 }
 
-impl Serializable for OptDatum {
+impl<T: Serializable> Serializable for OptDatum<T> {
     fn ser(&self, w: &mut impl Write) -> Result<usize> {
         match self {
             OptDatum::Tombstone => write_item(DatumType::Tombstone, &[0u8; 0], w),
@@ -161,7 +161,7 @@ impl Serializable for OptDatum {
         let obj: Self = match datum_type {
             DatumType::Tombstone => OptDatum::Tombstone,
             _ => {
-                let dat = Datum::deser(datum_size, datum_type, r)?;
+                let dat = T::deser(datum_size, datum_type, r)?;
                 OptDatum::Some(dat)
             }
         };
@@ -267,23 +267,31 @@ pub fn read_item<T: Serializable>(file: &mut File) -> Result<ReadItem<T>> {
     Ok(ret)
 }
 
-#[derive(From)]
-pub struct KeyValueIterator {
+pub struct KeyValueIterator<K, V> {
     file: File,
+    phantom: PhantomData<(K, V)>,
 }
 
-impl Iterator for KeyValueIterator {
-    type Item = Result<(Datum, OptDatum)>;
+impl<K, V> From<File> for KeyValueIterator<K, V> {
+    fn from(file: File) -> Self {
+        Self {
+            file,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<K: Serializable, V: Serializable> Iterator for KeyValueIterator<K, V> {
+    type Item = Result<(K, V)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // TODO(btc): if read_kv returns an error, perhaps it should continue to return errors for all subsequent calls?
-        let key: Datum = match read_item::<Datum>(&mut self.file) {
+        let key: K = match read_item::<K>(&mut self.file) {
             Err(e) => return Some(Err(anyhow!(e))),
             Ok(ReadItem::EOF) => return None,
             Ok(ReadItem::Some { read_size: _, obj }) => obj,
         };
 
-        let val: OptDatum = match read_item::<OptDatum>(&mut self.file) {
+        let val: V = match read_item::<V>(&mut self.file) {
             Err(e) => return Some(Err(anyhow!(e))),
             Ok(ReadItem::EOF) => {
                 return Some(Err(anyhow!("Unexpected EOF while reading a value.")))
