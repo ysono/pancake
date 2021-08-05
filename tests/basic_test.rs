@@ -1,6 +1,6 @@
 use anyhow::Result;
 use pancake::storage::db::DB;
-use pancake::storage::types::Datum;
+use pancake::storage::types::{Datum, PrimaryKey, Value};
 use rand;
 use std::collections::BTreeMap;
 use std::env::temp_dir;
@@ -19,13 +19,13 @@ fn test_in_single_thread() -> Result<()> {
 }
 
 fn put_then_tomb(db: &mut DB) -> Result<()> {
-    let mut k_to_expected_v = BTreeMap::<Datum, Option<Datum>>::new();
+    let mut k_to_expected_v = BTreeMap::<PrimaryKey, Option<Value>>::new();
 
     for _ in 0..100 {
         let i = rand::random::<u16>();
 
-        let key = Datum::Str(format!("key{}", i));
-        let val = Datum::Str(format!("val{}", i));
+        let key = PrimaryKey(Datum::Str(format!("key{}", i)));
+        let val = Value(Datum::Str(format!("val{}", i)));
 
         db.put(key.clone(), val.clone())?;
 
@@ -49,7 +49,7 @@ fn put_then_tomb(db: &mut DB) -> Result<()> {
 }
 
 fn nonexistent(db: &mut DB) -> Result<()> {
-    let key = Datum::Str(String::from("nonexistent"));
+    let key = PrimaryKey(Datum::Str(String::from("nonexistent")));
 
     let res = db.get(key)?;
 
@@ -59,9 +59,9 @@ fn nonexistent(db: &mut DB) -> Result<()> {
 }
 
 fn zero_byte_value(db: &mut DB) -> Result<()> {
-    let key = Datum::Str(String::from("empty"));
+    let key = PrimaryKey(Datum::Str(String::from("empty")));
 
-    let val = Datum::Bytes(vec![]);
+    let val = Value(Datum::Bytes(vec![]));
 
     db.put(key.clone(), val.clone())?;
 
@@ -80,6 +80,7 @@ fn tuple(db: &mut DB) -> Result<()> {
         Datum::I64(0x123456789abcdef),
         Datum::Str(String::from("ahoy in tuple")),
     ]);
+    let key = PrimaryKey(key);
 
     let val = Datum::Tuple(vec![
         Datum::I64(0x1337),
@@ -91,6 +92,7 @@ fn tuple(db: &mut DB) -> Result<()> {
         Datum::Tuple(vec![]),
         Datum::I64(0x7331),
     ]);
+    let val = Value(val);
 
     db.put(key.clone(), val.clone())?;
 

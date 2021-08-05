@@ -1,12 +1,12 @@
 use crate::storage::lsm::LSMTree;
-use crate::storage::types::{Datum, OptDatum};
+use crate::storage::types::{OptDatum, PrimaryKey, Value};
 use anyhow::Result;
 use std::path::Path;
 
 const PRIMARY_INDEX: &'static str = "primary_index";
 
 pub struct DB {
-    primary_index: LSMTree<Datum, OptDatum<Datum>>,
+    primary_index: LSMTree<PrimaryKey, OptDatum<Value>>,
 }
 
 impl DB {
@@ -18,15 +18,15 @@ impl DB {
         Ok(db)
     }
 
-    pub fn put(&mut self, k: Datum, v: Datum) -> Result<()> {
+    pub fn put(&mut self, k: PrimaryKey, v: Value) -> Result<()> {
         self.primary_index.put(k, OptDatum::Some(v))
     }
 
-    pub fn delete(&mut self, k: Datum) -> Result<()> {
+    pub fn delete(&mut self, k: PrimaryKey) -> Result<()> {
         self.primary_index.put(k, OptDatum::Tombstone)
     }
 
-    pub fn get(&self, k: Datum) -> Result<Option<Datum>> {
+    pub fn get(&self, k: PrimaryKey) -> Result<Option<Value>> {
         match self.primary_index.get(k)? {
             Some(OptDatum::Some(dat)) => Ok(Some(dat)),
             _ => Ok(None),

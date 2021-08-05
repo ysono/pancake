@@ -1,5 +1,5 @@
 use crate::storage::db::DB;
-use crate::storage::types::Datum;
+use crate::storage::types::{Datum, PrimaryKey, Value};
 use anyhow::{anyhow, Error, Result};
 use futures::executor::block_on;
 use hyper::{Body, Request, Response, Server, StatusCode};
@@ -21,7 +21,7 @@ async fn logger(req: Request<Body>) -> Result<Request<Body>> {
 
 async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key: &String = req.param("key").unwrap();
-    let key = Datum::Str(key.clone());
+    let key = PrimaryKey(Datum::Str(key.clone()));
 
     let db = req.data::<Arc<RwLock<DB>>>().unwrap();
     let db = db.read().unwrap();
@@ -32,7 +32,7 @@ async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
             .body(Body::empty())
             .map_err(|e| anyhow!(e)),
         Some(dat) => {
-            let body: String = match dat {
+            let body: String = match dat.0 {
                 Datum::Bytes(bytes) => bytes.iter().map(|b| format!("{:#x}", b)).collect(),
                 Datum::I64(i) => i.to_string(),
                 Datum::Str(s) => s,
@@ -47,10 +47,10 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
     let (parts, body) = req.into_parts();
 
     let key: &String = parts.param("key").unwrap();
-    let key = Datum::Str(key.clone());
+    let key = PrimaryKey(Datum::Str(key.clone()));
 
     let val: Vec<u8> = block_on(hyper::body::to_bytes(body))?.to_vec();
-    let val = Datum::Bytes(val);
+    let val = Value(Datum::Bytes(val));
 
     let db = parts.data::<Arc<RwLock<DB>>>().unwrap();
     let mut db = db.write().unwrap();
@@ -65,7 +65,7 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
 
 async fn delete_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key: &String = req.param("key").unwrap();
-    let key = Datum::Str(key.clone());
+    let key = PrimaryKey(Datum::Str(key.clone()));
 
     let db = req.data::<Arc<RwLock<DB>>>().unwrap();
     let mut db = db.write().unwrap();
