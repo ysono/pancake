@@ -1,63 +1,72 @@
-use crate::storage::api::{Datum, OptDatum};
-use crate::storage::lsm::Memtable;
-use crate::storage::serde::{self, KeyValueIterator, ReadItem, SkipItem};
+use crate::storage::serde::{self, KeyValueIterator, ReadItem, Serializable, SkipItem};
 use anyhow::{anyhow, Result};
 use core::option::Option;
 use core::option::Option::{None, Some};
 use core::result::Result::Ok;
+use derive_more::{Deref, DerefMut};
 use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Seek;
 use std::io::SeekFrom;
+use std::marker::PhantomData;
 use std::path::PathBuf;
 
 type FileOffset = u64;
 
 static SSTABLE_IDX_SPARSENESS: usize = 3;
 
-/// One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file.
-#[derive(Debug)]
-pub struct SSTable {
-    path: PathBuf,
-    sparse_index: SparseIndex,
+fn is_kv_sparsely_captured(kv_i: usize) -> bool {
+    kv_i % SSTABLE_IDX_SPARSENESS == SSTABLE_IDX_SPARSENESS - 1
 }
 
-impl SSTable {
-    fn is_kv_in_mem(kv_i: usize) -> bool {
-        kv_i % SSTABLE_IDX_SPARSENESS == SSTABLE_IDX_SPARSENESS - 1
-    }
+/// One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file.
+#[derive(Debug)]
+pub struct SSTable<K, V> {
+    path: PathBuf,
+    sparse_index: SparseIndex<K>,
+    phantom: PhantomData<V>,
+}
 
-    pub fn write_from_memtable(memtable: &Memtable, path: PathBuf) -> Result<SSTable> {
-        let mut sparse_index = SparseIndex::new();
+impl<K, V> SSTable<K, V>
+where
+    K: Serializable + Ord + Clone,
+    V: Serializable + Clone,
+{
+    pub fn write_from_mem(mem: &BTreeMap<K, V>, path: PathBuf) -> Result<Self> {
+        let mut sparse_index = SparseIndex::<K>::new();
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
             .open(&path)?;
         let mut offset = 0usize;
-        for (kv_i, (k, v)) in memtable.iter().enumerate() {
+        for (kv_i, (k, v)) in mem.iter().enumerate() {
             let delta_offset = serde::serialize_kv(k, v, &mut file)?;
 
-            if SSTable::is_kv_in_mem(kv_i) {
+            if is_kv_sparsely_captured(kv_i) {
                 sparse_index.insert((*k).clone(), offset as FileOffset);
             }
 
             offset += delta_offset;
         }
 
-        Ok(SSTable { path, sparse_index })
+        Ok(Self {
+            path,
+            sparse_index,
+            phantom: PhantomData,
+        })
     }
 
-    pub fn read_from_file(path: PathBuf) -> Result<SSTable> {
-        let mut sparse_index = SparseIndex::new();
+    pub fn read_from_file(path: PathBuf) -> Result<Self> {
+        let mut sparse_index = SparseIndex::<K>::new();
         let mut file = File::open(&path)?;
         let mut offset = 0usize;
         for kv_i in 0usize.. {
             // Key
-            if SSTable::is_kv_in_mem(kv_i) {
-                match serde::read_item::<Datum>(&mut file)? {
+            if is_kv_sparsely_captured(kv_i) {
+                match serde::read_item::<K>(&mut file)? {
                     ReadItem::EOF => break,
                     ReadItem::Some { read_size, obj } => {
                         sparse_index.insert(obj, offset as FileOffset);
@@ -82,7 +91,11 @@ impl SSTable {
             }
         }
 
-        Ok(SSTable { path, sparse_index })
+        Ok(Self {
+            path,
+            sparse_index,
+            phantom: PhantomData,
+        })
     }
 
     /// Both the in-memory index and the file are sorted by key.
@@ -92,10 +105,8 @@ impl SSTable {
     ///
     /// @return
     ///     `None` if not found within this sstable.
-    ///     `Some(_)` if found.
-    ///     `Some(OptDatum::Tombstone)` if found and value is tombstone.
-    ///     `Some(OptDatum::Some(_))` if found and value is non-tombstone.
-    pub fn get(&self, k: &Datum) -> Result<Option<OptDatum>> {
+    ///     `Some(_: V)` if found.
+    pub fn get(&self, k: &K) -> Result<Option<V>> {
         let file_offset = self.sparse_index.nearest_preceding_file_offset(k);
 
         let mut file = File::open(&self.path)?;
@@ -103,14 +114,14 @@ impl SSTable {
 
         loop {
             // Key
-            let found = match serde::read_item::<Datum>(&mut file)? {
+            let found = match serde::read_item::<K>(&mut file)? {
                 ReadItem::EOF => break,
                 ReadItem::Some { read_size: _, obj } => &obj == k,
             };
 
             // Value
             if found {
-                match serde::read_item::<OptDatum>(&mut file)? {
+                match serde::read_item::<V>(&mut file)? {
                     ReadItem::EOF => return Err(anyhow!("Unexpected EOF while reading a value.")),
                     ReadItem::Some { read_size: _, obj } => return Ok(Some(obj)),
                 }
@@ -126,10 +137,7 @@ impl SSTable {
         Ok(())
     }
 
-    pub fn compact<'a, I: Iterator<Item = &'a Self>>(
-        path: PathBuf,
-        tables: I,
-    ) -> Result<Vec<Self>> {
+    pub fn compact(path: PathBuf, tables: &Vec<Self>) -> Result<Vec<Self>> {
         let mut file = OpenOptions::new()
             .create_new(true)
             .write(true)
@@ -142,7 +150,7 @@ impl SSTable {
 
             // NB: the index/position of the sstable is included for the purpose of breaking ties
             // on duplicate keys.
-            let iter = KeyValueIterator::from(file).zip(std::iter::repeat(index));
+            let iter = KeyValueIterator::<K, V>::from(file).zip(std::iter::repeat(index));
             key_value_iterators.push(iter);
         }
 
@@ -198,24 +206,20 @@ impl SSTable {
     }
 }
 
-#[derive(Debug)]
-struct SparseIndex {
+#[derive(Deref, DerefMut, Debug)]
+struct SparseIndex<K> {
     // this version of the index is backed by an ordered map.
-    map: BTreeMap<Datum, FileOffset>,
+    map: BTreeMap<K, FileOffset>,
 }
 
-impl SparseIndex {
+impl<K: Serializable + Ord> SparseIndex<K> {
     fn new() -> Self {
         Self {
             map: Default::default(),
         }
     }
 
-    fn insert(&mut self, key: Datum, offset: FileOffset) {
-        self.map.insert(key, offset);
-    }
-
-    fn nearest_preceding_file_offset(&self, key: &Datum) -> FileOffset {
+    fn nearest_preceding_file_offset(&self, key: &K) -> FileOffset {
         // TODO what's the best way to bisect a BTreeMap? this appears to have O(n) cost
         let idx_pos = self.map.iter().rposition(|kv| kv.0 <= key);
         match idx_pos {
