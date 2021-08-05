@@ -1,6 +1,5 @@
-use crate::storage::api::Datum;
 use crate::storage::lsm::LSMTree;
-use crate::storage::serde::OptDatum;
+use crate::storage::types::{Datum, OptDatum};
 use anyhow::Result;
 use std::path::Path;
 

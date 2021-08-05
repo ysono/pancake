@@ -1,6 +1,6 @@
 use anyhow::Result;
-use pancake::storage::api::Datum;
 use pancake::storage::db::DB;
+use pancake::storage::types::Datum;
 use rand;
 use std::collections::BTreeMap;
 use std::env::temp_dir;

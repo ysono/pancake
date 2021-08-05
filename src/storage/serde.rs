@@ -48,7 +48,6 @@
 //! }
 //! ```
 
-use super::api::Datum;
 use anyhow::{anyhow, Result};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -56,12 +55,6 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
 use std::mem::size_of;
-
-#[derive(Clone)]
-pub enum OptDatum<T: Serializable> {
-    Tombstone,
-    Some(T),
-}
 
 /*
 We manually map enum members to data_type integers because:
@@ -85,92 +78,8 @@ pub trait Serializable: Sized {
     fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self>;
 }
 
-impl Serializable for Datum {
-    fn ser(&self, w: &mut impl Write) -> Result<usize> {
-        let write_size: usize = match self {
-            Datum::Bytes(b) => write_item(DatumType::Bytes, b, w)?,
-            Datum::I64(i) => write_item(DatumType::I64, &i.to_le_bytes(), w)?,
-            Datum::Str(s) => write_item(DatumType::Str, s.as_bytes(), w)?,
-            Datum::Tuple(vec) => {
-                let mut b: Vec<u8> = vec![];
-
-                b.write(&vec.len().to_le_bytes())?;
-
-                for dat in vec.iter() {
-                    dat.ser(&mut b)?;
-                }
-
-                write_item(DatumType::Tuple, &b, w)?
-            }
-        };
-        Ok(write_size)
-    }
-
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
-        let obj: Self = match datum_type {
-            DatumType::Bytes => {
-                let mut buf = vec![0u8; datum_size];
-                r.read_exact(&mut buf)?;
-                Datum::Bytes(buf)
-            }
-            DatumType::I64 => {
-                let mut buf = [0u8; size_of::<i64>()];
-                r.read_exact(&mut buf)?;
-                Datum::I64(i64::from_le_bytes(buf))
-            }
-            DatumType::Str => {
-                let mut buf = vec![0u8; datum_size];
-                r.read_exact(&mut buf)?;
-                Datum::Str(String::from_utf8(buf)?)
-            }
-            DatumType::Tuple => {
-                let mut tup_len_buf = [0u8; size_of::<usize>()];
-                r.read_exact(&mut tup_len_buf)?;
-                let tup_len = usize::from_le_bytes(tup_len_buf);
-
-                let mut members = Vec::<Datum>::with_capacity(tup_len);
-
-                for _ in 0..tup_len {
-                    match read_item(r)? {
-                        ReadItem::EOF => {
-                            return Err(anyhow!("Unexpected EOF while reading a tuple."))
-                        }
-                        ReadItem::Some { read_size: _, obj } => {
-                            members.push(obj);
-                        }
-                    }
-                }
-
-                Datum::Tuple(members)
-            }
-            _ => return Err(anyhow!("Unexpected datum_type {:?}", datum_type)),
-        };
-        Ok(obj)
-    }
-}
-
-impl<T: Serializable> Serializable for OptDatum<T> {
-    fn ser(&self, w: &mut impl Write) -> Result<usize> {
-        match self {
-            OptDatum::Tombstone => write_item(DatumType::Tombstone, &[0u8; 0], w),
-            OptDatum::Some(dat) => dat.ser(w),
-        }
-    }
-
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
-        let obj: Self = match datum_type {
-            DatumType::Tombstone => OptDatum::Tombstone,
-            _ => {
-                let dat = T::deser(datum_size, datum_type, r)?;
-                OptDatum::Some(dat)
-            }
-        };
-        Ok(obj)
-    }
-}
-
 /// @return Total count of bytes that are written to file.
-fn write_item(datum_type: DatumType, datum_bytes: &[u8], w: &mut impl Write) -> Result<usize> {
+pub fn write_item(datum_type: DatumType, datum_bytes: &[u8], w: &mut impl Write) -> Result<usize> {
     let mut span_size = 0usize;
     span_size += size_of::<DatumTypeInt>();
     span_size += datum_bytes.len();
