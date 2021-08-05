@@ -1,5 +1,5 @@
-use crate::storage::api::Datum;
 use crate::storage::db::DB;
+use crate::storage::types::Datum;
 use anyhow::{anyhow, Error, Result};
 use futures::executor::block_on;
 use hyper::{Body, Request, Response, Server, StatusCode};
