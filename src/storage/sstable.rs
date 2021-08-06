@@ -37,9 +37,8 @@ where
     pub fn write_from_mem(mem: &BTreeMap<K, V>, path: PathBuf) -> Result<Self> {
         let mut sparse_index = SparseIndex::<K>::new();
         let mut file = OpenOptions::new()
-            .create(true)
+            .create_new(true)
             .write(true)
-            .truncate(true)
             .open(&path)?;
         let mut offset = 0usize;
         for (kv_i, (k, v)) in mem.iter().enumerate() {
