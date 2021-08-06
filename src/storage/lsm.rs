@@ -44,7 +44,6 @@ where
         ));
         let commit_log = OpenOptions::new()
             .create(true)
-            .write(true)
             .append(true)
             .open(&commit_log_path)?;
 
@@ -77,9 +76,8 @@ where
     fn flush_memtable(&mut self) -> Result<()> {
         let new_cl_path = utils::new_timestamped_path(self.path.join(COMMIT_LOGS_DIR_PATH));
         let new_cl = OpenOptions::new()
-            .create(true)
+            .create_new(true)
             .write(true)
-            .append(true)
             .open(&new_cl_path)?;
         let old_cl_path: PathBuf;
         {
