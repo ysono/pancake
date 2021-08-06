@@ -1,14 +1,105 @@
 //! A _very_ basic parser
 //!
-//! This is a simplistic, recursion-based parser.
-//! It's meant to be a stop-gap impl.
-//! It ought to be replaced by one based on a lexer and a parser.
+//! # Supported queries
+//!
+//! ## By primary key
+//!
+//! Keys and values are typed.
+//!
+//! - `put int(100) str("1000")`
+//! - `del int(100)`
+//! - `get int(100)`
+//!
+//! The tuple type nests other data, including other tuples.
+//!
+//! - `put int(6000) tup( str("s6000") tup( int(60) str("s60") ) int(60) )`
+//! - `get tup( str("a") int(10) )`
+//!
+//! ## By range over primary key
+//!
+//! Analogous sql:
+//!
+//! - `SELECT * FROM table WHERE pk BETWEEN ${pk_lo} AND ${pk_hi};`
+//! - `SELECT * FROM table WHERE pk <= ${pk_hi};`
+//!
+//! Note, the comparison between keys is untyped, so the range might cover some data you don't expect.
+//!
+//! - `get between int(50) str("foobar")`
+//! - `get between int(50) _`
+//! - `get between _ str("foobar")`
+//! - `get between _ _`
+//!
+//! ## By sub-portion of value
+//!
+//! ### Index creation
+//!
+//! Analogous sql:
+//!
+//! `CREATE INDEX ON table (${column});`
+//!
+//! Whereas a RDBMS allows specifing an index based on
+//! a selection of one or more columns, we support a selection of any of:
+//!
+//! - The whole value
+//! - One sub-portion of value at a specific nested location and having a specific type
+//!
+//! Index all entries by value type.
+//!
+//! `create index int`
+//!
+//! Index all entries by sub-value specification.
+//!
+//! `create index tup( 0 str )`
+//!
+//! Index all entries by nested sub-value specification.
+//!
+//! `create index tup( 1 tup( 0 int ) )`
+//!
+//! ### Index-based selection
+//!
+//! Analogous sql:
+//!
+//! - `SELECT * FROM table WHERE ${column} = ${col_val};`
+//! - `SELECT * FROM table WHERE ${column} BETWEEN ${col_val_lo} AND ${col_val_hi};`
+//! - `SELECT * FROM table WHERE ${column} <= ${col_val_hi};`
+//!
+//! In addition, because value schemas are dynamic, we also support selecting all values
+//! that match a spec, regardless of the sub-portion of value pointed to by the spec.
+//! It would be analogous to this hypothetical sql:
+//!
+//! - `SELECT * FROM table WHERE ${column} IS VALID COLUMN;`
+//!
+//! Get all entries by value type.
+//!
+//! - `get where int int(1000)`
+//! - `get where int between int(500) int(1500)`
+//! - `get where int between _ int(1500)`
+//! - `get where int _`
+//!
+//! Get all entries by sub-value specification.
+//!
+//! - `get where tup( 0 str ) str("s6000")`
+//! - `get where tup( 0 str ) between str("s1000") str("s9000")`
+//! - `get where tup( 0 str ) _`
+//!
+//! Get all entries by nested sub-value specification.
+//!
+//! - `get where tup( 1 tup( 0 int ) ) int(60)`
+//! - `get where tup( 1 tup( 0 int ) ) between int(60) int(61)`
+//! - `get where tup( 1 tup( 0 int ) ) _`
+//!
+//! # Caveats
 //!
 //! The input string is split by unicode word boundary. This incurs some limitations:
 //! - Literals such as `foo.bar` and `foo-bar` are separated into multiple tokens.
 //!     - This means any data containing such characters as `.` and `-` are unworkable with this query engine.
 //! - Literals such as `("` and `))` are not separated.
-//!     - Hence, when in doubt, add spaces.
+//!     - For string literals `("` and `")` must be kept together.
+//!     - Otherwise, when in doubt, add spaces.
+//!
+//! This is a simplistic, recursion-based parser.
+//! It's meant to be a stop-gap impl.
+//! It ought to be replaced by one based on a lexer and a parser.
 
 use crate::storage::serde::DatumType;
 use crate::storage::types::{Datum, PrimaryKey, SubValue, SubValueSpec, Value};

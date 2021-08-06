@@ -1,3 +1,9 @@
+//! An SSTable is an abstraction of a sorted key-value dictionary.
+//!
+//! Its components are:
+//! - A file which stores `(key, value)` pairs, sorted by key, containing distinct keys.
+//! - An in-memory sorted structure that maps `{key: file_offset}` on sparsely captured keys. The offsets point to locations within the above file.
+
 use crate::storage::serde::{self, KeyValueIterator, ReadItem, Serializable, SkipItem};
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut};

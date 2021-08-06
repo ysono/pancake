@@ -1,10 +1,20 @@
 //! # Serialization format
 //!
-//! Following pseudocode depicts the byte representation on disk. The actual struct definitions do not exit. (TODO consider defining them in tests.)
+//! Following pseudocode depicts the byte representation on disk. The actual struct definitions do not exit.
 //!
 //! This file format is applicable for both the commit log and ss tables.
 //!
 //! ```text
+//! struct File {
+//!     k0: Item,
+//!     v0: Item,
+//!     k1: Item,
+//!     v1: Item,
+//!     ...
+//!     // There are no separators in between Items and nothing to indicate
+//!     // whether an Item is a key or a value.
+//! }
+//!
 //! struct Item {
 //!     // Encodes the on-disk byte size of `datum_type` and `datum`.
 //!     // Span size is placed first, so that a reader that is uninterested
@@ -22,16 +32,6 @@
 //!     // map, custom serialization.
 //!     datum: [u8; variable_length],
 //! }
-//!
-//! struct File {
-//!     k0: Item,
-//!     v0: Item,
-//!     k1: Item,
-//!     v1: Item,
-//!     ...
-//!     // There are no separators in between Items and nothing to indicate
-//!     // whether an Item is a key or a value.
-//! }
 //! ```
 //!
 //! A tuple is a type of datum that can nest other data, including other tuple-typed data.
@@ -40,7 +40,6 @@
 //! ```text
 //! struct TupleDatum {
 //!     length_of_tuple: usize,
-//!
 //!     member_0: Item,
 //!     member_1: Item,
 //!     ...
@@ -56,12 +55,10 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
 use std::mem::size_of;
 
-/*
-We manually map enum members to data_type integers because:
-- Rust does not support specifying discriminants on an enum containing non-simple members. https://github.com/rust-lang/rust/issues/60553
-- One member, Tombstone, is outside the Datum enum.
-- An automatic discriminant may change w/ enum definition change or compilation, according to [`std::mem::discriminant()`] doc.
-*/
+/// We manually map enum members to data_type integers because:
+/// - Rust does not support specifying discriminants on an enum containing non-simple members. [RFC](https://github.com/rust-lang/rust/issues/60553)
+/// - One member, Tombstone, is outside the Datum enum.
+/// - An automatic discriminant may change w/ enum definition change or compilation, according to [`std::mem::discriminant()`] doc.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, FromPrimitive, ToPrimitive, Debug)]
 pub enum DatumType {
     Tombstone = 0,

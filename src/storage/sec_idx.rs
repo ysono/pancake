@@ -1,3 +1,7 @@
+//! A secondary index is an abstraction that maps `{ sub-portion of value : [ primary key ] }`.
+//!
+//! Internally it uses a LSMTree index that maps `{ (sub-portion of value, primary key) : existence of key }`.
+
 use crate::storage::lsm::LSMTree;
 use crate::storage::serde::{self, ReadItem, Serializable};
 use crate::storage::types::{
@@ -9,6 +13,13 @@ use std::cmp::Ordering;
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 
+/// Each instance of [`SecondaryIndex`] is defined by a [`SubValueSpec`].
+///
+/// A [`SubValueSpec`] specifies how to extract a [`SubValue`] out of a [`Value`].
+///
+/// Any [`Value`] from which a [`SubValue`] can be extracted is covered by this [`SecondaryIndex`].
+///
+/// Lookup within a [`SecondaryIndex`] is by [`SubValue`] and returns a list of [`PrimaryKey`].
 pub struct SecondaryIndex {
     path: PathBuf,
     spec: SubValueSpec,
