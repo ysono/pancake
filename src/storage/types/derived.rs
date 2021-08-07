@@ -5,7 +5,7 @@ use derive_more::{Deref, From};
 use std::fs::File;
 use std::io::Write;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Deref, From, Clone, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Deref, From, Clone, Debug)]
 pub struct PrimaryKey(pub Datum);
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Deref, From, Clone, Debug)]

@@ -32,4 +32,22 @@ impl DB {
             _ => Ok(None),
         }
     }
+
+    pub fn get_range(
+        &self,
+        k_lo: &Option<PrimaryKey>,
+        k_hi: &Option<PrimaryKey>,
+    ) -> Result<Vec<(PrimaryKey, Value)>> {
+        let iter = self.primary_index.get_range(k_lo, k_hi)?;
+        let ret = iter
+            .filter_map(|res_kv| match res_kv {
+                Err(e) => Some(Err(e)),
+                Ok((k, v)) => match v {
+                    OptDatum::Tombstone => None,
+                    OptDatum::Some(v) => Some(Ok((k, v))),
+                },
+            })
+            .collect::<Result<Vec<_>>>();
+        ret
+    }
 }
