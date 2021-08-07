@@ -105,10 +105,6 @@ where
         }
         fs::remove_file(old_cl_path)?;
 
-        if self.sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH {
-            self.compact_sstables()?;
-        }
-
         Ok(())
     }
 
@@ -126,20 +122,24 @@ where
         Ok(())
     }
 
-    fn put_impl(&mut self, k: K, v: V) -> Result<()> {
-        serde::serialize_kv(&k, &v, &mut self.commit_log)?;
-
-        self.memtable.insert(k, v);
-
+    fn check_start_job(&mut self) -> Result<()> {
         if self.memtable.len() >= MEMTABLE_FLUSH_SIZE_THRESH {
             self.flush_memtable()?;
         }
-
+        if self.sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH {
+            self.compact_sstables()?;
+        }
         Ok(())
     }
 
     pub fn put(&mut self, k: K, v: V) -> Result<()> {
-        self.put_impl(k, v)
+        serde::serialize_kv(&k, &v, &mut self.commit_log)?;
+
+        self.memtable.insert(k, v);
+
+        self.check_start_job()?;
+
+        Ok(())
     }
 
     pub fn get(&self, k: &K) -> Result<Option<V>> {
