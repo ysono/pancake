@@ -26,7 +26,7 @@ impl DB {
         self.primary_index.put(k, OptDatum::Tombstone)
     }
 
-    pub fn get(&self, k: PrimaryKey) -> Result<Option<Value>> {
+    pub fn get(&self, k: &PrimaryKey) -> Result<Option<Value>> {
         match self.primary_index.get(k)? {
             Some(OptDatum::Some(dat)) => Ok(Some(dat)),
             _ => Ok(None),

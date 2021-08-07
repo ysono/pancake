@@ -142,18 +142,18 @@ where
         self.put_impl(k, v)
     }
 
-    pub fn get(&self, k: K) -> Result<Option<V>> {
-        if let Some(v) = self.memtable.get(&k) {
+    pub fn get(&self, k: &K) -> Result<Option<V>> {
+        if let Some(v) = self.memtable.get(k) {
             return Ok(Some(v.clone()));
         }
         if let Some(mtf) = &self.memtable_in_flush {
-            if let Some(v) = mtf.get(&k) {
+            if let Some(v) = mtf.get(k) {
                 return Ok(Some(v.clone()));
             }
         }
         // TODO bloom filter here
         for ss in self.sstables.iter().rev() {
-            let v = ss.get(&k)?;
+            let v = ss.get(k)?;
             if v.is_some() {
                 return Ok(v);
             }

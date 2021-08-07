@@ -26,7 +26,7 @@ async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
     let db = req.data::<Arc<RwLock<DB>>>().unwrap();
     let db = db.read().unwrap();
 
-    match db.get(key)? {
+    match db.get(&key)? {
         None => Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::empty())
