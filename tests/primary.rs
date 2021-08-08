@@ -1,30 +1,10 @@
 use anyhow::Result;
 use pancake::storage::db::DB;
 use pancake::storage::types::{Datum, PrimaryKey, Value};
-use pancake::storage::utils;
 use rand;
 use std::collections::BTreeMap;
-use std::env::temp_dir;
-use std::fs;
 
-#[test]
-fn test_in_single_thread() -> Result<()> {
-    let dir = temp_dir().join("pancake");
-    if dir.exists() {
-        for subdir in utils::read_dir_sorted(&dir)? {
-            fs::remove_dir_all(subdir)?;
-        }
-    }
-    let mut db = DB::open(dir)?;
-
-    put_del_get_getrange(&mut db)?;
-    nonexistent(&mut db)?;
-    zero_byte_value(&mut db)?;
-    tuple(&mut db)?;
-    Ok(())
-}
-
-fn put_del_get_getrange(db: &mut DB) -> Result<()> {
+pub fn put_del_get_getrange(db: &mut DB) -> Result<()> {
     let mut k_to_expected_v = BTreeMap::<PrimaryKey, Option<Value>>::new();
 
     let data_count = 100usize;
@@ -73,7 +53,7 @@ fn put_del_get_getrange(db: &mut DB) -> Result<()> {
     Ok(())
 }
 
-fn nonexistent(db: &mut DB) -> Result<()> {
+pub fn nonexistent(db: &mut DB) -> Result<()> {
     let key = PrimaryKey(Datum::Str(String::from("nonexistent")));
 
     let res = db.get(&key)?;
@@ -83,7 +63,7 @@ fn nonexistent(db: &mut DB) -> Result<()> {
     Ok(())
 }
 
-fn zero_byte_value(db: &mut DB) -> Result<()> {
+pub fn zero_byte_value(db: &mut DB) -> Result<()> {
     let key = PrimaryKey(Datum::Str(String::from("empty")));
 
     let val = Value(Datum::Bytes(vec![]));
@@ -99,7 +79,7 @@ fn zero_byte_value(db: &mut DB) -> Result<()> {
     Ok(())
 }
 
-fn tuple(db: &mut DB) -> Result<()> {
+pub fn tuple(db: &mut DB) -> Result<()> {
     let key = Datum::Tuple(vec![
         Datum::Bytes(vec![16u8, 17u8, 18u8]),
         Datum::I64(0x123456789abcdef),

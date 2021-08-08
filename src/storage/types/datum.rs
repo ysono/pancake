@@ -13,7 +13,19 @@ pub enum Datum {
     Tuple(Vec<Datum>),
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+impl Datum {
+    pub fn to_type(&self) -> DatumType {
+        match self {
+            Datum::Bytes(_) => DatumType::Bytes,
+            Datum::I64(_) => DatumType::I64,
+            Datum::Str(_) => DatumType::Str,
+            Datum::Tuple(_) => DatumType::Tuple,
+        }
+    }
+    // TODO below, in Datum and OptDatum, use this to_type().
+}
+
+#[derive(Clone, Debug)]
 pub enum OptDatum<T: Serializable> {
     Tombstone,
     Some(T),

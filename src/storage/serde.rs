@@ -62,7 +62,7 @@ We manually map enum members to data_type integers because:
 - One member, Tombstone, is outside the Datum enum.
 - An automatic discriminant may change w/ enum definition change or compilation, according to [`std::mem::discriminant()`] doc.
 */
-#[derive(PartialEq, Eq, PartialOrd, Ord, FromPrimitive, ToPrimitive, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, FromPrimitive, ToPrimitive, Debug)]
 pub enum DatumType {
     Tombstone = 0,
     Bytes = 1,
