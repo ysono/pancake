@@ -190,7 +190,11 @@ impl<K, V> From<File> for KeyValueIterator<K, V> {
     }
 }
 
-impl<K: Serializable, V: Serializable> Iterator for KeyValueIterator<K, V> {
+impl<K, V> Iterator for KeyValueIterator<K, V>
+where
+    K: Serializable,
+    V: Serializable,
+{
     type Item = Result<(K, V)>;
 
     fn next(&mut self) -> Option<Self::Item> {

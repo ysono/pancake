@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::mem;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Debug)]
 pub enum Datum {
     Bytes(Vec<u8>),
     I64(i64),
@@ -13,7 +13,7 @@ pub enum Datum {
     Tuple(Vec<Datum>),
 }
 
-#[derive(Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum OptDatum<T: Serializable> {
     Tombstone,
     Some(T),

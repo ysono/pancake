@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
+use std::hash::Hash;
 use std::mem;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
+use itertools::Itertools;
 
 use crate::storage::serde::{self, KeyValueIterator, Serializable};
 use crate::storage::sstable::SSTable;
@@ -25,7 +27,7 @@ pub struct LSMTree<K, V> {
 
 impl<K, V> LSMTree<K, V>
 where
-    K: Serializable + Ord + Clone,
+    K: Serializable + Ord + Hash + Clone,
     V: Serializable + Clone,
 {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
@@ -110,7 +112,8 @@ where
 
     fn compact_sstables(&mut self) -> Result<()> {
         let new_table_path = utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH));
-        let new_tables = SSTable::compact(new_table_path, &self.sstables)?;
+        let new_table = SSTable::compact(new_table_path, &self.sstables)?;
+        let new_tables = vec![new_table];
 
         // TODO MutexGuard here
         // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
@@ -159,5 +162,75 @@ where
             }
         }
         Ok(None)
+    }
+
+    pub fn get_range<'a>(
+        &'a self,
+        k_lo: &Option<K>,
+        k_hi: &Option<K>,
+    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a> {
+        let ssts_iter = SSTable::merge_range(&self.sstables, &k_lo, &k_hi).unwrap();
+
+        let mts_iter = [self.memtable_in_flush.as_ref(), Some(&self.memtable)]
+            .iter()
+            .filter_map(|mt| *mt)
+            .enumerate()
+            .map(|(mt_i, mt)| {
+                let mut iter = mt.iter();
+
+                if let Some(k_lo) = &k_lo {
+                    if let Some(iter_pos) = mt.iter().rposition(|(k, _v)| k < k_lo) {
+                        iter.nth(iter_pos);
+                    }
+                }
+
+                let k_hi = k_hi.clone();
+                iter.take_while(move |(k, _v)| {
+                    // This closure moves k_hi.
+                    if let Some(k_hi) = &k_hi {
+                        k <= &k_hi
+                    } else {
+                        true
+                    }
+                })
+                .zip(std::iter::repeat(mt_i))
+            })
+            .kmerge_by(|((a_k, _a_v), a_i), ((b_k, _b_v), b_i)| {
+                a_k < b_k || (a_k == b_k && a_i > b_i)
+            })
+            .unique_by(|((k, _v), _mt_i)| k.clone())
+            .map(|(kv, _mt_i)| kv);
+
+        let mut ssts_iter = ssts_iter.peekable();
+        let mut mts_iter = mts_iter.peekable();
+
+        let out_iter_fn = move || -> Option<Result<(K, V)>> {
+            let next_is_sst = match (ssts_iter.peek(), mts_iter.peek()) {
+                (None, None) => return None,
+                (None, Some(_)) => false,
+                (Some(_), None) => true,
+                (Some(Err(_)), _) => true,
+                (Some(Ok((sst_k, _sst_v))), Some((mt_k, _mt_v))) => {
+                    if &sst_k < mt_k {
+                        true
+                    } else if &sst_k > mt_k {
+                        false
+                    } else {
+                        ssts_iter.next();
+                        false
+                    }
+                }
+            };
+
+            if next_is_sst {
+                return ssts_iter.next();
+            } else {
+                let (k, v) = mts_iter.next().unwrap();
+                let kv = (k.clone(), v.clone());
+                return Some(Ok(kv));
+            }
+        };
+        let out_iter = std::iter::from_fn(out_iter_fn);
+        Ok(out_iter)
     }
 }

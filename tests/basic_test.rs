@@ -1,27 +1,35 @@
 use anyhow::Result;
 use pancake::storage::db::DB;
 use pancake::storage::types::{Datum, PrimaryKey, Value};
+use pancake::storage::utils;
 use rand;
 use std::collections::BTreeMap;
 use std::env::temp_dir;
+use std::fs;
 
 #[test]
 fn test_in_single_thread() -> Result<()> {
     let dir = temp_dir().join("pancake");
+    if dir.exists() {
+        for subdir in utils::read_dir_sorted(&dir)? {
+            fs::remove_dir_all(subdir)?;
+        }
+    }
     let mut db = DB::open(dir)?;
 
-    put_then_tomb(&mut db)?;
+    put_del_get_getrange(&mut db)?;
     nonexistent(&mut db)?;
     zero_byte_value(&mut db)?;
     tuple(&mut db)?;
-    put_then_tomb(&mut db)?;
     Ok(())
 }
 
-fn put_then_tomb(db: &mut DB) -> Result<()> {
+fn put_del_get_getrange(db: &mut DB) -> Result<()> {
     let mut k_to_expected_v = BTreeMap::<PrimaryKey, Option<Value>>::new();
 
-    for _ in 0..100 {
+    let data_count = 100usize;
+
+    for _ in 0..data_count {
         let i = rand::random::<u16>();
 
         let key = PrimaryKey(Datum::Str(format!("key{}", i)));
@@ -43,6 +51,26 @@ fn put_then_tomb(db: &mut DB) -> Result<()> {
         if exp_v != &actual_v {
             panic!("Expected {:?}; got {:?}", exp_v, actual_v);
         }
+    }
+
+    let range_lo_i = data_count / 4;
+    let range_hi_i = range_lo_i * 3;
+    let exp_range = k_to_expected_v
+        .iter()
+        .skip(range_lo_i)
+        .take(range_hi_i - range_lo_i)
+        .filter_map(|(k, opt_v)| opt_v.as_ref().map(|v| (k, v)))
+        .collect::<Vec<_>>();
+    assert!(exp_range.len() >= 3);
+
+    let act_range = db.get_range(
+        &Some(exp_range[0].0.clone()),
+        &Some(exp_range.last().unwrap().0.clone()),
+    )?;
+    let act_range = act_range.iter().map(|(k, v)| (k, v)).collect::<Vec<_>>();
+
+    if exp_range != act_range {
+        panic!("Expected {:?}; got {:?}", exp_range, act_range);
     }
 
     Ok(())
