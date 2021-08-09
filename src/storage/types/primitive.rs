@@ -9,14 +9,16 @@ pub struct Bool(pub bool);
 
 impl Bool {
     fn to_datum(&self) -> Result<Datum> {
-        let dat = Datum::Bytes(vec![1u8]);
+        let byte = if self.0 { 1u8 } else { 0u8 };
+        let dat = Datum::Bytes(vec![byte]);
         Ok(dat)
     }
 
     fn from_datum(dat: &Datum) -> Result<Self> {
         if let Datum::Bytes(vec) = dat {
-            if let [b] = vec.as_slice() {
-                let obj = Self(b == &1u8);
+            if let [byte] = vec.as_slice() {
+                let b = byte == &1u8;
+                let obj = Self(b);
                 return Ok(obj);
             }
         }

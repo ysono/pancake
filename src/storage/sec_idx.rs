@@ -1,18 +1,13 @@
 use crate::storage::lsm::LSMTree;
 use crate::storage::serde::{self, ReadItem, Serializable};
 use crate::storage::types::{
-    Bool, Datum, OptDatum, PrimaryKey, SubValue, SubValueAndKey, SubValueSpec, Value,
+    Bool, OptDatum, PrimaryKey, SubValue, SubValueAndKey, SubValueSpec, Value,
 };
 use crate::storage::utils;
 use anyhow::{anyhow, Result};
 use std::cmp::Ordering;
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
-
-pub enum PutArg {
-    New { new_val: Datum },
-    Del { old_val: Datum },
-}
 
 pub struct SecondaryIndex {
     path: PathBuf,
@@ -133,43 +128,32 @@ impl SecondaryIndex {
 
     pub fn get_range(
         &self,
-        subval: &SubValue,
-        pk_lo: Option<&PrimaryKey>,
-        pk_hi: Option<&PrimaryKey>,
+        subval_lo: Option<&SubValue>,
+        subval_hi: Option<&SubValue>,
     ) -> Result<Vec<PrimaryKey>> {
-        let k_lo_cmp = |sample_sk: &SubValueAndKey| {
-            match sample_sk.sub_value.cmp(subval) {
+        let sk_lo_cmp = |sample_sk: &SubValueAndKey| match subval_lo {
+            None => return Ordering::Greater,
+            Some(subval_lo) => match sample_sk.sub_value.cmp(subval_lo) {
                 Ordering::Equal => {
-                    if let Some(pk_lo) = pk_lo {
-                        sample_sk.key.cmp(pk_lo)
-                    } else {
-                        // When subval is equal, if primary key bound is not given,
-                        // then treat any sample primary key as "greater than" the desired low boundary.
-                        Ordering::Greater
-                    }
+                    // sample_sk may not be the smallest SubValueAndKey within our bounds,
+                    // because there may be another SubValueAndKey with equal sub_value but lesser key.
+                    return Ordering::Greater;
                 }
-                ord => ord,
-            }
+                ord => return ord,
+            },
         };
 
-        let k_hi_cmp = |sample_sk: &SubValueAndKey| {
-            match sample_sk.sub_value.cmp(subval) {
-                Ordering::Equal => {
-                    if let Some(pk_hi) = pk_hi {
-                        sample_sk.key.cmp(pk_hi)
-                    } else {
-                        // When subval is equal, if primary key bound is not given,
-                        // then treat any sample primary key as "less than" the desired high boundary.
-                        Ordering::Less
-                    }
-                }
-                ord => ord,
-            }
+        let sk_hi_cmp = |sample_sk: &SubValueAndKey| match subval_hi {
+            None => return Ordering::Less,
+            Some(subval_hi) => match sample_sk.sub_value.cmp(subval_hi) {
+                Ordering::Equal => return Ordering::Less,
+                ord => return ord,
+            },
         };
 
         let out = self
             .idx
-            .get_range(Some(&k_lo_cmp), Some(&k_hi_cmp))?
+            .get_range(Some(&sk_lo_cmp), Some(&sk_hi_cmp))?
             .filter_map(|res_kv| match res_kv {
                 Err(e) => Some(Err(e)),
                 Ok((sk, is_alive)) => match is_alive {

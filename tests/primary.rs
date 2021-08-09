@@ -107,5 +107,13 @@ pub fn tuple(db: &mut DB) -> Result<()> {
         panic!("Expected {:?}; got {:?}", val, res);
     }
 
+    db.delete(key.clone())?;
+
+    let res = db.get(&key)?;
+
+    if res.is_some() {
+        panic!("Expected deleted; got {:?}", res);
+    }
+
     Ok(())
 }

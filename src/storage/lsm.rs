@@ -175,7 +175,7 @@ where
         Flo: Fn(&K) -> Ordering,
         Fhi: Fn(&K) -> Ordering,
     {
-        let ssts_iter = SSTable::merge_range(&self.sstables, k_lo_cmp, k_hi_cmp).unwrap();
+        let ssts_iter = SSTable::merge_range(&self.sstables, k_lo_cmp, k_hi_cmp)?;
 
         let mts_iter = [self.memtable_in_flush.as_ref(), Some(&self.memtable)]
             .iter()

@@ -23,7 +23,6 @@ fn test_main() -> Result<()> {
     primary::tuple(&mut db)?;
 
     secondary::whole::delete_create_get(&mut db)?;
-
     secondary::partial::delete_create_get(&mut db)?;
 
     Ok(())

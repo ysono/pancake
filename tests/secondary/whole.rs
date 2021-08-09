@@ -3,11 +3,16 @@ use pancake::storage::db::DB;
 use pancake::storage::serde::DatumType;
 use pancake::storage::types::{Datum, PrimaryKey, SubValue, SubValueSpec, Value};
 
+fn key(k: &str) -> PrimaryKey {
+    PrimaryKey(Datum::Str(String::from(k)))
+}
+
+fn val(v: &str) -> Value {
+    Value(Datum::Str(String::from(v)))
+}
+
 fn kv(k: &str, v: &str) -> (PrimaryKey, Value) {
-    (
-        PrimaryKey(Datum::Str(String::from(k))),
-        Value(Datum::Str(String::from(v))),
-    )
+    (key(k), val(v))
 }
 
 fn put(db: &mut DB, k: &str, v: &str) -> Result<()> {
@@ -18,16 +23,14 @@ fn put(db: &mut DB, k: &str, v: &str) -> Result<()> {
 fn verify_get(
     db: &mut DB,
     spec: &SubValueSpec,
-    subval: &str,
-    pk_lo: Option<&str>,
-    pk_hi: Option<&str>,
+    subval_lo: Option<&str>,
+    subval_hi: Option<&str>,
     exp: Vec<(PrimaryKey, Value)>,
 ) -> Result<bool> {
-    let subval = SubValue(Datum::Str(String::from(subval)));
-    let pk_lo = pk_lo.map(|s| PrimaryKey(Datum::Str(String::from(s))));
-    let pk_hi = pk_hi.map(|s| PrimaryKey(Datum::Str(String::from(s))));
+    let subval_lo = subval_lo.map(|s| SubValue(Datum::Str(String::from(s))));
+    let subval_hi = subval_hi.map(|s| SubValue(Datum::Str(String::from(s))));
 
-    let actual = db.get_by_sub_value(&spec, &subval, pk_lo.as_ref(), pk_hi.as_ref())?;
+    let actual = db.get_by_sub_value(&spec, subval_lo.as_ref(), subval_hi.as_ref())?;
 
     let success = exp == actual;
     if !success {
@@ -43,35 +46,31 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
 
     let mut success = true;
 
-    let s = verify_get(db, &spec, "val-a", None, None, vec![])?;
+    let s = verify_get(db, &spec, None, None, vec![])?;
     success &= s;
 
-    let s = verify_get(db, &spec, "val-b", None, None, vec![])?;
-    success &= s;
-
-    put(db, "a.1", "val-a")?;
-    put(db, "a.2", "val-a")?;
-    put(db, "b.1", "val-b")?;
-    put(db, "b.2", "val-b")?;
+    put(db, "g.1", "secidxtest-val-g")?;
+    put(db, "f.1", "secidxtest-val-f")?;
+    put(db, "e.1", "secidxtest-val-e")?;
 
     db.create_sec_idx(spec.clone())?;
 
-    put(db, "a.3", "val-a")?;
-    put(db, "b.3", "val-b")?;
-    put(db, "a.4", "val-a")?;
-    put(db, "b.4", "val-b")?;
+    put(db, "g.2", "secidxtest-val-g")?;
+    put(db, "f.2", "secidxtest-val-f")?;
+    put(db, "e.2", "secidxtest-val-e")?;
 
     let s = verify_get(
         db,
         &spec,
-        "val-a",
-        None,
-        None,
+        Some("secidxtest-val-a"),
+        Some("secidxtest-val-z"),
         vec![
-            kv("a.1", "val-a"),
-            kv("a.2", "val-a"),
-            kv("a.3", "val-a"),
-            kv("a.4", "val-a"),
+            kv("e.1", "secidxtest-val-e"),
+            kv("e.2", "secidxtest-val-e"),
+            kv("f.1", "secidxtest-val-f"),
+            kv("f.2", "secidxtest-val-f"),
+            kv("g.1", "secidxtest-val-g"),
+            kv("g.2", "secidxtest-val-g"),
         ],
     )?;
     success &= s;
@@ -79,14 +78,13 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     let s = verify_get(
         db,
         &spec,
-        "val-b",
-        None,
-        None,
+        Some("secidxtest-val-f"),
+        Some("secidxtest-val-z"),
         vec![
-            kv("b.1", "val-b"),
-            kv("b.2", "val-b"),
-            kv("b.3", "val-b"),
-            kv("b.4", "val-b"),
+            kv("f.1", "secidxtest-val-f"),
+            kv("f.2", "secidxtest-val-f"),
+            kv("g.1", "secidxtest-val-g"),
+            kv("g.2", "secidxtest-val-g"),
         ],
     )?;
     success &= s;
@@ -94,34 +92,46 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     let s = verify_get(
         db,
         &spec,
-        "val-a",
-        Some("a.2"),
-        Some("a.3"),
-        vec![kv("a.2", "val-a"), kv("a.3", "val-a")],
-    )?;
-    success &= s;
-
-    let s = verify_get(
-        db,
-        &spec,
-        "val-a",
-        Some("a.2"),
-        None,
-        vec![kv("a.2", "val-a"), kv("a.3", "val-a"), kv("a.4", "val-a")],
-    )?;
-    success &= s;
-
-    let s = verify_get(
-        db,
-        &spec,
-        "val-b",
-        Some("b.0"),
-        Some("b.9"),
+        Some("secidxtest-val-a"),
+        Some("secidxtest-val-f"),
         vec![
-            kv("b.1", "val-b"),
-            kv("b.2", "val-b"),
-            kv("b.3", "val-b"),
-            kv("b.4", "val-b"),
+            kv("e.1", "secidxtest-val-e"),
+            kv("e.2", "secidxtest-val-e"),
+            kv("f.1", "secidxtest-val-f"),
+            kv("f.2", "secidxtest-val-f"),
+        ],
+    )?;
+    success &= s;
+
+    let s = verify_get(
+        db,
+        &spec,
+        Some("secidxtest-val-e"),
+        Some("secidxtest-val-g"),
+        vec![
+            kv("e.1", "secidxtest-val-e"),
+            kv("e.2", "secidxtest-val-e"),
+            kv("f.1", "secidxtest-val-f"),
+            kv("f.2", "secidxtest-val-f"),
+            kv("g.1", "secidxtest-val-g"),
+            kv("g.2", "secidxtest-val-g"),
+        ],
+    )?;
+    success &= s;
+
+    db.delete(key("f.1"))?;
+
+    let s = verify_get(
+        db,
+        &spec,
+        Some("secidxtest-val-a"),
+        Some("secidxtest-val-z"),
+        vec![
+            kv("e.1", "secidxtest-val-e"),
+            kv("e.2", "secidxtest-val-e"),
+            kv("f.2", "secidxtest-val-f"),
+            kv("g.1", "secidxtest-val-g"),
+            kv("g.2", "secidxtest-val-g"),
         ],
     )?;
     success &= s;

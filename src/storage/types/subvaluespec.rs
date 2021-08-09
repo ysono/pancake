@@ -5,6 +5,68 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use std::fs::File;
 use std::io::Write;
 
+/// [`SubValueSpec`] specifies a sub-portion of a [`Value`].
+///
+/// The spec is a DSL for locating this sub-portion,
+/// as well as an extractor of this sub-portion that returns [`SubValue`].
+///
+/// #### Whole
+///
+/// [`SubValueSpec::Whole`] specifies non-subdivided [`Datum`].
+/// For example, it can be used to specify the whole [`Value`].
+///
+/// #### Partial
+///
+/// [`SubValueSpec::PartialTuple`] specifies a member of a [`Datum::Tuple`].
+/// The member is identified by the member index as well as a [`SubValueSpec`]
+/// that's applicable at this member index.
+///
+/// This nested [`SubValueSpec`], in turn, can be [`SubValueSpec::Whole`] or [`SubValueSpec::PartialTuple`].
+///
+/// For example in pseudocode, given a tuple-typed [`Value`]
+///
+/// ```text
+/// Value(
+///     Datum::Tuple(vec![
+///         Datum::I64(0),
+///         Datum::Tuple(vec![
+///             Datum::I64(1),
+///             Datum::Str(String::from("2")),
+///             Datum::Tuple(vec![
+///                 Datum::I64(3),
+///                 Datum::Str(String::from("4")),
+///             ])
+///         ])
+///     ])
+/// )
+/// ```
+///
+/// If you want to specify the `Datum::I64(1)`:
+///
+/// ```text
+/// SubValueSpec::PartialTuple {
+///     member_idx: 1,
+///     member_spec: Box::new(SubValueSpec::PartialTuple {
+///         member_idx: 0,
+///         member_spec: SubValueSpec::Whole(DatumType::I64)
+///     })
+/// }
+/// ```
+///
+/// If you want to specify the `Datum::Tuple` containing data 3 and 4:
+///
+/// ```text
+/// SubValueSpec::PartialTuple {
+///     member_idx: 1,
+///     member_spec: Box::new(SubValueSpec::PartialTuple {
+///         member_idx: 0,
+///         member_spec: SubValueSpec::Whole(DatumType::Tuple)
+///     })
+/// }
+/// ```
+///
+/// Notice, in this case, `SubValueSpec::Whole(DatumType::Tuple)` specifies the whole tuple,
+/// not further sub-divided.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Debug)]
 pub enum SubValueSpec {
     Whole(DatumType),

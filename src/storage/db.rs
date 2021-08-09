@@ -93,13 +93,12 @@ impl DB {
     pub fn get_by_sub_value(
         &self,
         spec: &SubValueSpec,
-        subval: &SubValue,
-        pk_lo: Option<&PrimaryKey>,
-        pk_hi: Option<&PrimaryKey>,
+        subval_lo: Option<&SubValue>,
+        subval_hi: Option<&SubValue>,
     ) -> Result<Vec<(PrimaryKey, Value)>> {
         for secidx in self.secondary_indexes.iter() {
             if secidx.spec() == spec {
-                let keys = secidx.get_range(subval, pk_lo, pk_hi)?;
+                let keys = secidx.get_range(subval_lo, subval_hi)?;
                 let mut kvs = vec![];
                 for k in keys.into_iter() {
                     let v = self.get(&k)?;

@@ -3,42 +3,79 @@ use pancake::storage::db::DB;
 use pancake::storage::serde::DatumType;
 use pancake::storage::types::{Datum, PrimaryKey, SubValue, SubValueSpec, Value};
 
-fn kv(k: &str, v: &str) -> (PrimaryKey, Value) {
-    let key = Datum::Str(String::from(k));
-    let key = PrimaryKey(key);
+/// A spec that extracts `value[1][2]: str`.
+fn spec_1_2_str() -> SubValueSpec {
+    SubValueSpec::PartialTuple {
+        member_idx: 1,
+        member_spec: Box::new(SubValueSpec::PartialTuple {
+            member_idx: 2,
+            member_spec: Box::new(SubValueSpec::Whole(DatumType::Str)),
+        }),
+    }
+}
 
+/// A spec that extracts `value[1]: tuple`.
+/// The type of the contents of the tuple is opaque in the view of this spec.
+fn spec_1_tup() -> SubValueSpec {
+    SubValueSpec::PartialTuple {
+        member_idx: 1,
+        member_spec: Box::new(SubValueSpec::Whole(DatumType::Tuple)),
+    }
+}
+
+fn key(k: &str) -> PrimaryKey {
+    let key = Datum::Str(String::from(k));
+    PrimaryKey(key)
+}
+
+/// Value is a type that can be captured by both [`spec_1_2_str`] and [`spec_1_tup`] specs.
+/// Specifically, its type is `(int, (int, int, str), int)`.
+fn val(v_i: i64, v_s: &str) -> Value {
     let val = Datum::Tuple(vec![
         Datum::I64(0),
         Datum::Tuple(vec![
-            Datum::I64(1),
-            Datum::I64(1),
-            Datum::Str(String::from(v)),
+            Datum::I64(v_i),
+            Datum::I64(0),
+            Datum::Str(String::from(v_s)),
         ]),
         Datum::I64(0),
     ]);
-    let val = Value(val);
-
-    (key, val)
+    Value(val)
 }
 
-fn put(db: &mut DB, k: &str, v: &str) -> Result<()> {
-    let (k, v) = kv(k, v);
+fn kv(k: &str, v_i: i64, v_s: &str) -> (PrimaryKey, Value) {
+    (key(k), val(v_i, v_s))
+}
+
+/// A string-typed SubValue.
+/// This SubValue is workable with any spec that extracts a string-typed SubValue, such as [`spec_1_2_str`].
+fn subval_str(subval: &str) -> SubValue {
+    SubValue(Datum::Str(String::from(subval)))
+}
+
+/// A SubValue typed `(int, int, str)`.
+/// This is a type such that [`spec_1_tup`] can extract it from a value produced by [`kv`].
+fn subval_tup(i: i64, s: &str) -> SubValue {
+    SubValue(Datum::Tuple(vec![
+        Datum::I64(i),
+        Datum::I64(0),
+        Datum::Str(String::from(s)),
+    ]))
+}
+
+fn put(db: &mut DB, k: &str, v_i: i64, v_s: &str) -> Result<()> {
+    let (k, v) = kv(k, v_i, v_s);
     db.put(k, v)
 }
 
 fn verify_get(
     db: &mut DB,
     spec: &SubValueSpec,
-    subval: &str,
-    pk_lo: Option<&str>,
-    pk_hi: Option<&str>,
+    subval_lo: Option<SubValue>,
+    subval_hi: Option<SubValue>,
     exp: Vec<(PrimaryKey, Value)>,
 ) -> Result<bool> {
-    let subval = SubValue(Datum::Str(String::from(subval)));
-    let pk_lo = pk_lo.map(|s| PrimaryKey(Datum::Str(String::from(s))));
-    let pk_hi = pk_hi.map(|s| PrimaryKey(Datum::Str(String::from(s))));
-
-    let actual = db.get_by_sub_value(&spec, &subval, pk_lo.as_ref(), pk_hi.as_ref())?;
+    let actual = db.get_by_sub_value(&spec, subval_lo.as_ref(), subval_hi.as_ref())?;
 
     let success = exp == actual;
     if !success {
@@ -48,53 +85,102 @@ fn verify_get(
 }
 
 pub fn delete_create_get(db: &mut DB) -> Result<()> {
-    let spec = SubValueSpec::PartialTuple {
-        member_idx: 1,
-        member_spec: Box::new(SubValueSpec::PartialTuple {
-            member_idx: 2,
-            member_spec: Box::new(SubValueSpec::Whole(DatumType::Str)),
-        }),
-    };
+    let spec_str = spec_1_2_str();
+    let spec_tup = spec_1_tup();
 
-    db.delete_sec_idx(&spec)?;
+    db.delete_sec_idx(&spec_str)?;
+    db.delete_sec_idx(&spec_tup)?;
 
     let mut success = true;
 
-    let s = verify_get(db, &spec, "complex-subval", None, None, vec![])?;
+    let s = verify_get(db, &spec_str, None, None, vec![])?;
+    success &= s;
+    let s = verify_get(db, &spec_tup, None, None, vec![])?;
     success &= s;
 
-    put(db, "complex.1", "complex-subval")?;
-    put(db, "complex.2", "complex-subval")?;
+    put(db, "complex.4", 40, "complex-subval")?;
+    put(db, "complex.3", 30, "complex-subval")?;
 
-    db.create_sec_idx(spec.clone())?;
+    db.create_sec_idx(spec_str.clone())?;
+    db.create_sec_idx(spec_tup.clone())?;
 
-    put(db, "complex.3", "complex-subval")?;
-    put(db, "complex.4", "complex-subval")?;
+    put(db, "complex.2", 20, "complex-subval")?;
+    put(db, "complex.1", 10, "complex-subval")?;
 
     let s = verify_get(
         db,
-        &spec,
-        "complex-subval",
+        &spec_str,
         None,
         None,
         vec![
-            kv("complex.1", "complex-subval"),
-            kv("complex.2", "complex-subval"),
-            kv("complex.3", "complex-subval"),
-            kv("complex.4", "complex-subval"),
+            kv("complex.1", 10, "complex-subval"),
+            kv("complex.2", 20, "complex-subval"),
+            kv("complex.3", 30, "complex-subval"),
+            kv("complex.4", 40, "complex-subval"),
         ],
     )?;
     success &= s;
 
     let s = verify_get(
         db,
-        &spec,
-        "complex-subval",
-        Some("complex.2"),
-        Some("complex.3"),
+        &spec_str,
+        Some(subval_str("complex-subval")),
+        Some(subval_str("complex-subval")),
         vec![
-            kv("complex.2", "complex-subval"),
-            kv("complex.3", "complex-subval"),
+            kv("complex.1", 10, "complex-subval"),
+            kv("complex.2", 20, "complex-subval"),
+            kv("complex.3", 30, "complex-subval"),
+            kv("complex.4", 40, "complex-subval"),
+        ],
+    )?;
+    success &= s;
+
+    let s = verify_get(
+        db,
+        &spec_tup,
+        Some(subval_tup(20, "complex-")),
+        None,
+        vec![
+            kv("complex.2", 20, "complex-subval"),
+            kv("complex.3", 30, "complex-subval"),
+            kv("complex.4", 40, "complex-subval"),
+        ],
+    )?;
+    success &= s;
+
+    let s = verify_get(
+        db,
+        &spec_tup,
+        None,
+        Some(subval_tup(30, "complex-subval-zzzz")),
+        vec![
+            kv("complex.1", 10, "complex-subval"),
+            kv("complex.2", 20, "complex-subval"),
+            kv("complex.3", 30, "complex-subval"),
+        ],
+    )?;
+    success &= s;
+
+    let s = verify_get(
+        db,
+        &spec_tup,
+        Some(subval_tup(20, "complex-")),
+        Some(subval_tup(30, "complex-")),
+        vec![kv("complex.2", 20, "complex-subval")],
+    )?;
+    success &= s;
+
+    db.delete(key("complex.3"))?;
+
+    let s = verify_get(
+        db,
+        &spec_str,
+        None,
+        None,
+        vec![
+            kv("complex.1", 10, "complex-subval"),
+            kv("complex.2", 20, "complex-subval"),
+            kv("complex.4", 40, "complex-subval"),
         ],
     )?;
     success &= s;
