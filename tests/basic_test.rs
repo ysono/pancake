@@ -38,9 +38,9 @@ fn put_then_tomb(db: &mut DB) -> Result<()> {
         }
     }
 
-    for (k, exp_v) in k_to_expected_v {
+    for (k, exp_v) in k_to_expected_v.iter() {
         let actual_v = db.get(k).unwrap();
-        if exp_v != actual_v {
+        if exp_v != &actual_v {
             panic!("Expected {:?}; got {:?}", exp_v, actual_v);
         }
     }
@@ -51,7 +51,7 @@ fn put_then_tomb(db: &mut DB) -> Result<()> {
 fn nonexistent(db: &mut DB) -> Result<()> {
     let key = PrimaryKey(Datum::Str(String::from("nonexistent")));
 
-    let res = db.get(key)?;
+    let res = db.get(&key)?;
 
     assert!(res.is_none());
 
@@ -65,7 +65,7 @@ fn zero_byte_value(db: &mut DB) -> Result<()> {
 
     db.put(key.clone(), val.clone())?;
 
-    let res = db.get(key)?;
+    let res = db.get(&key)?;
 
     if !(res.is_some() && res.as_ref().unwrap() == &val) {
         panic!("Expected {:?}; got {:?}", val, res);
@@ -96,7 +96,7 @@ fn tuple(db: &mut DB) -> Result<()> {
 
     db.put(key.clone(), val.clone())?;
 
-    let res = db.get(key)?;
+    let res = db.get(&key)?;
 
     if !(res.is_some() && res.as_ref().unwrap() == &val) {
         panic!("Expected {:?}; got {:?}", val, res);

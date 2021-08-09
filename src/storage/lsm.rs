@@ -105,10 +105,6 @@ where
         }
         fs::remove_file(old_cl_path)?;
 
-        if self.sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH {
-            self.compact_sstables()?;
-        }
-
         Ok(())
     }
 
@@ -126,34 +122,38 @@ where
         Ok(())
     }
 
-    fn put_impl(&mut self, k: K, v: V) -> Result<()> {
-        serde::serialize_kv(&k, &v, &mut self.commit_log)?;
-
-        self.memtable.insert(k, v);
-
+    fn check_start_job(&mut self) -> Result<()> {
         if self.memtable.len() >= MEMTABLE_FLUSH_SIZE_THRESH {
             self.flush_memtable()?;
         }
-
+        if self.sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH {
+            self.compact_sstables()?;
+        }
         Ok(())
     }
 
     pub fn put(&mut self, k: K, v: V) -> Result<()> {
-        self.put_impl(k, v)
+        serde::serialize_kv(&k, &v, &mut self.commit_log)?;
+
+        self.memtable.insert(k, v);
+
+        self.check_start_job()?;
+
+        Ok(())
     }
 
-    pub fn get(&self, k: K) -> Result<Option<V>> {
-        if let Some(v) = self.memtable.get(&k) {
+    pub fn get(&self, k: &K) -> Result<Option<V>> {
+        if let Some(v) = self.memtable.get(k) {
             return Ok(Some(v.clone()));
         }
         if let Some(mtf) = &self.memtable_in_flush {
-            if let Some(v) = mtf.get(&k) {
+            if let Some(v) = mtf.get(k) {
                 return Ok(Some(v.clone()));
             }
         }
         // TODO bloom filter here
         for ss in self.sstables.iter().rev() {
-            let v = ss.get(&k)?;
+            let v = ss.get(k)?;
             if v.is_some() {
                 return Ok(v);
             }
