@@ -3,13 +3,6 @@ use pancake::storage::db::DB;
 use pancake::storage::serde::DatumType;
 use pancake::storage::types::{Datum, PrimaryKey, SubValue, SubValueSpec, Value};
 
-fn put(db: &mut DB, k: &str, v: &str) -> Result<()> {
-    db.put(
-        PrimaryKey(Datum::Str(String::from(k))),
-        Value(Datum::Str(String::from(v))),
-    )
-}
-
 fn kv(k: &str, v: &str) -> (PrimaryKey, Value) {
     (
         PrimaryKey(Datum::Str(String::from(k))),
@@ -17,7 +10,12 @@ fn kv(k: &str, v: &str) -> (PrimaryKey, Value) {
     )
 }
 
-fn verify(
+fn put(db: &mut DB, k: &str, v: &str) -> Result<()> {
+    let (k, v) = kv(k, v);
+    db.put(k, v)
+}
+
+fn verify_get(
     db: &mut DB,
     spec: &SubValueSpec,
     subval: &str,
@@ -30,6 +28,7 @@ fn verify(
     let pk_hi = pk_hi.map(|s| PrimaryKey(Datum::Str(String::from(s))));
 
     let actual = db.get_by_sub_value(&spec, &subval, pk_lo.as_ref(), pk_hi.as_ref())?;
+
     let success = exp == actual;
     if !success {
         eprintln!("Expected {:?}; got {:?}", exp, actual);
@@ -40,14 +39,14 @@ fn verify(
 pub fn delete_create_get(db: &mut DB) -> Result<()> {
     let spec = SubValueSpec::Whole(DatumType::Str);
 
-    let mut success = true;
-
     db.delete_sec_idx(&spec)?;
 
-    let s = verify(db, &spec, "val-a", None, None, vec![])?;
+    let mut success = true;
+
+    let s = verify_get(db, &spec, "val-a", None, None, vec![])?;
     success &= s;
 
-    let s = verify(db, &spec, "val-b", None, None, vec![])?;
+    let s = verify_get(db, &spec, "val-b", None, None, vec![])?;
     success &= s;
 
     put(db, "a.1", "val-a")?;
@@ -62,7 +61,7 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     put(db, "a.4", "val-a")?;
     put(db, "b.4", "val-b")?;
 
-    let s = verify(
+    let s = verify_get(
         db,
         &spec,
         "val-a",
@@ -77,7 +76,7 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     )?;
     success &= s;
 
-    let s = verify(
+    let s = verify_get(
         db,
         &spec,
         "val-b",
@@ -92,7 +91,7 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     )?;
     success &= s;
 
-    let s = verify(
+    let s = verify_get(
         db,
         &spec,
         "val-a",
@@ -102,7 +101,7 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     )?;
     success &= s;
 
-    let s = verify(
+    let s = verify_get(
         db,
         &spec,
         "val-a",
@@ -112,7 +111,7 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     )?;
     success &= s;
 
-    let s = verify(
+    let s = verify_get(
         db,
         &spec,
         "val-b",

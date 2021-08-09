@@ -22,7 +22,9 @@ fn test_main() -> Result<()> {
     primary::zero_byte_value(&mut db)?;
     primary::tuple(&mut db)?;
 
-    secondary::delete_create_get(&mut db)?;
+    secondary::whole::delete_create_get(&mut db)?;
+
+    secondary::partial::delete_create_get(&mut db)?;
 
     Ok(())
 }
