@@ -35,11 +35,17 @@ impl DB {
 
     pub fn get_range(
         &self,
-        k_lo: &Option<PrimaryKey>,
-        k_hi: &Option<PrimaryKey>,
+        k_lo: Option<&PrimaryKey>,
+        k_hi: Option<&PrimaryKey>,
     ) -> Result<Vec<(PrimaryKey, Value)>> {
-        let iter = self.primary_index.get_range(k_lo, k_hi)?;
-        let ret = iter
+        // The `move` keyword here moves `k_lo: &PrimaryKey` out of the callback for `.map()`
+        // into the following closure.
+        let k_lo_cmp = k_lo.map(|k_lo| move |sample_k: &PrimaryKey| sample_k.cmp(k_lo));
+        let k_hi_cmp = k_hi.map(|k_hi| move |sample_k: &PrimaryKey| sample_k.cmp(k_hi));
+
+        let ret = self
+            .primary_index
+            .get_range(k_lo_cmp.as_ref(), k_hi_cmp.as_ref())?
             .filter_map(|res_kv| match res_kv {
                 Err(e) => Some(Err(e)),
                 Ok((k, v)) => match v {

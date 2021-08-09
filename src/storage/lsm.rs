@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::hash::Hash;
@@ -164,12 +165,16 @@ where
         Ok(None)
     }
 
-    pub fn get_range<'a>(
+    pub fn get_range<'a, Flo, Fhi>(
         &'a self,
-        k_lo: &Option<K>,
-        k_hi: &Option<K>,
-    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a> {
-        let ssts_iter = SSTable::merge_range(&self.sstables, &k_lo, &k_hi).unwrap();
+        k_lo_cmp: Option<&'a Flo>,
+        k_hi_cmp: Option<&'a Fhi>,
+    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a>
+    where
+        Flo: Fn(&K) -> Ordering,
+        Fhi: Fn(&K) -> Ordering,
+    {
+        let ssts_iter = SSTable::merge_range(&self.sstables, k_lo_cmp, k_hi_cmp).unwrap();
 
         let mts_iter = [self.memtable_in_flush.as_ref(), Some(&self.memtable)]
             .iter()
@@ -178,17 +183,19 @@ where
             .map(|(mt_i, mt)| {
                 let mut iter = mt.iter();
 
-                if let Some(k_lo) = &k_lo {
-                    if let Some(iter_pos) = mt.iter().rposition(|(k, _v)| k < k_lo) {
+                if let Some(k_lo_cmp) = k_lo_cmp {
+                    // Find the max key less than the desired key. Not equal to it, b/c
+                    // `.nth()` takes the item at the provided position.
+                    if let Some(iter_pos) = mt.iter().rposition(|(k, _v)| k_lo_cmp(k).is_lt()) {
                         iter.nth(iter_pos);
                     }
                 }
 
-                let k_hi = k_hi.clone();
+                let k_hi_cmp = k_hi_cmp.clone();
                 iter.take_while(move |(k, _v)| {
-                    // This closure moves k_hi.
-                    if let Some(k_hi) = &k_hi {
-                        k <= &k_hi
+                    // This closure moves k_hi_cmp.
+                    if let Some(k_hi_cmp) = k_hi_cmp {
+                        k_hi_cmp(k).is_le()
                     } else {
                         true
                     }

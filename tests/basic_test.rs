@@ -63,10 +63,7 @@ fn put_del_get_getrange(db: &mut DB) -> Result<()> {
         .collect::<Vec<_>>();
     assert!(exp_range.len() >= 3);
 
-    let act_range = db.get_range(
-        &Some(exp_range[0].0.clone()),
-        &Some(exp_range.last().unwrap().0.clone()),
-    )?;
+    let act_range = db.get_range(Some(&exp_range[0].0), Some(&exp_range.last().unwrap().0))?;
     let act_range = act_range.iter().map(|(k, v)| (k, v)).collect::<Vec<_>>();
 
     if exp_range != act_range {

@@ -5,6 +5,7 @@ use core::option::Option::{None, Some};
 use core::result::Result::Ok;
 use derive_more::{Deref, DerefMut};
 use itertools::Itertools;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -107,7 +108,8 @@ where
     ///     `None` if not found within this sstable.
     ///     `Some(_: V)` if found.
     pub fn get(&self, k: &K) -> Result<Option<V>> {
-        let file_offset = self.sparse_index.nearest_preceding_file_offset(k);
+        let k_lo_cmp = |sample_k: &K| sample_k.cmp(k);
+        let file_offset = self.sparse_index.nearest_preceding_file_offset(&k_lo_cmp);
 
         let mut file = File::open(&self.path)?;
         file.seek(SeekFrom::Start(file_offset))?;
@@ -132,14 +134,18 @@ where
         Ok(None)
     }
 
-    pub fn get_range(
-        &self,
-        k_lo: Option<K>,
-        k_hi: Option<K>,
-    ) -> Result<impl Iterator<Item = Result<(K, V)>>> {
-        let file_offset = match &k_lo {
+    pub fn get_range<'a, Flo, Fhi>(
+        &'a self,
+        k_lo_cmp: Option<&'a Flo>,
+        k_hi_cmp: Option<&'a Fhi>,
+    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a>
+    where
+        Flo: Fn(&K) -> Ordering,
+        Fhi: Fn(&K) -> Ordering,
+    {
+        let file_offset = match k_lo_cmp {
             None => 0 as FileOffset,
-            Some(k_lo) => self.sparse_index.nearest_preceding_file_offset(k_lo),
+            Some(k_lo_cmp) => self.sparse_index.nearest_preceding_file_offset(k_lo_cmp),
         };
 
         let mut file = File::open(&self.path)?;
@@ -147,19 +153,19 @@ where
 
         let iter = KeyValueIterator::<K, V>::from(file)
             .skip_while(move |res| {
-                // This closure moves k_lo.
-                if let Some(k_lo) = &k_lo {
+                // This closure moves k_lo_cmp.
+                if let Some(k_lo_cmp) = k_lo_cmp {
                     if let Ok((k, _v)) = res {
-                        return k < &k_lo;
+                        return k_lo_cmp(k).is_lt();
                     }
                 }
                 false
             })
             .take_while(move |res| {
-                // This closure moves k_hi.
-                if let Some(k_hi) = &k_hi {
+                // This closure moves k_hi_cmp.
+                if let Some(k_hi_cmp) = k_hi_cmp {
                     if let Ok((k, _v)) = res {
-                        return k <= &k_hi;
+                        return k_hi_cmp(k).is_le();
                     }
                 }
                 true
@@ -173,18 +179,22 @@ where
         Ok(())
     }
 
-    pub fn merge_range(
-        tables: &[Self],
-        k_lo: &Option<K>,
-        k_hi: &Option<K>,
-    ) -> Result<impl Iterator<Item = Result<(K, V)>>> {
+    pub fn merge_range<'a, Flo, Fhi>(
+        tables: &'a [Self],
+        k_lo_cmp: Option<&'a Flo>,
+        k_hi_cmp: Option<&'a Fhi>,
+    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a>
+    where
+        Flo: Fn(&K) -> Ordering,
+        Fhi: Fn(&K) -> Ordering,
+    {
         let per_table_iters = tables
             .iter()
             .enumerate()
             .map(|(table_i, sst)| {
                 // NB: the index/position of the sstable is included for the purpose of breaking ties
                 // on duplicate keys.
-                sst.get_range(k_lo.clone(), k_hi.clone())
+                sst.get_range(k_lo_cmp, k_hi_cmp)
                     .map(|iter| iter.zip(std::iter::repeat(table_i)))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -231,7 +241,13 @@ where
         let mut sparse_index = SparseIndex::new();
         let mut offset = 0 as FileOffset;
 
-        for (kv_i, res_kv) in Self::merge_range(tables, &None, &None)?.enumerate() {
+        for (kv_i, res_kv) in Self::merge_range(
+            tables,
+            None::<&Box<dyn Fn(&K) -> Ordering>>,
+            None::<&Box<dyn Fn(&K) -> Ordering>>,
+        )?
+        .enumerate()
+        {
             let (k, v) = res_kv?;
 
             let delta_offset = serde::serialize_kv(&k, &v, &mut file)?;
@@ -267,9 +283,14 @@ impl<K: Serializable + Ord> SparseIndex<K> {
         }
     }
 
-    fn nearest_preceding_file_offset(&self, key: &K) -> FileOffset {
+    fn nearest_preceding_file_offset<Flo>(&self, k_lo_cmp: &Flo) -> FileOffset
+    where
+        Flo: Fn(&K) -> Ordering,
+    {
         // TODO Bisect. Currently this has O(n) cost.
-        let idx_pos = self.ptrs.iter().rposition(|(k, _off)| k <= key);
+
+        // Find the max key less than or equal to the desired key.
+        let idx_pos = self.ptrs.iter().rposition(|(k, _off)| k_lo_cmp(k).is_le());
         match idx_pos {
             None => 0u64,
             Some(idx_pos) => {
