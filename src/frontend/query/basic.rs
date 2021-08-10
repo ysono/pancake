@@ -1,12 +1,14 @@
 //! A _very_ basic parser
 //!
 //! This is a simplistic, recursion-based parser.
+//! It's meant to be a stop-gap impl.
+//! It ought to be replaced by one based on a lexer and a parser.
 //!
-//! The input string is split by unicode word boundary.
-//! This means literals such as "foo.bar" and "foo-bar" are separated into two tokens.
-//! This means any data having such characters as '.' and '-' are unworkable with this query engine.
-//!
-//! This parser is meant to be a stop-gap impl. It ought to be replaced by one based on a lexer and a parser.
+//! The input string is split by unicode word boundary. This incurs some limitations:
+//! - Literals such as `foo.bar` and `foo-bar` are separated into multiple tokens.
+//!     - This means any data containing such characters as `.` and `-` are unworkable with this query engine.
+//! - Literals such as `("` and `))` are not separated.
+//!     - Hence, when in doubt, add spaces.
 
 use crate::storage::serde::DatumType;
 use crate::storage::types::{Datum, PrimaryKey, SubValue, SubValueSpec, Value};

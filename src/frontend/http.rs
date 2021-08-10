@@ -1,4 +1,4 @@
-use crate::query::{self, Query};
+use crate::frontend::query::basic::{self as query, Query};
 use crate::storage::db::DB;
 use crate::storage::types::{Datum, PrimaryKey, Value};
 use anyhow::{Error, Result};
