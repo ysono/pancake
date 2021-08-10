@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Datum",""],["OptDatum",""],["SubValueSpec","[`SubValueSpec`] specifies a sub-portion of a [`Value`]."]],"struct":[["Bool",""],["PrimaryKey",""],["SubValue",""],["SubValueAndKey",""],["Value",""]]});

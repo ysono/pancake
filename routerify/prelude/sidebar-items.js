@@ -1,0 +1,1 @@
+initSidebarItems({"trait":[["RequestExt","A extension trait which extends the `hyper::Request` and `http::Parts` types with some helpful methods."]]});

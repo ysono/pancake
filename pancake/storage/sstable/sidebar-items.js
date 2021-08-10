@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["SSTable","One SS Table. It consists of a file on disk and an in-memory sparse indexing of the file."]]});
