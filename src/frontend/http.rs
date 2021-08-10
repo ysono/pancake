@@ -84,8 +84,8 @@ mod db_helpers {
             ]
             .join("\r\n")
         });
-        let mut out_str =
-            itertools::Itertools::intersperse(kv_strs, String::from("\r\n")).collect::<String>();
+        let mut out_str = itertools::Itertools::intersperse(kv_strs, String::from("\r\n\r\n"))
+            .collect::<String>();
         out_str.push_str("\r\n");
 
         Ok(Response::new(Body::from(out_str)))

@@ -22,17 +22,11 @@ curl -i -X POST "${DB}/query" -d 'put int(100) int(1000)'
 curl -i -X POST "${DB}/query" -d 'get int(100)'
 curl -i -X POST "${DB}/query" -d 'put int(101) int(1010)'
 curl -i -X POST "${DB}/query" -d 'get int(101)'
-curl -i -X POST "${DB}/query" -d 'put int(102) int(1020)'
+curl -i -X POST "${DB}/query" -d 'put int(102) str("1020")'
 curl -i -X POST "${DB}/query" -d 'del int(102)'
 curl -i -X POST "${DB}/query" -d 'get int(102)'
 
-# The tuple type nests other data.
-curl -i -X POST "${DB}/query" -d 'put int(5000) tup( str("s5000") int(50) )'
-curl -i -X POST "${DB}/query" -d 'get int(5000)'
-curl -i -X POST "${DB}/query" -d 'put int(5001) tup( str("s5000") int(51) )'
-curl -i -X POST "${DB}/query" -d 'get int(5001)'
-
-# The tuple type can nest another tuple.
+# The tuple type nests other data, including other tuples.
 curl -i -X POST "${DB}/query" -d 'put int(6000) tup( str("s6000") tup( int(60) str("s60") ) int(60) )'
 curl -i -X POST "${DB}/query" -d 'get int(6000)'
 curl -i -X POST "${DB}/query" -d 'put int(6001) tup( str("s6000") tup( int(61) str("s61") ) int(61) )'
@@ -40,14 +34,15 @@ curl -i -X POST "${DB}/query" -d 'get int(6001)'
 
 ### Range query ###
 
-curl -i -X POST "${DB}/query" -d 'get between int(50) int(150)'
+# Note, the comparison between keys is untyped.
+curl -i -X POST "${DB}/query" -d 'get between int(50) str("foobar")'
 curl -i -X POST "${DB}/query" -d 'get between int(50) _'
-curl -i -X POST "${DB}/query" -d 'get between _ int(150)'
+curl -i -X POST "${DB}/query" -d 'get between _ str("foobar")'
 curl -i -X POST "${DB}/query" -d 'get between _ _'
 
 ### Querying by sub-portion of value ###
 
-# Index all entries value type.
+# Index all entries by value type.
 curl -i -X POST "${DB}/query" -d 'create index int'
 
 # Index all entries by sub-value specification.
@@ -63,7 +58,7 @@ curl -i -X POST "${DB}/query" -d 'get where int between int(500) int(1500)'
 
 # Get all entries by sub-value specification.
 curl -i -X POST "${DB}/query" -d 'get where tup( 0 str ) _'
-curl -i -X POST "${DB}/query" -d 'get where tup( 0 str ) str("s5000")'
+curl -i -X POST "${DB}/query" -d 'get where tup( 0 str ) str("s6000")'
 curl -i -X POST "${DB}/query" -d 'get where tup( 0 str ) between str("s1000") str("s9000")'
 
 # Get all entries by nested sub-value specification.
