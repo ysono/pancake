@@ -157,6 +157,7 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
     let query = query::parse(&body)?;
     match query {
         Query::Put(key, val) => db_helpers::put(&mut db, key, val),
+        Query::Del(key) => db_helpers::delete(&mut db, key),
         Query::Get(key) => db_helpers::get(&db, &key),
         Query::GetBetween(key_lo, key_hi) => db_helpers::get_between(&db, &key_lo, &key_hi),
         Query::GetWhere(spec, subval) => db_helpers::get_where(&db, &spec, &subval, &subval),

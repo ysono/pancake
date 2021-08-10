@@ -22,6 +22,9 @@ curl -i -X POST "${DB}/query" -d 'put int(100) int(1000)'
 curl -i -X POST "${DB}/query" -d 'get int(100)'
 curl -i -X POST "${DB}/query" -d 'put int(101) int(1010)'
 curl -i -X POST "${DB}/query" -d 'get int(101)'
+curl -i -X POST "${DB}/query" -d 'put int(102) int(1020)'
+curl -i -X POST "${DB}/query" -d 'del int(102)'
+curl -i -X POST "${DB}/query" -d 'get int(102)'
 
 # The tuple type nests other data.
 curl -i -X POST "${DB}/query" -d 'put int(5000) tup( str("s5000") int(50) )'

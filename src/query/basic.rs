@@ -17,7 +17,8 @@ use std::iter::Peekable;
 #[derive(PartialEq, Eq, Debug)]
 pub enum Query {
     Put(PrimaryKey, Value),
-    Get(PrimaryKey), // TODO delete
+    Del(PrimaryKey),
+    Get(PrimaryKey),
     GetBetween(Option<PrimaryKey>, Option<PrimaryKey>),
     GetWhere(SubValueSpec, Option<SubValue>),
     GetWhereBetween(SubValueSpec, Option<SubValue>, Option<SubValue>),
@@ -40,6 +41,14 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Query>
             eos(&mut iter)?;
 
             let q = Query::Put(key, val);
+            return Ok(q);
+        }
+        Some("del") => {
+            let dat = datum(&mut iter)?;
+            eos(&mut iter)?;
+
+            let key = PrimaryKey(dat);
+            let q = Query::Del(key);
             return Ok(q);
         }
         Some("get") => match iter.peek() {
@@ -251,6 +260,16 @@ mod test {
             ])),
             Value(Datum::I64(321)),
         );
+        let q_obj = parse(q_str)?;
+        assert!(q_obj == exp_q_obj);
+
+        Ok(())
+    }
+
+    #[test]
+    fn del() -> Result<()> {
+        let q_str = "del int(123)";
+        let exp_q_obj = Query::Del(PrimaryKey(Datum::I64(123)));
         let q_obj = parse(q_str)?;
         assert!(q_obj == exp_q_obj);
 
