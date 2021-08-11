@@ -1,9 +1,79 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A very basic parser"><meta name="keywords" content="rust, rustlang, rust-lang, basic"><title>pancake::frontend::query::basic - Rust</title><link rel="stylesheet" type="text/css" href="../../../../normalize.css"><link rel="stylesheet" type="text/css" href="../../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../../../ayu.css" disabled ><script id="default-settings"></script><script src="../../../../storage.js"></script><script src="../../../../crates.js"></script><noscript><link rel="stylesheet" href="../../../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../../../favicon.svg">
 <link rel="alternate icon" type="image/png" href="../../../../favicon-16x16.png">
-<link rel="alternate icon" type="image/png" href="../../../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../../../down-arrow.svg");}</style></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../../../pancake/index.html'><div class='logo-container rust-logo'><img src='../../../../rust-logo.png' alt='logo'></div></a><h2 class="location">Module basic</h2><div class="sidebar-elems"><div class="block items"><ul><li><a href="#enums">Enums</a></li><li><a href="#functions">Functions</a></li></ul></div><div id="sidebar-vars" data-name="basic" data-ty="mod" data-relpath="./"></div><script defer src="./sidebar-items.js"></script></div></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu" title="themes"><img src="../../../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" id="help-button" title="help">?</button><a id="settings-menu" href="../../../../settings.html" title="settings"><img src="../../../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><h1 class="fqn"><span class="in-band">Module <a href="../../../index.html">pancake</a>::<wbr><a href="../../index.html">frontend</a>::<wbr><a href="../index.html">query</a>::<wbr><a class="mod" href="#">basic</a><button id="copy-path" onclick="copy_path(this)" title="copy path"><img src="../../../../clipboard.svg" width="19" height="18" alt="Copy item import" title="Copy item import to clipboard"></button></span><span class="out-of-band"><span id="render-detail"><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class="inner">&#x2212;</span>]</a></span><a class="srclink" href="../../../../src/pancake/frontend/query/basic.rs.html#1-429" title="goto source code">[src]</a></span></h1><details class="rustdoc-toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A <em>very</em> basic parser</p>
-<p>This is a simplistic, recursion-based parser.
-It’s meant to be a stop-gap impl.
-It ought to be replaced by one based on a lexer and a parser.</p>
+<link rel="alternate icon" type="image/png" href="../../../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../../../down-arrow.svg");}</style></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../../../pancake/index.html'><div class='logo-container rust-logo'><img src='../../../../rust-logo.png' alt='logo'></div></a><h2 class="location">Module basic</h2><div class="sidebar-elems"><div class="block items"><ul><li><a href="#enums">Enums</a></li><li><a href="#functions">Functions</a></li></ul></div><div id="sidebar-vars" data-name="basic" data-ty="mod" data-relpath="./"></div><script defer src="./sidebar-items.js"></script></div></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu" title="themes"><img src="../../../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" id="help-button" title="help">?</button><a id="settings-menu" href="../../../../settings.html" title="settings"><img src="../../../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><h1 class="fqn"><span class="in-band">Module <a href="../../../index.html">pancake</a>::<wbr><a href="../../index.html">frontend</a>::<wbr><a href="../index.html">query</a>::<wbr><a class="mod" href="#">basic</a><button id="copy-path" onclick="copy_path(this)" title="copy path"><img src="../../../../clipboard.svg" width="19" height="18" alt="Copy item import" title="Copy item import to clipboard"></button></span><span class="out-of-band"><span id="render-detail"><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class="inner">&#x2212;</span>]</a></span><a class="srclink" href="../../../../src/pancake/frontend/query/basic.rs.html#1-520" title="goto source code">[src]</a></span></h1><details class="rustdoc-toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A <em>very</em> basic parser</p>
+<h1 id="supported-queries" class="section-header"><a href="#supported-queries">Supported queries</a></h1><h2 id="by-primary-key" class="section-header"><a href="#by-primary-key">By primary key</a></h2>
+<p>Keys and values are typed.</p>
+<ul>
+<li><code>put int(100) str(&quot;1000&quot;)</code></li>
+<li><code>del int(100)</code></li>
+<li><code>get int(100)</code></li>
+</ul>
+<p>The tuple type nests other data, including other tuples.</p>
+<ul>
+<li><code>put int(6000) tup( str(&quot;s6000&quot;) tup( int(60) str(&quot;s60&quot;) ) int(60) )</code></li>
+<li><code>get tup( str(&quot;a&quot;) int(10) )</code></li>
+</ul>
+<h2 id="by-range-over-primary-key" class="section-header"><a href="#by-range-over-primary-key">By range over primary key</a></h2>
+<p>Analogous sql:</p>
+<ul>
+<li><code>SELECT * FROM table WHERE pk BETWEEN ${pk_lo} AND ${pk_hi};</code></li>
+<li><code>SELECT * FROM table WHERE pk &lt;= ${pk_hi};</code></li>
+</ul>
+<p>Note, the comparison between keys is untyped, so the range might cover some data you don’t expect.</p>
+<ul>
+<li><code>get between int(50) str(&quot;foobar&quot;)</code></li>
+<li><code>get between int(50) _</code></li>
+<li><code>get between _ str(&quot;foobar&quot;)</code></li>
+<li><code>get between _ _</code></li>
+</ul>
+<h2 id="by-sub-portion-of-value" class="section-header"><a href="#by-sub-portion-of-value">By sub-portion of value</a></h2><h3 id="index-creation" class="section-header"><a href="#index-creation">Index creation</a></h3>
+<p>Analogous sql:</p>
+<p><code>CREATE INDEX ON table (${column});</code></p>
+<p>Whereas a RDBMS allows specifing an index based on
+a selection of one or more columns, we support a selection of any of:</p>
+<ul>
+<li>The whole value</li>
+<li>One sub-portion of value at a specific nested location and having a specific type</li>
+</ul>
+<p>Index all entries by value type.</p>
+<p><code>create index int</code></p>
+<p>Index all entries by sub-value specification.</p>
+<p><code>create index tup( 0 str )</code></p>
+<p>Index all entries by nested sub-value specification.</p>
+<p><code>create index tup( 1 tup( 0 int ) )</code></p>
+<h3 id="index-based-selection" class="section-header"><a href="#index-based-selection">Index-based selection</a></h3>
+<p>Analogous sql:</p>
+<ul>
+<li><code>SELECT * FROM table WHERE ${column} = ${col_val};</code></li>
+<li><code>SELECT * FROM table WHERE ${column} BETWEEN ${col_val_lo} AND ${col_val_hi};</code></li>
+<li><code>SELECT * FROM table WHERE ${column} &lt;= ${col_val_hi};</code></li>
+</ul>
+<p>In addition, because value schemas are dynamic, we also support selecting all values
+that match a spec, regardless of the sub-portion of value pointed to by the spec.
+It would be analogous to this hypothetical sql:</p>
+<ul>
+<li><code>SELECT * FROM table WHERE ${column} IS VALID COLUMN;</code></li>
+</ul>
+<p>Get all entries by value type.</p>
+<ul>
+<li><code>get where int int(1000)</code></li>
+<li><code>get where int between int(500) int(1500)</code></li>
+<li><code>get where int between _ int(1500)</code></li>
+<li><code>get where int _</code></li>
+</ul>
+<p>Get all entries by sub-value specification.</p>
+<ul>
+<li><code>get where tup( 0 str ) str(&quot;s6000&quot;)</code></li>
+<li><code>get where tup( 0 str ) between str(&quot;s1000&quot;) str(&quot;s9000&quot;)</code></li>
+<li><code>get where tup( 0 str ) _</code></li>
+</ul>
+<p>Get all entries by nested sub-value specification.</p>
+<ul>
+<li><code>get where tup( 1 tup( 0 int ) ) int(60)</code></li>
+<li><code>get where tup( 1 tup( 0 int ) ) between int(60) int(61)</code></li>
+<li><code>get where tup( 1 tup( 0 int ) ) _</code></li>
+</ul>
+<h1 id="caveats" class="section-header"><a href="#caveats">Caveats</a></h1>
 <p>The input string is split by unicode word boundary. This incurs some limitations:</p>
 <ul>
 <li>Literals such as <code>foo.bar</code> and <code>foo-bar</code> are separated into multiple tokens.
@@ -13,10 +83,14 @@ It ought to be replaced by one based on a lexer and a parser.</p>
 </li>
 <li>Literals such as <code>(&quot;</code> and <code>))</code> are not separated.
 <ul>
-<li>Hence, when in doubt, add spaces.</li>
+<li>For string literals <code>(&quot;</code> and <code>&quot;)</code> must be kept together.</li>
+<li>Otherwise, when in doubt, add spaces.</li>
 </ul>
 </li>
 </ul>
+<p>This is a simplistic, recursion-based parser.
+It’s meant to be a stop-gap impl.
+It ought to be replaced by one based on a lexer and a parser.</p>
 </div></details><h2 id="enums" class="section-header"><a href="#enums">Enums</a></h2>
 <table><tr class="module-item"><td><a class="enum" href="enum.Query.html" title="pancake::frontend::query::basic::Query enum">Query</a></td><td class="docblock-short"></td></tr></table><h2 id="functions" class="section-header"><a href="#functions">Functions</a></h2>
 <table><tr class="module-item"><td><a class="fn" href="fn.parse.html" title="pancake::frontend::query::basic::parse fn">parse</a></td><td class="docblock-short"></td></tr></table></section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../../../" data-current-crate="pancake" data-search-index-js="../../../../search-index.js" data-search-js="../../../../search.js"></div><script src="../../../../main.js"></script></body></html>
