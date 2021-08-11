@@ -6,14 +6,14 @@
 //!
 //! Keys and values are typed.
 //!
-//! - `put int(100) str("1000")`
+//! - `put int(100) str(1000)`
 //! - `del int(100)`
 //! - `get int(100)`
 //!
 //! The tuple type nests other data, including other tuples.
 //!
-//! - `put int(6000) tup( str("s6000") tup( int(60) str("s60") ) int(60) )`
-//! - `get tup( str("a") int(10) )`
+//! - `put int(6000) tup( str(s6000) tup( int(60) str(s60) ) int(60) )`
+//! - `get tup( str(a) int(10) )`
 //!
 //! ## By range over primary key
 //!
@@ -24,9 +24,9 @@
 //!
 //! Note, the comparison between keys is untyped, so the range might cover some data you don't expect.
 //!
-//! - `get between int(50) str("foobar")`
+//! - `get between int(50) str(foobar)`
 //! - `get between int(50) _`
-//! - `get between _ str("foobar")`
+//! - `get between _ str(foobar)`
 //! - `get between _ _`
 //!
 //! ## By sub-portion of value
@@ -78,8 +78,8 @@
 //!
 //! Get all entries by sub-value specification.
 //!
-//! - `get where tup( 0 str ) str("s6000")`
-//! - `get where tup( 0 str ) between str("s1000") str("s9000")`
+//! - `get where tup( 0 str ) str(s6000)`
+//! - `get where tup( 0 str ) between str(s1000) str(s9000)`
 //! - `get where tup( 0 str ) _`
 //!
 //! Get all entries by nested sub-value specification.
@@ -94,8 +94,7 @@
 //! - Literals such as `foo.bar` and `foo-bar` are separated into multiple tokens.
 //!     - This means any data containing such characters as `.` and `-` are unworkable with this query engine.
 //! - Literals such as `("` and `))` are not separated.
-//!     - For string literals `("` and `")` must be kept together.
-//!     - Otherwise, when in doubt, add spaces.
+//!     - Hence, when in doubt, add spaces.
 //!
 //! This is a simplistic, recursion-based parser.
 //! It's meant to be a stop-gap impl.
@@ -209,9 +208,9 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Query>
 fn datum<'a, I: Iterator<Item = &'a str>>(iter: &mut Peekable<I>) -> Result<Datum> {
     match iter.next() {
         Some("str") => match iter.next() {
-            Some("(\"") => match iter.next() {
+            Some("(") => match iter.next() {
                 Some(str_literal) => match iter.next() {
-                    Some("\")") => return Ok(Datum::Str(String::from(str_literal))),
+                    Some(")") => return Ok(Datum::Str(String::from(str_literal))),
                     x => {
                         return Err(anyhow!(
                             "Expected closing of string literal but found {:?}",
@@ -337,7 +336,7 @@ mod test {
 
     #[test]
     fn put() -> Result<()> {
-        let q_str = "put int(123) str(\"val1\")";
+        let q_str = "put int(123) str(val1)";
         let exp_q_obj = Query::Put(
             PrimaryKey(Datum::I64(123)),
             Value(Datum::Str(String::from("val1"))),
@@ -345,7 +344,7 @@ mod test {
         let q_obj = parse(q_str)?;
         assert!(q_obj == exp_q_obj);
 
-        let q_str = "put tup( str(\"a\") int(123) ) int(321)";
+        let q_str = "put tup( str(a) int(123) ) int(321)";
         let exp_q_obj = Query::Put(
             PrimaryKey(Datum::Tuple(vec![
                 Datum::Str(String::from("a")),
@@ -376,12 +375,12 @@ mod test {
         let q_obj = parse(q_str)?;
         assert!(q_obj == exp_q_obj);
 
-        let q_str = "get str(\"key1\")";
+        let q_str = "get str(key1)";
         let exp_q_obj = Query::Get(PrimaryKey(Datum::Str(String::from("key1"))));
         let q_obj = parse(q_str)?;
         assert!(q_obj == exp_q_obj);
 
-        let q_str = "get tup( str(\"a\") int(123) )";
+        let q_str = "get tup( str(a) int(123) )";
         let exp_q_obj = Query::Get(PrimaryKey(Datum::Tuple(vec![
             Datum::Str(String::from("a")),
             Datum::I64(123),
@@ -435,7 +434,7 @@ mod test {
         let q_obj = parse(q_str)?;
         assert!(q_obj == exp_q_obj);
 
-        let q_str = "get where tup( 1 tup( 0 str ) ) str(\"subval_a\")";
+        let q_str = "get where tup( 1 tup( 0 str ) ) str(subval_a)";
         let exp_q_obj = Query::GetWhere(
             SubValueSpec::PartialTuple {
                 member_idx: 1,
