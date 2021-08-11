@@ -3,7 +3,7 @@ name: Rustdoc to Github Pages
 on:
   push:
     branches:
-      - ysono/doc
+      - main
 
 env:
   CARGO_TERM_COLOR: always

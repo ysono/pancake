@@ -6,7 +6,7 @@ Pancake is an experimental database.
 
 See [doc for LSM-Tree](https://ysono.github.io/pancake/pancake/storage/lsm/index.html).
 
-### Usage
+## Usage
 
 ```sh
 DB="localhost:3000"
