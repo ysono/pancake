@@ -118,9 +118,9 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Query>
 fn datum<'a, I: Iterator<Item = &'a str>>(iter: &mut Peekable<I>) -> Result<Datum> {
     match iter.next() {
         Some("str") => match iter.next() {
-            Some("(\"") => match iter.next() {
+            Some("(") => match iter.next() {
                 Some(str_literal) => match iter.next() {
-                    Some("\")") => return Ok(Datum::Str(String::from(str_literal))),
+                    Some(")") => return Ok(Datum::Str(String::from(str_literal))),
                     x => {
                         return Err(anyhow!(
                             "Expected closing of string literal but found {:?}",
@@ -246,7 +246,7 @@ mod test {
 
     #[test]
     fn put() -> Result<()> {
-        let q_str = "put int(123) str(\"val1\")";
+        let q_str = "put int(123) str(val1)";
         let exp_q_obj = Query::Put(
             PrimaryKey(Datum::I64(123)),
             Value(Datum::Str(String::from("val1"))),
@@ -254,7 +254,7 @@ mod test {
         let q_obj = parse(q_str)?;
         assert!(q_obj == exp_q_obj);
 
-        let q_str = "put tup( str(\"a\") int(123) ) int(321)";
+        let q_str = "put tup( str(a) int(123) ) int(321)";
         let exp_q_obj = Query::Put(
             PrimaryKey(Datum::Tuple(vec![
                 Datum::Str(String::from("a")),
@@ -285,12 +285,12 @@ mod test {
         let q_obj = parse(q_str)?;
         assert!(q_obj == exp_q_obj);
 
-        let q_str = "get str(\"key1\")";
+        let q_str = "get str(key1)";
         let exp_q_obj = Query::Get(PrimaryKey(Datum::Str(String::from("key1"))));
         let q_obj = parse(q_str)?;
         assert!(q_obj == exp_q_obj);
 
-        let q_str = "get tup( str(\"a\") int(123) )";
+        let q_str = "get tup( str(a) int(123) )";
         let exp_q_obj = Query::Get(PrimaryKey(Datum::Tuple(vec![
             Datum::Str(String::from("a")),
             Datum::I64(123),
@@ -344,7 +344,7 @@ mod test {
         let q_obj = parse(q_str)?;
         assert!(q_obj == exp_q_obj);
 
-        let q_str = "get where tup( 1 tup( 0 str ) ) str(\"subval_a\")";
+        let q_str = "get where tup( 1 tup( 0 str ) ) str(subval_a)";
         let exp_q_obj = Query::GetWhere(
             SubValueSpec::PartialTuple {
                 member_idx: 1,
