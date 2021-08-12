@@ -44,6 +44,7 @@ where
 
         let commit_log_path = commit_log_path.unwrap_or(utils::new_timestamped_path(
             path.as_ref().join(COMMIT_LOGS_DIR_PATH),
+            "data",
         ));
         let commit_log = OpenOptions::new()
             .create(true)
@@ -77,7 +78,7 @@ where
     }
 
     fn flush_memtable(&mut self) -> Result<()> {
-        let new_cl_path = utils::new_timestamped_path(self.path.join(COMMIT_LOGS_DIR_PATH));
+        let new_cl_path = utils::new_timestamped_path(self.path.join(COMMIT_LOGS_DIR_PATH), "data");
         let new_cl = OpenOptions::new()
             .create_new(true)
             .write(true)
@@ -98,7 +99,7 @@ where
             .ok_or(anyhow!("Unexpected error: no memtable being flushed"))?;
         let new_sst = SSTable::write_from_mem(
             mtf,
-            utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH)),
+            utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH), "data"),
         )?;
 
         {
@@ -112,7 +113,7 @@ where
     }
 
     fn compact_sstables(&mut self) -> Result<()> {
-        let new_table_path = utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH));
+        let new_table_path = utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH), "data");
         let new_table = SSTable::compact(new_table_path, &self.sstables)?;
         let new_tables = vec![new_table];
 
@@ -174,7 +175,7 @@ where
         Flo: Fn(&K) -> Ordering,
         Fhi: Fn(&K) -> Ordering,
     {
-        let ssts_iter = SSTable::merge_range(&self.sstables, k_lo_cmp, k_hi_cmp).unwrap();
+        let ssts_iter = SSTable::merge_range(&self.sstables, k_lo_cmp, k_hi_cmp)?;
 
         let mts_iter = [self.memtable_in_flush.as_ref(), Some(&self.memtable)]
             .iter()

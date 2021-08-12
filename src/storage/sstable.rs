@@ -1,17 +1,12 @@
 use crate::storage::serde::{self, KeyValueIterator, ReadItem, Serializable, SkipItem};
 use anyhow::{anyhow, Result};
-use core::option::Option;
-use core::option::Option::{None, Some};
-use core::result::Result::Ok;
 use derive_more::{Deref, DerefMut};
 use itertools::Itertools;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::fs;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::hash::Hash;
-use std::io::Seek;
-use std::io::SeekFrom;
+use std::io::{Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
@@ -134,7 +129,7 @@ where
         Ok(None)
     }
 
-    pub fn get_range<'a, Flo, Fhi>(
+    fn get_range<'a, Flo, Fhi>(
         &'a self,
         k_lo_cmp: Option<&'a Flo>,
         k_hi_cmp: Option<&'a Fhi>,
@@ -241,13 +236,12 @@ where
         let mut sparse_index = SparseIndex::new();
         let mut offset = 0 as FileOffset;
 
-        for (kv_i, res_kv) in Self::merge_range(
+        let merged_iter = Self::merge_range(
             tables,
             None::<&Box<dyn Fn(&K) -> Ordering>>,
             None::<&Box<dyn Fn(&K) -> Ordering>>,
-        )?
-        .enumerate()
-        {
+        )?;
+        for (kv_i, res_kv) in merged_iter.enumerate() {
             let (k, v) = res_kv?;
 
             let delta_offset = serde::serialize_kv(&k, &v, &mut file)?;

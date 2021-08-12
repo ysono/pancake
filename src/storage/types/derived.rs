@@ -11,6 +11,9 @@ pub struct PrimaryKey(pub Datum);
 #[derive(PartialEq, Eq, PartialOrd, Ord, Deref, From, Clone, Debug)]
 pub struct Value(pub Datum);
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Deref, From, Clone, Debug)]
+pub struct SubValue(pub Datum);
+
 impl<Inner, Outer> Serializable for Outer
 where
     Inner: Serializable,
