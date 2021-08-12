@@ -519,7 +519,6 @@
 <span id="517">517</span>
 <span id="518">518</span>
 <span id="519">519</span>
-<span id="520">520</span>
 </pre><pre class="rust">
 <span class="doccomment">//! A _very_ basic parser</span>
 <span class="doccomment">//!</span>
@@ -529,14 +528,14 @@
 <span class="doccomment">//!</span>
 <span class="doccomment">//! Keys and values are typed.</span>
 <span class="doccomment">//!</span>
-<span class="doccomment">//! - `put int(100) str(&quot;1000&quot;)`</span>
+<span class="doccomment">//! - `put int(100) str(1000)`</span>
 <span class="doccomment">//! - `del int(100)`</span>
 <span class="doccomment">//! - `get int(100)`</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! The tuple type nests other data, including other tuples.</span>
 <span class="doccomment">//!</span>
-<span class="doccomment">//! - `put int(6000) tup( str(&quot;s6000&quot;) tup( int(60) str(&quot;s60&quot;) ) int(60) )`</span>
-<span class="doccomment">//! - `get tup( str(&quot;a&quot;) int(10) )`</span>
+<span class="doccomment">//! - `put int(6000) tup( str(s6000) tup( int(60) str(s60) ) int(60) )`</span>
+<span class="doccomment">//! - `get tup( str(a) int(10) )`</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! ## By range over primary key</span>
 <span class="doccomment">//!</span>
@@ -547,9 +546,9 @@
 <span class="doccomment">//!</span>
 <span class="doccomment">//! Note, the comparison between keys is untyped, so the range might cover some data you don&#39;t expect.</span>
 <span class="doccomment">//!</span>
-<span class="doccomment">//! - `get between int(50) str(&quot;foobar&quot;)`</span>
+<span class="doccomment">//! - `get between int(50) str(foobar)`</span>
 <span class="doccomment">//! - `get between int(50) _`</span>
-<span class="doccomment">//! - `get between _ str(&quot;foobar&quot;)`</span>
+<span class="doccomment">//! - `get between _ str(foobar)`</span>
 <span class="doccomment">//! - `get between _ _`</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! ## By sub-portion of value</span>
@@ -601,8 +600,8 @@
 <span class="doccomment">//!</span>
 <span class="doccomment">//! Get all entries by sub-value specification.</span>
 <span class="doccomment">//!</span>
-<span class="doccomment">//! - `get where tup( 0 str ) str(&quot;s6000&quot;)`</span>
-<span class="doccomment">//! - `get where tup( 0 str ) between str(&quot;s1000&quot;) str(&quot;s9000&quot;)`</span>
+<span class="doccomment">//! - `get where tup( 0 str ) str(s6000)`</span>
+<span class="doccomment">//! - `get where tup( 0 str ) between str(s1000) str(s9000)`</span>
 <span class="doccomment">//! - `get where tup( 0 str ) _`</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! Get all entries by nested sub-value specification.</span>
@@ -617,8 +616,7 @@
 <span class="doccomment">//! - Literals such as `foo.bar` and `foo-bar` are separated into multiple tokens.</span>
 <span class="doccomment">//!     - This means any data containing such characters as `.` and `-` are unworkable with this query engine.</span>
 <span class="doccomment">//! - Literals such as `(&quot;` and `))` are not separated.</span>
-<span class="doccomment">//!     - For string literals `(&quot;` and `&quot;)` must be kept together.</span>
-<span class="doccomment">//!     - Otherwise, when in doubt, add spaces.</span>
+<span class="doccomment">//!     - Hence, when in doubt, add spaces.</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! This is a simplistic, recursion-based parser.</span>
 <span class="doccomment">//! It&#39;s meant to be a stop-gap impl.</span>
@@ -732,9 +730,9 @@
 <span class="kw">fn</span> <span class="ident">datum</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, <span class="ident">I</span>: <span class="ident">Iterator</span><span class="op">&lt;</span><span class="ident">Item</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">str</span><span class="op">&gt;</span><span class="op">&gt;</span>(<span class="ident">iter</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">Peekable</span><span class="op">&lt;</span><span class="ident">I</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Datum</span><span class="op">&gt;</span> {
     <span class="kw">match</span> <span class="ident">iter</span>.<span class="ident">next</span>() {
         <span class="prelude-val">Some</span>(<span class="string">&quot;str&quot;</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">match</span> <span class="ident">iter</span>.<span class="ident">next</span>() {
-            <span class="prelude-val">Some</span>(<span class="string">&quot;(\&quot;&quot;</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">match</span> <span class="ident">iter</span>.<span class="ident">next</span>() {
+            <span class="prelude-val">Some</span>(<span class="string">&quot;(&quot;</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">match</span> <span class="ident">iter</span>.<span class="ident">next</span>() {
                 <span class="prelude-val">Some</span>(<span class="ident">str_literal</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">match</span> <span class="ident">iter</span>.<span class="ident">next</span>() {
-                    <span class="prelude-val">Some</span>(<span class="string">&quot;\&quot;)&quot;</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="ident">Datum::Str</span>(<span class="ident">String::from</span>(<span class="ident">str_literal</span>))),
+                    <span class="prelude-val">Some</span>(<span class="string">&quot;)&quot;</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="ident">Datum::Str</span>(<span class="ident">String::from</span>(<span class="ident">str_literal</span>))),
                     <span class="ident">x</span> <span class="op">=</span><span class="op">&gt;</span> {
                         <span class="kw">return</span> <span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(
                             <span class="string">&quot;Expected closing of string literal but found {:?}&quot;</span>,
@@ -860,7 +858,7 @@
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">put</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;put int(123) str(\&quot;val1\&quot;)&quot;</span>;
+        <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;put int(123) str(val1)&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Query::Put</span>(
             <span class="ident">PrimaryKey</span>(<span class="ident">Datum::I64</span>(<span class="number">123</span>)),
             <span class="ident">Value</span>(<span class="ident">Datum::Str</span>(<span class="ident">String::from</span>(<span class="string">&quot;val1&quot;</span>))),
@@ -868,7 +866,7 @@
         <span class="kw">let</span> <span class="ident">q_obj</span> <span class="op">=</span> <span class="ident">parse</span>(<span class="ident">q_str</span>)<span class="question-mark">?</span>;
         <span class="macro">assert!</span>(<span class="ident">q_obj</span> <span class="op">=</span><span class="op">=</span> <span class="ident">exp_q_obj</span>);
 
-        <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;put tup( str(\&quot;a\&quot;) int(123) ) int(321)&quot;</span>;
+        <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;put tup( str(a) int(123) ) int(321)&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Query::Put</span>(
             <span class="ident">PrimaryKey</span>(<span class="ident">Datum::Tuple</span>(<span class="macro">vec!</span>[
                 <span class="ident">Datum::Str</span>(<span class="ident">String::from</span>(<span class="string">&quot;a&quot;</span>)),
@@ -899,12 +897,12 @@
         <span class="kw">let</span> <span class="ident">q_obj</span> <span class="op">=</span> <span class="ident">parse</span>(<span class="ident">q_str</span>)<span class="question-mark">?</span>;
         <span class="macro">assert!</span>(<span class="ident">q_obj</span> <span class="op">=</span><span class="op">=</span> <span class="ident">exp_q_obj</span>);
 
-        <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get str(\&quot;key1\&quot;)&quot;</span>;
+        <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get str(key1)&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Query::Get</span>(<span class="ident">PrimaryKey</span>(<span class="ident">Datum::Str</span>(<span class="ident">String::from</span>(<span class="string">&quot;key1&quot;</span>))));
         <span class="kw">let</span> <span class="ident">q_obj</span> <span class="op">=</span> <span class="ident">parse</span>(<span class="ident">q_str</span>)<span class="question-mark">?</span>;
         <span class="macro">assert!</span>(<span class="ident">q_obj</span> <span class="op">=</span><span class="op">=</span> <span class="ident">exp_q_obj</span>);
 
-        <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get tup( str(\&quot;a\&quot;) int(123) )&quot;</span>;
+        <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get tup( str(a) int(123) )&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Query::Get</span>(<span class="ident">PrimaryKey</span>(<span class="ident">Datum::Tuple</span>(<span class="macro">vec!</span>[
             <span class="ident">Datum::Str</span>(<span class="ident">String::from</span>(<span class="string">&quot;a&quot;</span>)),
             <span class="ident">Datum::I64</span>(<span class="number">123</span>),
@@ -958,7 +956,7 @@
         <span class="kw">let</span> <span class="ident">q_obj</span> <span class="op">=</span> <span class="ident">parse</span>(<span class="ident">q_str</span>)<span class="question-mark">?</span>;
         <span class="macro">assert!</span>(<span class="ident">q_obj</span> <span class="op">=</span><span class="op">=</span> <span class="ident">exp_q_obj</span>);
 
-        <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get where tup( 1 tup( 0 str ) ) str(\&quot;subval_a\&quot;)&quot;</span>;
+        <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get where tup( 1 tup( 0 str ) ) str(subval_a)&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Query::GetWhere</span>(
             <span class="ident">SubValueSpec::PartialTuple</span> {
                 <span class="ident">member_idx</span>: <span class="number">1</span>,
