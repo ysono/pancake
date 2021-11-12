@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow = "*"
 derive_more = "*"
-futures = "*"
 hyper = { version = "*", features = ["full"] }
 itertools = "*"
 num-derive = "0.3"

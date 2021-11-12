@@ -3,7 +3,6 @@ use crate::storage::db::DB;
 use crate::storage::serde::Datum;
 use crate::storage::types::{PrimaryKey, Value};
 use anyhow::{Error, Result};
-use futures::executor::block_on;
 use hyper::{Body, Request, Response, Server, StatusCode};
 use routerify::prelude::*;
 use routerify::{Middleware, RequestInfo, Router, RouterService};
@@ -127,7 +126,7 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key: &String = parts.param("key").unwrap();
     let key = PrimaryKey(Datum::Str(key.clone()));
 
-    let val: Vec<u8> = block_on(hyper::body::to_bytes(body))?.to_vec();
+    let val: Vec<u8> = hyper::body::to_bytes(body).await?.to_vec();
     let val = String::from_utf8(val.into_iter().collect())?;
     let val = Value(Datum::Str(val));
 
@@ -150,7 +149,7 @@ async fn delete_handler(req: Request<Body>) -> Result<Response<Body>> {
 async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
     let (parts, body) = req.into_parts();
 
-    let body = block_on(hyper::body::to_bytes(body))?;
+    let body = hyper::body::to_bytes(body).await?;
     let body = String::from_utf8(body.into_iter().collect())?;
 
     let db = parts.data::<Arc<RwLock<DB>>>().unwrap();
