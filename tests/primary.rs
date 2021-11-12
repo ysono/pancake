@@ -1,6 +1,7 @@
 use anyhow::Result;
 use pancake::storage::db::DB;
-use pancake::storage::types::{Datum, PrimaryKey, Value};
+use pancake::storage::serde::Datum;
+use pancake::storage::types::{PrimaryKey, Value};
 use rand;
 use std::collections::BTreeMap;
 

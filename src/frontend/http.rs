@@ -1,6 +1,7 @@
 use crate::frontend::query::basic::{self as query, Query};
 use crate::storage::db::DB;
-use crate::storage::types::{Datum, PrimaryKey, Value};
+use crate::storage::serde::Datum;
+use crate::storage::types::{PrimaryKey, Value};
 use anyhow::{Error, Result};
 use futures::executor::block_on;
 use hyper::{Body, Request, Response, Server, StatusCode};
@@ -12,7 +13,8 @@ use std::sync::{Arc, RwLock};
 
 mod db_helpers {
     use crate::storage::db::DB;
-    use crate::storage::types::{Datum, PrimaryKey, SubValue, SubValueSpec, Value};
+    use crate::storage::serde::Datum;
+    use crate::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
     use anyhow::{anyhow, Result};
     use hyper::{Body, Response, StatusCode};
 

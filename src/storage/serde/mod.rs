@@ -47,26 +47,15 @@
 //! }
 //! ```
 
+mod types;
+pub use types::*;
+
 use anyhow::{anyhow, Result};
-use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
 use std::mem::size_of;
-
-/// We manually map enum members to data_type integers because:
-/// - Rust does not support specifying discriminants on an enum containing non-simple members. [RFC](https://github.com/rust-lang/rust/issues/60553)
-/// - One member, Tombstone, is outside the Datum enum.
-/// - An automatic discriminant may change w/ enum definition change or compilation, according to [`std::mem::discriminant()`] doc.
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, FromPrimitive, ToPrimitive, Debug)]
-pub enum DatumType {
-    Tombstone = 0,
-    Bytes = 1,
-    I64 = 2,
-    Str = 3,
-    Tuple = 4,
-}
 
 type DatumTypeInt = u8;
 

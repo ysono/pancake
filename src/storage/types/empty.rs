@@ -1,32 +1,28 @@
-use crate::storage::serde::{DatumType, Serializable};
-use crate::storage::types::Datum;
+use crate::storage::serde::{Datum, DatumType, Serializable};
 use anyhow::{anyhow, Result};
 use std::fs::File;
 use std::io::Write;
 
-#[derive(Clone, Debug)]
-pub struct Bool(pub bool);
+#[derive(Clone)]
+pub struct Empty;
 
-impl Bool {
+impl Empty {
     fn to_datum(&self) -> Result<Datum> {
-        let byte = if self.0 { 1u8 } else { 0u8 };
-        let dat = Datum::Bytes(vec![byte]);
+        let dat = Datum::Bytes(Vec::with_capacity(0));
         Ok(dat)
     }
 
     fn from_datum(dat: &Datum) -> Result<Self> {
         if let Datum::Bytes(vec) = dat {
-            if let [byte] = vec.as_slice() {
-                let b = byte == &1u8;
-                let obj = Self(b);
-                return Ok(obj);
+            if vec.is_empty() {
+                return Ok(Empty {});
             }
         }
         Err(anyhow!("Bool could not be deserialized from {:?}", dat))
     }
 }
 
-impl Serializable for Bool {
+impl Serializable for Empty {
     fn ser(&self, w: &mut impl Write) -> Result<usize> {
         self.to_datum()?.ser(w)
     }

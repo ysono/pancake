@@ -4,9 +4,7 @@
 
 use crate::storage::lsm::LSMTree;
 use crate::storage::serde::{self, ReadItem, Serializable};
-use crate::storage::types::{
-    Bool, OptDatum, PrimaryKey, SubValue, SubValueAndKey, SubValueSpec, Value,
-};
+use crate::storage::types::{Empty, PrimaryKey, SubValue, SubValueAndKey, SubValueSpec, Value};
 use crate::storage::utils;
 use anyhow::{anyhow, Result};
 use std::cmp::Ordering;
@@ -23,7 +21,7 @@ use std::path::{Path, PathBuf};
 pub struct SecondaryIndex {
     path: PathBuf,
     spec: SubValueSpec,
-    idx: LSMTree<SubValueAndKey, Bool>,
+    idx: LSMTree<SubValueAndKey, Empty>,
 }
 
 impl SecondaryIndex {
@@ -57,7 +55,7 @@ impl SecondaryIndex {
     pub fn new<P: AsRef<Path>>(
         all_secidxs_path: P,
         spec: SubValueSpec,
-        prim_idx: &LSMTree<PrimaryKey, OptDatum<Value>>,
+        prim_idx: &LSMTree<PrimaryKey, Value>,
     ) -> Result<Self> {
         let secidx_path = utils::new_timestamped_path(&all_secidxs_path, "");
 
@@ -73,17 +71,14 @@ impl SecondaryIndex {
 
         let data_path = Self::data_path(&secidx_path);
         fs::create_dir_all(&data_path)?;
-        let mut sec_idx = LSMTree::<SubValueAndKey, Bool>::open(&data_path)?;
-        for res_kv in prim_idx.get_range(
+        let mut sec_idx = LSMTree::<SubValueAndKey, Empty>::open(&data_path)?;
+        for (key, val) in prim_idx.get_range(
             None::<&Box<dyn Fn(&PrimaryKey) -> Ordering>>,
             None::<&Box<dyn Fn(&PrimaryKey) -> Ordering>>,
         )? {
-            let (key, opt_val) = res_kv?;
-            if let OptDatum::Some(val) = opt_val {
-                if let Some(sub_value) = spec.extract(&val) {
-                    let sk = SubValueAndKey { sub_value, key };
-                    sec_idx.put(sk, Bool(true))?;
-                }
+            if let Some(sub_value) = spec.extract(&val) {
+                let sk = SubValueAndKey { sub_value, key };
+                sec_idx.put(sk, Empty {})?;
             }
         }
 
@@ -122,14 +117,14 @@ impl SecondaryIndex {
                         sub_value: old_subval,
                         key: k.clone(),
                     };
-                    self.idx.put(sk, Bool(false))?;
+                    self.idx.del(sk)?;
                 }
                 if let Some(new_subval) = new {
                     let sk = SubValueAndKey {
                         sub_value: new_subval,
                         key: k.clone(),
                     };
-                    self.idx.put(sk, Bool(true))?;
+                    self.idx.put(sk, Empty {})?;
                 }
             }
         }
@@ -162,17 +157,8 @@ impl SecondaryIndex {
             },
         };
 
-        let out = self
-            .idx
-            .get_range(Some(&sk_lo_cmp), Some(&sk_hi_cmp))?
-            .filter_map(|res_kv| match res_kv {
-                Err(e) => Some(Err(e)),
-                Ok((sk, is_alive)) => match is_alive {
-                    Bool(false) => None,
-                    Bool(true) => Some(Ok(sk.key)),
-                },
-            })
-            .collect::<Result<Vec<_>>>();
-        out
+        let kvs = self.idx.get_range(Some(&sk_lo_cmp), Some(&sk_hi_cmp))?;
+        let ret = kvs.into_iter().map(|(sk, _v)| sk.key).collect::<Vec<_>>();
+        Ok(ret)
     }
 }
