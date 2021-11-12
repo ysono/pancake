@@ -30,13 +30,12 @@ mod sstable;
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::mem;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
-use itertools::Itertools;
+use anyhow::Result;
 
 use crate::storage::serde::{self, KeyValueIterator, OptDatum, Serializable};
 use crate::storage::utils;
@@ -53,9 +52,7 @@ where
 {
     path: PathBuf,
     memtable: BTreeMap<K, OptDatum<V>>,
-    commit_log_path: PathBuf,
     commit_log: File,
-    memtable_in_flush: Option<BTreeMap<K, OptDatum<V>>>,
     sstables: Vec<SSTable<K, OptDatum<V>>>,
 }
 
@@ -92,9 +89,7 @@ where
         let ret = Self {
             path: path.as_ref().into(),
             memtable,
-            commit_log_path,
             commit_log,
-            memtable_in_flush: None,
             sstables,
         };
         Ok(ret)
@@ -111,36 +106,14 @@ where
     }
 
     fn flush_memtable(&mut self) -> Result<()> {
-        let new_cl_path = utils::new_timestamped_path(self.path.join(COMMIT_LOGS_DIR_PATH), "data");
-        let new_cl = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&new_cl_path)?;
-        let old_cl_path: PathBuf;
-        {
-            // TODO MutexGuard here
-            let old_mt = mem::replace(&mut self.memtable, Default::default());
-            self.memtable_in_flush = Some(old_mt);
-
-            self.commit_log = new_cl;
-            old_cl_path = mem::replace(&mut self.commit_log_path, new_cl_path);
-        }
-
-        let mtf = self
-            .memtable_in_flush
-            .as_ref()
-            .ok_or(anyhow!("Unexpected error: no memtable being flushed"))?;
         let new_sst = SSTable::write_from_mem(
-            mtf,
+            &self.memtable,
             utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH), "data"),
         )?;
+        self.sstables.push(new_sst);
 
-        {
-            // TODO MutexGuard here
-            self.sstables.push(new_sst);
-            self.memtable_in_flush.take();
-        }
-        fs::remove_file(old_cl_path)?;
+        self.memtable.clear();
+        self.commit_log.set_len(0)?;
 
         Ok(())
     }
@@ -192,11 +165,6 @@ where
         if let Some(v) = self.memtable.get(k) {
             return Ok(Some(v.clone()));
         }
-        if let Some(mtf) = &self.memtable_in_flush {
-            if let Some(v) = mtf.get(k) {
-                return Ok(Some(v.clone()));
-            }
-        }
         // TODO bloom filter here
         for ss in self.sstables.iter().rev() {
             let v = ss.get(k)?;
@@ -224,40 +192,32 @@ where
     {
         let ssts_iter = SSTable::merge_range(&self.sstables, k_lo_cmp, k_hi_cmp)?;
 
-        let mts_iter = [self.memtable_in_flush.as_ref(), Some(&self.memtable)]
-            .iter()
-            .filter_map(|mt| *mt)
-            .enumerate()
-            .map(|(mt_i, mt)| {
-                let mut iter = mt.iter();
+        let mut mt_iter = self.memtable.iter();
 
-                if let Some(k_lo_cmp) = k_lo_cmp {
-                    // Find the max key less than the desired key. Not equal to it, b/c
-                    // `.nth()` takes the item at the provided position.
-                    if let Some(iter_pos) = mt.iter().rposition(|(k, _v)| k_lo_cmp(k).is_lt()) {
-                        iter.nth(iter_pos);
-                    }
-                }
+        if let Some(k_lo_cmp) = k_lo_cmp {
+            // Find the max key less than the desired key. Not equal to it, b/c
+            // `.nth()` takes the item at the provided position.
+            if let Some(iter_pos) = self
+                .memtable
+                .iter()
+                .rposition(|(k, _v)| k_lo_cmp(k).is_lt())
+            {
+                mt_iter.nth(iter_pos);
+            }
+        }
 
-                let k_hi_cmp = k_hi_cmp.clone();
-                iter.take_while(move |(k, _v)| {
-                    // This closure moves k_hi_cmp.
-                    if let Some(k_hi_cmp) = k_hi_cmp {
-                        k_hi_cmp(k).is_le()
-                    } else {
-                        true
-                    }
-                })
-                .zip(std::iter::repeat(mt_i))
-            })
-            .kmerge_by(|((a_k, _a_v), a_i), ((b_k, _b_v), b_i)| {
-                a_k < b_k || (a_k == b_k && a_i > b_i)
-            })
-            .unique_by(|((k, _v), _mt_i)| k.clone())
-            .map(|(kv, _mt_i)| kv);
+        let k_hi_cmp = k_hi_cmp.clone();
+        let mt_iter = mt_iter.take_while(move |(k, _v)| {
+            // This closure moves k_hi_cmp.
+            if let Some(k_hi_cmp) = k_hi_cmp {
+                k_hi_cmp(k).is_le()
+            } else {
+                true
+            }
+        });
 
         let mut ssts_iter = ssts_iter.peekable();
-        let mut mts_iter = mts_iter.peekable();
+        let mut mt_iter = mt_iter.peekable();
 
         /*
         Here we're doing k-merge between (the iterator of all sstables) and (the iterator of all memtables).
@@ -266,7 +226,7 @@ where
         A memtable iterator yields Item = (&K, &V).
         */
         let out_iter_fn = move || -> Option<Result<(K, OptDatum<V>)>> {
-            let next_is_sst = match (ssts_iter.peek(), mts_iter.peek()) {
+            let next_is_sst = match (ssts_iter.peek(), mt_iter.peek()) {
                 (None, None) => return None,
                 (None, Some(_)) => false,
                 (Some(_), None) => true,
@@ -286,7 +246,7 @@ where
             if next_is_sst {
                 return ssts_iter.next();
             } else {
-                let (k, v) = mts_iter.next().unwrap();
+                let (k, v) = mt_iter.next().unwrap();
                 let kv = (k.clone(), v.clone());
                 return Some(Ok(kv));
             }
