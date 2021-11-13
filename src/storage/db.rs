@@ -106,8 +106,6 @@ impl DB {
             }
         }
 
-        // TODO RAII lock object in this scope
-
         let secidx = SecondaryIndex::new(&self.all_secidxs_dir, spec, &self.primary_index)?;
 
         self.secondary_indexes.push(secidx);
@@ -126,8 +124,6 @@ impl DB {
 
         if let Some(del_idx) = del_idx {
             let secidx = {
-                // TODO RAII lock object in this scope
-
                 // This is O(n). We could use a HashMap instead.
                 self.secondary_indexes.remove(del_idx)
             };
