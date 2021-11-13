@@ -123,7 +123,6 @@ where
         let new_table = SSTable::compact(new_table_path, &self.sstables)?;
         let new_tables = vec![new_table];
 
-        // TODO MutexGuard here
         // In async version, we will have to assume that new sstables may have been created while we were compacting, so we won't be able to just swap.
         let old_tables = mem::replace(&mut self.sstables, new_tables);
         for table in old_tables {
