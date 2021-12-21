@@ -4,7 +4,7 @@
 
 use crate::storage::lsm::LSMTree;
 use crate::storage::serde::{self, ReadItem, Serializable};
-use crate::storage::types::{Empty, PrimaryKey, SubValue, SubValueAndKey, SubValueSpec, Value};
+use crate::storage::types::{PrimaryKey, SubValue, SubValueAndKey, SubValueSpec, Value};
 use crate::storage::utils;
 use anyhow::{anyhow, Result};
 use std::cmp::Ordering;
@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 pub struct SecondaryIndex {
     dir_path: PathBuf,
     spec: SubValueSpec,
-    lsm: LSMTree<SubValueAndKey, Empty>,
+    lsm: LSMTree<SubValueAndKey, Value>,
 }
 
 impl SecondaryIndex {
@@ -68,14 +68,14 @@ impl SecondaryIndex {
             .open(&spec_file_path)?;
         spec.ser(&mut spec_file)?;
 
-        let mut scnd_lsm = LSMTree::<SubValueAndKey, Empty>::load_or_new(&lsm_dir_path)?;
+        let mut scnd_lsm = LSMTree::<SubValueAndKey, Value>::load_or_new(&lsm_dir_path)?;
         for (pk, pv) in prim_lsm.get_range(
             None::<&Box<dyn Fn(&PrimaryKey) -> Ordering>>,
             None::<&Box<dyn Fn(&PrimaryKey) -> Ordering>>,
         )? {
             if let Some(sv) = spec.extract(&pv) {
                 let svpk = SubValueAndKey { sv, pk };
-                scnd_lsm.put(svpk, Empty {})?;
+                scnd_lsm.put(svpk, pv)?;
             }
         }
 
@@ -104,24 +104,20 @@ impl SecondaryIndex {
         let old_sv = old_pv.map(|old_pv| self.spec.extract(old_pv)).flatten();
         let new_sv = new_pv.map(|new_pv| self.spec.extract(new_pv)).flatten();
 
-        match (old_sv, new_sv) {
-            (None, None) => (),
-            (Some(old_sv), Some(new_sv)) if old_sv == new_sv => (),
-            (old, new) => {
-                if let Some(old_sv) = old {
-                    let svpk = SubValueAndKey {
-                        sv: old_sv,
-                        pk: pk.clone(),
-                    };
-                    self.lsm.del(svpk)?;
-                }
-                if let Some(new_sv) = new {
-                    let svpk = SubValueAndKey {
-                        sv: new_sv,
-                        pk: pk.clone(),
-                    };
-                    self.lsm.put(svpk, Empty {})?;
-                }
+        if old_sv != new_sv {
+            if let Some(old_sv) = old_sv {
+                let svpk = SubValueAndKey {
+                    sv: old_sv,
+                    pk: pk.clone(),
+                };
+                self.lsm.del(svpk)?;
+            }
+            if let Some(new_sv) = new_sv {
+                let svpk = SubValueAndKey {
+                    sv: new_sv,
+                    pk: pk.clone(),
+                };
+                self.lsm.put(svpk, new_pv.unwrap().clone())?;
             }
         }
 
@@ -132,7 +128,7 @@ impl SecondaryIndex {
         &self,
         sv_lo: Option<&SubValue>,
         sv_hi: Option<&SubValue>,
-    ) -> Result<Vec<PrimaryKey>> {
+    ) -> Result<Vec<(PrimaryKey, Value)>> {
         let svpk_lo_cmp = |sample_svpk: &SubValueAndKey| match sv_lo {
             None => return Ordering::Greater,
             Some(sv_lo) => match sample_svpk.sv.cmp(sv_lo) {
@@ -156,7 +152,7 @@ impl SecondaryIndex {
         let kvs = self.lsm.get_range(Some(&svpk_lo_cmp), Some(&svpk_hi_cmp))?;
         let ret = kvs
             .into_iter()
-            .map(|(svpk, _v)| svpk.pk)
+            .map(|(svpk, pv)| (svpk.pk, pv))
             .collect::<Vec<_>>();
         Ok(ret)
     }

@@ -85,15 +85,7 @@ impl DB {
     ) -> Result<Vec<(PrimaryKey, Value)>> {
         for scnd_idx in self.scnd_idxs.iter() {
             if scnd_idx.spec() == spec {
-                let keys = scnd_idx.get_range(sv_lo, sv_hi)?;
-                let mut kvs = vec![];
-                for k in keys.into_iter() {
-                    let v = self.get_pk_one(&k)?;
-                    if let Some(v) = v {
-                        kvs.push((k, v));
-                    }
-                }
-                return Ok(kvs);
+                return scnd_idx.get_range(sv_lo, sv_hi);
             }
         }
         Ok(vec![])
