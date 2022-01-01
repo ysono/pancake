@@ -4,13 +4,15 @@ use pancake::storage::utils;
 use std::env;
 use std::fs;
 
-mod primary;
-mod secondary;
+mod storage;
+use storage::{primary, secondary};
 
 #[test]
 fn test_main() -> Result<()> {
     let dir = env::temp_dir().join("pancake");
     if dir.exists() {
+        /* Don't remove the dir itself, so that symbolic links remain valid.
+        This is for tester's convenience only.*/
         for subdir in utils::read_dir(&dir)? {
             fs::remove_dir_all(subdir)?;
         }
