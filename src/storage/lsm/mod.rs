@@ -41,7 +41,7 @@ use crate::storage::serde::{self, KeyValueIterator, OptDatum, Serializable};
 use crate::storage::utils;
 use sstable::SSTable;
 
-static COMMIT_LOG_FILE_NAME: &'static str = "commit_log.data";
+static COMMIT_LOG_FILE_NAME: &'static str = "commit_log.kv";
 static SSTABLES_DIR_NAME: &'static str = "sstables";
 static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;
 static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
@@ -61,7 +61,7 @@ where
     K: Serializable + Ord + Hash + Clone,
     V: Serializable + Clone,
 {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+    pub fn load_or_new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let cl_path = path.as_ref().join(COMMIT_LOG_FILE_NAME);
         let sstables_dir_path = path.as_ref().join(SSTABLES_DIR_NAME);
         std::fs::create_dir_all(&sstables_dir_path)?;
@@ -103,7 +103,7 @@ where
     fn flush_memtable(&mut self) -> Result<()> {
         let new_sst = SSTable::write_from_mem(
             &self.memtable,
-            utils::new_timestamped_path(self.path.join(SSTABLES_DIR_NAME), "data"),
+            utils::new_timestamped_path(self.path.join(SSTABLES_DIR_NAME), "kv"),
         )?;
         self.sstables.push(new_sst);
 
@@ -114,7 +114,7 @@ where
     }
 
     fn compact_sstables(&mut self) -> Result<()> {
-        let new_table_path = utils::new_timestamped_path(self.path.join(SSTABLES_DIR_NAME), "data");
+        let new_table_path = utils::new_timestamped_path(self.path.join(SSTABLES_DIR_NAME), "kv");
         let new_table = SSTable::compact(new_table_path, &self.sstables)?;
         let new_tables = vec![new_table];
 

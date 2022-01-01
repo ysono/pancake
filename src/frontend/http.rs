@@ -76,7 +76,7 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
         }
         Operation::CreateScndIdx(spec) => {
             let mut db = db.write().unwrap();
-            let res = db.create_sec_idx(spec);
+            let res = db.create_scnd_idx(spec);
             match res {
                 Err(e) => return resp::err(e),
                 Ok(()) => return resp::no_content(),
@@ -84,7 +84,7 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
         }
         Operation::DelScndIdx(spec) => {
             let mut db = db.write().unwrap();
-            let res = db.delete_sec_idx(&spec);
+            let res = db.delete_scnd_idx(&spec);
             match res {
                 Err(e) => return resp::err(e),
                 Ok(()) => return resp::no_content(),

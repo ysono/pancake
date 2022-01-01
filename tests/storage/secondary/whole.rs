@@ -13,7 +13,7 @@ fn put(db: &mut DB, pk: &str, pv: &str) -> Result<()> {
 pub fn delete_create_get(db: &mut DB) -> Result<()> {
     let spec = SubValueSpec::Whole(DatumType::Str);
 
-    db.delete_sec_idx(&spec)?;
+    db.delete_scnd_idx(&spec)?;
 
     verify_get(db, &spec, None, None, vec![])?;
 
@@ -21,7 +21,7 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     put(db, "f.1", "secidxtest-val-f")?;
     put(db, "e.1", "secidxtest-val-e")?;
 
-    db.create_sec_idx(spec.clone())?;
+    db.create_scnd_idx(spec.clone())?;
 
     put(db, "g.2", "secidxtest-val-g")?;
     put(db, "f.2", "secidxtest-val-f")?;

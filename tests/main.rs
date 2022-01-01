@@ -17,7 +17,7 @@ fn test_main() -> Result<()> {
             fs::remove_dir_all(subdir)?;
         }
     }
-    let mut db = DB::open(dir)?;
+    let mut db = DB::load_or_new(dir)?;
 
     primary::put_del_get_getrange(&mut db)?;
     primary::nonexistent(&mut db)?;

@@ -6,22 +6,22 @@ use std::io::Write;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Debug)]
 pub struct SubValueAndKey {
-    pub sub_value: SubValue,
-    pub key: PrimaryKey,
+    pub sv: SubValue,
+    pub pk: PrimaryKey,
 }
 
 impl SubValueAndKey {
     fn to_datum(&self) -> Result<Datum> {
-        let dat = Datum::Tuple(vec![self.sub_value.0.clone(), self.key.0.clone()]);
+        let dat = Datum::Tuple(vec![self.sv.0.clone(), self.pk.0.clone()]);
         Ok(dat)
     }
 
     fn from_datum(dat: &Datum) -> Result<Self> {
         if let Datum::Tuple(vec) = dat {
-            if let [sub_value, key] = vec.as_slice() {
+            if let [sv, key] = vec.as_slice() {
                 let obj = Self {
-                    sub_value: SubValue(sub_value.clone()),
-                    key: PrimaryKey(key.clone()),
+                    sv: SubValue(sv.clone()),
+                    pk: PrimaryKey(key.clone()),
                 };
                 return Ok(obj);
             }

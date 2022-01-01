@@ -69,8 +69,8 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     let spec_str = spec_1_2_str();
     let spec_tup = spec_1_tup();
 
-    db.delete_sec_idx(&spec_str)?;
-    db.delete_sec_idx(&spec_tup)?;
+    db.delete_scnd_idx(&spec_str)?;
+    db.delete_scnd_idx(&spec_tup)?;
 
     verify_get(db, &spec_str, None, None, vec![])?;
     verify_get(db, &spec_tup, None, None, vec![])?;
@@ -78,8 +78,8 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     put(db, "complex.4", 40, "complex-subval")?;
     put(db, "complex.3", 30, "complex-subval")?;
 
-    db.create_sec_idx(spec_str.clone())?;
-    db.create_sec_idx(spec_tup.clone())?;
+    db.create_scnd_idx(spec_str.clone())?;
+    db.create_scnd_idx(spec_tup.clone())?;
 
     put(db, "complex.2", 20, "complex-subval")?;
     put(db, "complex.1", 10, "complex-subval")?;

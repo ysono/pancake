@@ -10,7 +10,7 @@ pub fn query(db: &Arc<RwLock<DB>>, stmt: Statement) -> Result<Response<Body>> {
     match stmt {
         Statement::GetPK(SearchRange::One(pk)) => {
             let db = db.read().unwrap();
-            match db.get(&pk) {
+            match db.get_pk_one(&pk) {
                 Err(e) => resp::err(e),
                 Ok(None) => resp::no_content(),
                 Ok(Some(pv)) => {
@@ -22,7 +22,7 @@ pub fn query(db: &Arc<RwLock<DB>>, stmt: Statement) -> Result<Response<Body>> {
         }
         Statement::GetPK(SearchRange::Range { lo, hi }) => {
             let db = db.read().unwrap();
-            match db.get_range(lo.as_ref(), hi.as_ref()) {
+            match db.get_pk_range(lo.as_ref(), hi.as_ref()) {
                 Err(e) => resp::err(e),
                 Ok(kvs) => {
                     let mut s = String::new();
@@ -36,7 +36,7 @@ pub fn query(db: &Arc<RwLock<DB>>, stmt: Statement) -> Result<Response<Body>> {
         Statement::GetSV(spec, sv_range) => {
             let (sv_lo, sv_hi) = sv_range.as_ref();
             let db = db.read().unwrap();
-            match db.get_by_sub_value(&spec, sv_lo, sv_hi) {
+            match db.get_sv_range(&spec, sv_lo, sv_hi) {
                 Err(e) => resp::err(e),
                 Ok(kvs) => {
                     let mut s = String::new();

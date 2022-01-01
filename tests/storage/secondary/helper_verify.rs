@@ -9,7 +9,7 @@ pub fn verify_get(
     sv_hi: Option<SubValue>,
     exp: Vec<(PrimaryKey, Value)>,
 ) -> Result<()> {
-    let actual = db.get_by_sub_value(&spec, sv_lo.as_ref(), sv_hi.as_ref())?;
+    let actual = db.get_sv_range(&spec, sv_lo.as_ref(), sv_hi.as_ref())?;
 
     assert_eq!(exp, actual);
 
