@@ -100,30 +100,20 @@
 //! It's meant to be a stop-gap impl.
 //! It ought to be replaced by one based on a lexer and a parser.
 
+use crate::frontend::api::{Operation, SearchRange, Statement};
 use crate::storage::serde::{Datum, DatumType};
 use crate::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
 use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 use std::iter::Peekable;
 
-#[derive(PartialEq, Eq, Debug)]
-pub enum Query {
-    Put(PrimaryKey, Value),
-    Del(PrimaryKey),
-    Get(PrimaryKey),
-    GetBetween(Option<PrimaryKey>, Option<PrimaryKey>),
-    GetWhere(SubValueSpec, Option<SubValue>),
-    GetWhereBetween(SubValueSpec, Option<SubValue>, Option<SubValue>),
-    CreateSecIdx(SubValueSpec),
-}
-
-pub fn parse(q_str: &str) -> Result<Query> {
+pub fn parse(q_str: &str) -> Result<Operation> {
     let reg = Regex::new(r"\s+|\b").unwrap();
     let iter = reg.split(q_str).filter(|w| w.len() > 0).peekable();
     root(iter)
 }
 
-fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Query> {
+fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Operation> {
     match iter.next() {
         Some("put") => {
             let dat = datum(&mut iter)?;
@@ -132,7 +122,7 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Query>
             let val = Value(dat);
             eos(&mut iter)?;
 
-            let q = Query::Put(key, val);
+            let q = Operation::from(Statement::Put(key, Some(val)));
             return Ok(q);
         }
         Some("del") => {
@@ -140,7 +130,7 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Query>
             eos(&mut iter)?;
 
             let key = PrimaryKey(dat);
-            let q = Query::Del(key);
+            let q = Operation::from(Statement::Put(key, None));
             return Ok(q);
         }
         Some("get") => match iter.peek() {
@@ -148,12 +138,15 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Query>
                 iter.next();
 
                 let optdat = opt_datum(&mut iter)?;
-                let key_lo = optdat.map(PrimaryKey);
+                let pk_lo = optdat.map(PrimaryKey);
                 let optdat = opt_datum(&mut iter)?;
-                let key_hi = optdat.map(PrimaryKey);
+                let pk_hi = optdat.map(PrimaryKey);
                 eos(&mut iter)?;
 
-                let q = Query::GetBetween(key_lo, key_hi);
+                let q = Operation::from(Statement::GetPK(SearchRange::Range {
+                    lo: pk_lo,
+                    hi: pk_hi,
+                }));
                 return Ok(q);
             }
             Some(&"where") => {
@@ -166,21 +159,36 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Query>
                         iter.next();
 
                         let optdat = opt_datum(&mut iter)?;
-                        let subval_lo = optdat.map(SubValue);
+                        let sv_lo = optdat.map(SubValue);
                         let optdat = opt_datum(&mut iter)?;
-                        let subval_hi = optdat.map(SubValue);
+                        let sv_hi = optdat.map(SubValue);
                         eos(&mut iter)?;
 
-                        let q = Query::GetWhereBetween(spec, subval_lo, subval_hi);
+                        let q = Operation::from(Statement::GetSV(
+                            spec,
+                            SearchRange::Range {
+                                lo: sv_lo,
+                                hi: sv_hi,
+                            },
+                        ));
                         return Ok(q);
                     }
                     _ => {
                         let optdat = opt_datum(&mut iter)?;
                         eos(&mut iter)?;
 
-                        let subval = optdat.map(SubValue);
-                        let q = Query::GetWhere(spec, subval);
-                        return Ok(q);
+                        match optdat {
+                            None => {
+                                let q = Operation::from(Statement::GetSV(spec, SearchRange::all()));
+                                return Ok(q);
+                            }
+                            Some(dat) => {
+                                let sv = SubValue(dat);
+                                let q =
+                                    Operation::from(Statement::GetSV(spec, SearchRange::One(sv)));
+                                return Ok(q);
+                            }
+                        }
                     }
                 }
             }
@@ -189,7 +197,7 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Query>
                 let key = PrimaryKey(dat);
                 eos(&mut iter)?;
 
-                let q = Query::Get(key);
+                let q = Operation::from(Statement::GetPK(SearchRange::One(key)));
                 return Ok(q);
             }
         },
@@ -197,7 +205,7 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Query>
             Some("index") => {
                 let spec = subvalspec(&mut iter)?;
                 eos(&mut iter)?;
-                return Ok(Query::CreateSecIdx(spec));
+                return Ok(Operation::CreateScndIdx(spec));
             }
             x => return Err(anyhow!("Expected creatable but found {:?}", x)),
         },
@@ -337,23 +345,21 @@ mod test {
     #[test]
     fn put() -> Result<()> {
         let q_str = "put int(123) str(val1)";
-        let exp_q_obj = Query::Put(
+        let exp_q_obj = Operation::from(Statement::Put(
             PrimaryKey(Datum::I64(123)),
-            Value(Datum::Str(String::from("val1"))),
-        );
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+            Some(Value(Datum::Str(String::from("val1")))),
+        ));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "put tup( str(a) int(123) ) int(321)";
-        let exp_q_obj = Query::Put(
+        let exp_q_obj = Operation::from(Statement::Put(
             PrimaryKey(Datum::Tuple(vec![
                 Datum::Str(String::from("a")),
                 Datum::I64(123),
             ])),
-            Value(Datum::I64(321)),
-        );
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+            Some(Value(Datum::I64(321))),
+        ));
+        assert!(parse(q_str)? == exp_q_obj);
 
         Ok(())
     }
@@ -361,9 +367,8 @@ mod test {
     #[test]
     fn del() -> Result<()> {
         let q_str = "del int(123)";
-        let exp_q_obj = Query::Del(PrimaryKey(Datum::I64(123)));
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj = Operation::from(Statement::Put(PrimaryKey(Datum::I64(123)), None));
+        assert!(parse(q_str)? == exp_q_obj);
 
         Ok(())
     }
@@ -371,22 +376,22 @@ mod test {
     #[test]
     fn get() -> Result<()> {
         let q_str = "get int(123)";
-        let exp_q_obj = Query::Get(PrimaryKey(Datum::I64(123)));
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::One(PrimaryKey(
+            Datum::I64(123),
+        ))));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get str(key1)";
-        let exp_q_obj = Query::Get(PrimaryKey(Datum::Str(String::from("key1"))));
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::One(PrimaryKey(
+            Datum::Str(String::from("key1")),
+        ))));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get tup( str(a) int(123) )";
-        let exp_q_obj = Query::Get(PrimaryKey(Datum::Tuple(vec![
-            Datum::Str(String::from("a")),
-            Datum::I64(123),
-        ])));
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::One(PrimaryKey(
+            Datum::Tuple(vec![Datum::Str(String::from("a")), Datum::I64(123)]),
+        ))));
+        assert!(parse(q_str)? == exp_q_obj);
 
         Ok(())
     }
@@ -394,27 +399,30 @@ mod test {
     #[test]
     fn get_between() -> Result<()> {
         let q_str = "get between int(123) int(234)";
-        let exp_q_obj = Query::GetBetween(
-            Some(PrimaryKey(Datum::I64(123))),
-            Some(PrimaryKey(Datum::I64(234))),
-        );
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::Range {
+            lo: Some(PrimaryKey(Datum::I64(123))),
+            hi: Some(PrimaryKey(Datum::I64(234))),
+        }));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get between int(123) _";
-        let exp_q_obj = Query::GetBetween(Some(PrimaryKey(Datum::I64(123))), None);
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::Range {
+            lo: Some(PrimaryKey(Datum::I64(123))),
+            hi: None,
+        }));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get between _ int(234)";
-        let exp_q_obj = Query::GetBetween(None, Some(PrimaryKey(Datum::I64(234))));
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::Range {
+            lo: None,
+            hi: Some(PrimaryKey(Datum::I64(234))),
+        }));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get between _ _";
-        let exp_q_obj = Query::GetBetween(None, None);
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj =
+            Operation::from(Statement::GetPK(SearchRange::Range { lo: None, hi: None }));
+        assert!(parse(q_str)? == exp_q_obj);
 
         Ok(())
     }
@@ -422,20 +430,21 @@ mod test {
     #[test]
     fn get_where() -> Result<()> {
         let q_str = "get where int _";
-        let exp_q_obj = Query::GetWhere(SubValueSpec::Whole(DatumType::I64), None);
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj = Operation::from(Statement::GetSV(
+            SubValueSpec::Whole(DatumType::I64),
+            SearchRange::all(),
+        ));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get where int int(123)";
-        let exp_q_obj = Query::GetWhere(
+        let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::Whole(DatumType::I64),
-            Some(SubValue(Datum::I64(123))),
-        );
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+            SearchRange::One(SubValue(Datum::I64(123))),
+        ));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get where tup( 1 tup( 0 str ) ) str(subval_a)";
-        let exp_q_obj = Query::GetWhere(
+        let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::PartialTuple {
                 member_idx: 1,
                 member_spec: Box::new(SubValueSpec::PartialTuple {
@@ -443,10 +452,9 @@ mod test {
                     member_spec: Box::new(SubValueSpec::Whole(DatumType::Str)),
                 }),
             },
-            Some(SubValue(Datum::Str(String::from("subval_a")))),
-        );
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+            SearchRange::One(SubValue(Datum::Str(String::from("subval_a")))),
+        ));
+        assert!(parse(q_str)? == exp_q_obj);
 
         Ok(())
     }
@@ -454,65 +462,67 @@ mod test {
     #[test]
     fn get_where_between() -> Result<()> {
         let q_str = "get where int between int(123) int(234)";
-        let exp_q_obj = Query::GetWhereBetween(
+        let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::Whole(DatumType::I64),
-            Some(SubValue(Datum::I64(123))),
-            Some(SubValue(Datum::I64(234))),
-        );
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+            SearchRange::Range {
+                lo: Some(SubValue(Datum::I64(123))),
+                hi: Some(SubValue(Datum::I64(234))),
+            },
+        ));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get where int between int(123) _";
-        let exp_q_obj = Query::GetWhereBetween(
+        let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::Whole(DatumType::I64),
-            Some(SubValue(Datum::I64(123))),
-            None,
-        );
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+            SearchRange::Range {
+                lo: Some(SubValue(Datum::I64(123))),
+                hi: None,
+            },
+        ));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get where int between _ int(234)";
-        let exp_q_obj = Query::GetWhereBetween(
+        let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::Whole(DatumType::I64),
-            None,
-            Some(SubValue(Datum::I64(234))),
-        );
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+            SearchRange::Range {
+                lo: None,
+                hi: Some(SubValue(Datum::I64(234))),
+            },
+        ));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get where int between _ _";
-        let exp_q_obj = Query::GetWhereBetween(SubValueSpec::Whole(DatumType::I64), None, None);
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj = Operation::from(Statement::GetSV(
+            SubValueSpec::Whole(DatumType::I64),
+            SearchRange::all(),
+        ));
+        assert!(parse(q_str)? == exp_q_obj);
 
         Ok(())
     }
 
     #[test]
-    fn create_secidx() -> Result<()> {
+    fn create_scnd_idx() -> Result<()> {
         let q_str = "create index int";
-        let exp_q_obj = Query::CreateSecIdx(SubValueSpec::Whole(DatumType::I64));
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec::Whole(DatumType::I64));
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "create index tup( 2 int )";
-        let exp_q_obj = Query::CreateSecIdx(SubValueSpec::PartialTuple {
+        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec::PartialTuple {
             member_idx: 2,
             member_spec: Box::new(SubValueSpec::Whole(DatumType::I64)),
         });
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "create index tup( 1 tup( 0 str ) )";
-        let exp_q_obj = Query::CreateSecIdx(SubValueSpec::PartialTuple {
+        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec::PartialTuple {
             member_idx: 1,
             member_spec: Box::new(SubValueSpec::PartialTuple {
                 member_idx: 0,
                 member_spec: Box::new(SubValueSpec::Whole(DatumType::Str)),
             }),
         });
-        let q_obj = parse(q_str)?;
-        assert!(q_obj == exp_q_obj);
+        assert!(parse(q_str)? == exp_q_obj);
 
         Ok(())
     }
