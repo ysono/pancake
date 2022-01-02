@@ -5,7 +5,6 @@ use crate::storage::serde::{self, ReadItem, Serializable};
 use anyhow::{anyhow, Result};
 use num_derive::{FromPrimitive, ToPrimitive};
 use std::cmp::{Eq, Ord, PartialEq, PartialOrd};
-use std::fs::File;
 use std::io::{Read, Write};
 use std::mem;
 
@@ -65,7 +64,7 @@ impl Serializable for Datum {
         Ok(write_size)
     }
 
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
+    fn deser(datum_size: usize, datum_type: DatumType, r: &mut impl Read) -> Result<Self> {
         let obj: Self = match datum_type {
             DatumType::Bytes => {
                 let mut buf = vec![0u8; datum_size];
@@ -121,7 +120,7 @@ impl<T: Serializable> Serializable for OptDatum<T> {
         }
     }
 
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
+    fn deser(datum_size: usize, datum_type: DatumType, r: &mut impl Read) -> Result<Self> {
         let obj: Self = match datum_type {
             DatumType::Tombstone => OptDatum::Tombstone,
             _ => {

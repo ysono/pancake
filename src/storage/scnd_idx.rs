@@ -3,6 +3,7 @@ use crate::storage::types::{PKShared, PVShared, SVPKShared, SubValue, SubValueSp
 use crate::storage::utils;
 use anyhow::Result;
 use std::fs::{self, File, OpenOptions};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -34,8 +35,9 @@ impl SecondaryIndex {
         let spec_file_path = Self::spec_file_path(&scnd_idx_dir_path);
         let lsm_dir_path = Self::lsm_dir_path(&scnd_idx_dir_path);
 
-        let mut spec_file = File::open(&spec_file_path)?;
-        let spec = SubValueSpec::deser(&mut spec_file)?;
+        let spec_file = File::open(&spec_file_path)?;
+        let mut spec_reader = BufReader::new(spec_file);
+        let spec = SubValueSpec::deser(&mut spec_reader)?;
         let spec = Arc::new(spec);
 
         let lsm = LSMTree::load_or_new(&lsm_dir_path)?;
@@ -57,11 +59,13 @@ impl SecondaryIndex {
         let lsm_dir_path = Self::lsm_dir_path(&scnd_idx_dir_path);
         fs::create_dir_all(&lsm_dir_path)?;
 
-        let mut spec_file = OpenOptions::new()
+        let spec_file = OpenOptions::new()
             .create_new(true)
             .write(true)
             .open(&spec_file_path)?;
-        spec.ser(&mut spec_file)?;
+        let mut spec_writer = BufWriter::new(spec_file);
+        spec.ser(&mut spec_writer)?;
+        spec_writer.flush()?;
 
         let mut scnd_lsm = LSMTree::load_or_new(&lsm_dir_path)?;
         for entry in prim_lsm.get_whole_range() {

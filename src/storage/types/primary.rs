@@ -2,8 +2,7 @@ use crate::storage::serde::{Datum, DatumType, Serializable};
 use anyhow::Result;
 use derive_more::{Deref, From};
 use std::cmp::{Ordering, PartialOrd};
-use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::sync::Arc;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Deref, From, Debug)]
@@ -35,7 +34,7 @@ where
         self.deref().ser(w)
     }
 
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
+    fn deser(datum_size: usize, datum_type: DatumType, r: &mut impl Read) -> Result<Self> {
         let inner = Inner::deser(datum_size, datum_type, r)?;
         let outer = Outer::from(inner);
         Ok(outer)

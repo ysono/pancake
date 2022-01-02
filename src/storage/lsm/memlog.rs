@@ -4,11 +4,13 @@ use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
-use std::path::Path;
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
 
 pub struct MemLog<K, V> {
     memtable: BTreeMap<K, OptDatum<V>>,
-    commit_log: File,
+    log_path: PathBuf,
+    log_writer: BufWriter<File>,
 }
 
 impl<K, V> MemLog<K, V>
@@ -16,31 +18,36 @@ where
     K: Serializable + Ord,
     V: Serializable,
 {
-    pub fn load_or_new<P: AsRef<Path>>(cl_path: P) -> Result<Self> {
+    pub fn load_or_new<P: AsRef<Path>>(log_path: P) -> Result<Self> {
         let mut memtable = BTreeMap::default();
-        if cl_path.as_ref().exists() {
-            let cl_read = File::open(&cl_path)?;
-            let iter = KeyValueIterator::<K, OptDatum<V>>::from(cl_read);
+        if log_path.as_ref().exists() {
+            let log_file = File::open(&log_path)?;
+            let iter = KeyValueIterator::<K, OptDatum<V>>::from(log_file);
             for res_kv in iter {
                 let (k, v) = res_kv?;
                 memtable.insert(k, v);
             }
         }
 
-        let commit_log = OpenOptions::new()
+        let log_file = OpenOptions::new()
             .create(true)
             .append(true) // *Not* write(true)
-            .open(&cl_path)?;
+            .open(&log_path)?;
+        let log_writer = BufWriter::new(log_file);
 
         Ok(Self {
             memtable,
-            commit_log,
+            log_path: log_path.as_ref().into(),
+            log_writer,
         })
     }
 
     pub fn clear(&mut self) -> Result<()> {
         self.memtable.clear();
-        self.commit_log.set_len(0)?;
+        self.log_writer.flush()?;
+        let log_file = OpenOptions::new().write(true).open(&self.log_path)?;
+        log_file.set_len(0)?;
+        self.log_writer = BufWriter::new(log_file);
         Ok(())
     }
 
@@ -49,7 +56,7 @@ where
     }
 
     pub fn put(&mut self, k: K, v: OptDatum<V>) -> Result<()> {
-        serde::serialize_kv(&k, &v, &mut self.commit_log)?;
+        serde::serialize_kv(&k, &v, &mut self.log_writer)?;
 
         self.memtable.insert(k, v);
 

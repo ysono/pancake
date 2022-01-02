@@ -3,8 +3,7 @@ use crate::storage::types::{PKShared, PrimaryKey, SVShared, SubValue};
 use anyhow::{anyhow, Result};
 use std::borrow::Borrow;
 use std::cmp::{Ord, Ordering, PartialOrd};
-use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::sync::Arc;
 
 /// SubValue and PrimaryKey.
@@ -36,7 +35,7 @@ impl Serializable for SVPKShared {
         serialize_ref_datums(tup, w)
     }
 
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
+    fn deser(datum_size: usize, datum_type: DatumType, r: &mut impl Read) -> Result<Self> {
         let dat = Datum::deser(datum_size, datum_type, r)?;
         Self::from_datum(dat)
     }

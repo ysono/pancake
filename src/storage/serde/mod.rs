@@ -53,7 +53,7 @@ pub use primitives::*;
 use anyhow::{anyhow, Result};
 use num_traits::FromPrimitive;
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
 use std::mem::size_of;
 
@@ -61,7 +61,7 @@ pub type DatumTypeInt = u8;
 
 pub trait Serializable: Sized {
     fn ser(&self, w: &mut impl Write) -> Result<usize>;
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self>;
+    fn deser(datum_size: usize, datum_type: DatumType, r: &mut impl Read) -> Result<Self>;
 }
 
 /// @return Total count of bytes that are written to file.
@@ -94,7 +94,7 @@ enum ReadSpanSize {
     Some { read_size: usize, span_size: usize },
 }
 
-fn read_span_size(file: &mut File) -> Result<ReadSpanSize> {
+fn read_span_size(file: &mut impl Read) -> Result<ReadSpanSize> {
     let mut span_size_buf = [0u8; size_of::<usize>()];
     let read_size = file.read(&mut span_size_buf)?;
     if read_size == 0 {
@@ -116,7 +116,7 @@ pub enum SkipItem {
     Some { read_size: usize },
 }
 
-pub fn skip_item(file: &mut File) -> Result<SkipItem> {
+pub fn skip_item(file: &mut (impl Read + Seek)) -> Result<SkipItem> {
     let ret = match read_span_size(file)? {
         ReadSpanSize::EOF => SkipItem::EOF,
         ReadSpanSize::Some {
@@ -136,15 +136,15 @@ pub enum ReadItem<T> {
     Some { read_size: usize, obj: T },
 }
 
-pub fn read_item<T: Serializable>(file: &mut File) -> Result<ReadItem<T>> {
-    let ret = match read_span_size(file)? {
+pub fn read_item<T: Serializable>(r: &mut impl Read) -> Result<ReadItem<T>> {
+    let ret = match read_span_size(r)? {
         ReadSpanSize::EOF => ReadItem::EOF,
         ReadSpanSize::Some {
             mut read_size,
             span_size,
         } => {
             let mut dtype_buf = [0u8; size_of::<DatumTypeInt>()];
-            file.read_exact(&mut dtype_buf)?;
+            r.read_exact(&mut dtype_buf)?;
             let dtype_int = DatumTypeInt::from_le_bytes(dtype_buf);
 
             let dtype =
@@ -152,7 +152,7 @@ pub fn read_item<T: Serializable>(file: &mut File) -> Result<ReadItem<T>> {
 
             let datum_size = span_size - dtype_buf.len();
 
-            let obj = T::deser(datum_size, dtype, file)?;
+            let obj = T::deser(datum_size, dtype, r)?;
 
             read_size += span_size;
 
@@ -163,14 +163,14 @@ pub fn read_item<T: Serializable>(file: &mut File) -> Result<ReadItem<T>> {
 }
 
 pub struct KeyValueIterator<K, V> {
-    file: File,
+    r: BufReader<File>,
     phantom: PhantomData<(K, V)>,
 }
 
 impl<K, V> From<File> for KeyValueIterator<K, V> {
     fn from(file: File) -> Self {
         Self {
-            file,
+            r: BufReader::new(file),
             phantom: PhantomData,
         }
     }
@@ -184,13 +184,13 @@ where
     type Item = Result<(K, V)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let key: K = match read_item::<K>(&mut self.file) {
+        let key: K = match read_item(&mut self.r) {
             Err(e) => return Some(Err(anyhow!(e))),
             Ok(ReadItem::EOF) => return None,
             Ok(ReadItem::Some { read_size: _, obj }) => obj,
         };
 
-        let val: V = match read_item::<V>(&mut self.file) {
+        let val: V = match read_item(&mut self.r) {
             Err(e) => return Some(Err(anyhow!(e))),
             Ok(ReadItem::EOF) => {
                 return Some(Err(anyhow!("Unexpected EOF while reading a value.")))
