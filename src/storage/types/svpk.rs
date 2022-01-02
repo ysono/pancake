@@ -8,7 +8,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 /// SubValue and PrimaryKey.
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct SVPKShared {
     pub sv: SVShared,
     pub pk: PKShared,

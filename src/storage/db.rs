@@ -3,6 +3,7 @@ use crate::storage::scnd_idx::SecondaryIndex;
 use crate::storage::types::{PKShared, PVShared, PrimaryKey, SubValue, SubValueSpec};
 use crate::storage::utils;
 use anyhow::{anyhow, Result};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,7 +14,7 @@ const ALL_SCND_IDXS_DIRNAME: &'static str = "scnd_idxs";
 pub struct DB {
     prim_lsm: LSMTree<PKShared, PVShared>,
     all_scnd_idxs_dir: PathBuf,
-    scnd_idxs: Vec<SecondaryIndex>,
+    scnd_idxs: HashMap<Arc<SubValueSpec>, SecondaryIndex>,
 }
 
 impl DB {
@@ -25,8 +26,12 @@ impl DB {
 
         let scnd_idxs = utils::read_dir(&all_scnd_idxs_dir)?
             .into_iter()
-            .map(SecondaryIndex::load)
-            .collect::<Result<Vec<_>>>()?;
+            .map(|scnd_idx_dir| {
+                let scnd_idx = SecondaryIndex::load(scnd_idx_dir)?;
+                let spec = scnd_idx.spec().clone();
+                Ok((spec, scnd_idx))
+            })
+            .collect::<Result<HashMap<_, _>>>()?;
 
         let db = DB {
             prim_lsm,
@@ -42,7 +47,7 @@ impl DB {
         let opt_pair = opt_res_pair.transpose()?;
         let old_pv: Option<&PVShared> = opt_pair.map(|pair| pair.1);
 
-        for scnd_idx in self.scnd_idxs.iter_mut() {
+        for (_spec, scnd_idx) in self.scnd_idxs.iter_mut() {
             scnd_idx.put(pk.clone(), old_pv, pv.as_ref())?;
         }
 
@@ -69,43 +74,28 @@ impl DB {
         sv_lo: Option<&'a SubValue>,
         sv_hi: Option<&'a SubValue>,
     ) -> Result<impl 'a + Iterator<Item = Entry<'a, PKShared, PVShared>>> {
-        for scnd_idx in self.scnd_idxs.iter() {
-            if scnd_idx.spec().as_ref() == spec {
-                let iter = scnd_idx.get_range(sv_lo, sv_hi);
-                return Ok(iter);
-            }
+        if let Some(scnd_idx) = self.scnd_idxs.get(spec) {
+            let iter = scnd_idx.get_range(sv_lo, sv_hi);
+            return Ok(iter);
         }
         Err(anyhow!("Secondary index does not exist for {:?}", spec))
     }
 
     pub fn create_scnd_idx(&mut self, spec: Arc<SubValueSpec>) -> Result<()> {
-        for scnd_idx in self.scnd_idxs.iter() {
-            if scnd_idx.spec() == &spec {
-                return Ok(());
-            }
+        if let Some(_) = self.scnd_idxs.get(&spec) {
+            return Ok(());
         }
 
-        let scnd_idx = SecondaryIndex::new(&self.all_scnd_idxs_dir, spec, &self.prim_lsm)?;
-
-        self.scnd_idxs.push(scnd_idx);
+        let scnd_idx =
+            SecondaryIndex::new(&self.all_scnd_idxs_dir, Arc::clone(&spec), &self.prim_lsm)?;
+        self.scnd_idxs.insert(spec, scnd_idx);
 
         Ok(())
     }
 
     pub fn delete_scnd_idx(&mut self, spec: &SubValueSpec) -> Result<()> {
-        let mut del_idx = None::<usize>;
-        for (i, scnd_idx) in self.scnd_idxs.iter().enumerate() {
-            if scnd_idx.spec().as_ref() == spec {
-                del_idx = Some(i);
-                break;
-            }
-        }
-
-        if let Some(del_idx) = del_idx {
-            let scnd_idx = {
-                // This is O(n). We could use a HashMap instead.
-                self.scnd_idxs.remove(del_idx)
-            };
+        let scnd_idx = self.scnd_idxs.remove(spec);
+        if let Some(scnd_idx) = scnd_idx {
             scnd_idx.remove_files()?;
         }
 

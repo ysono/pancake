@@ -24,7 +24,7 @@ pub fn serialize_ref_datums<'a>(vec: Vec<&'a Datum>, w: &mut impl Write) -> Resu
     Ok(sz)
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Datum {
     Bytes(Vec<u8>),
     I64(i64),

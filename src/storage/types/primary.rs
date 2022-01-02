@@ -6,10 +6,10 @@ use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Deref, From, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Deref, From, Debug)]
 pub struct PrimaryKey(pub Datum);
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Deref, From, Debug)]
+#[derive(PartialEq, Eq, Deref, From, Debug)]
 pub struct Value(pub Datum);
 
 pub type PKShared = Arc<PrimaryKey>;

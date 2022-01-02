@@ -6,10 +6,10 @@ use std::cmp::{Ord, PartialOrd};
 use std::ops::Deref;
 use std::sync::Arc;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Deref, From, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Deref, From, Debug)]
 pub struct SubValue(pub Datum);
 
-#[derive(Hash, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum SVShared {
     Own(Arc<SubValue>),
     Ref(OwningRef<PVShared, Datum>),
