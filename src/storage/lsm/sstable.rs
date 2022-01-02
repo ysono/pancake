@@ -1,3 +1,4 @@
+use crate::ds_n_a::bisect;
 use crate::storage::lsm::Entry;
 use crate::storage::serde::{self, KeyValueIterator, OptDatum, ReadItem, Serializable, SkipItem};
 use anyhow::{anyhow, Result};
@@ -23,7 +24,7 @@ fn is_kv_sparsely_captured(entry_i: usize) -> bool {
 /// - An in-memory sorted structure that maps `{key: file_offset}` on sparsely captured keys. The offsets point to locations within the above file.
 pub struct SSTable<K, V> {
     path: PathBuf,
-    sparse_file_offsets: SparseIndex<K>,
+    sparse_file_offsets: SparseFileOffsets<K>,
     _phant: PhantomData<V>,
 }
 
@@ -40,7 +41,7 @@ where
         K: 'a,
         V: 'a,
     {
-        let mut sparse_file_offsets = SparseIndex::from(vec![]);
+        let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
         let mut file = OpenOptions::new()
             .create_new(true)
             .write(true)
@@ -69,7 +70,7 @@ where
     }
 
     pub fn load(path: PathBuf) -> Result<Self> {
-        let mut sparse_file_offsets = SparseIndex::from(vec![]);
+        let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
         let mut file = File::open(&path)?;
         let mut file_offset = FileOffset(0);
         for entry_i in 0usize.. {
@@ -186,9 +187,9 @@ where
 }
 
 #[derive(From, Deref, DerefMut)]
-struct SparseIndex<K>(Vec<(K, FileOffset)>);
+struct SparseFileOffsets<K>(Vec<(K, FileOffset)>);
 
-impl<K> SparseIndex<K> {
+impl<K> SparseFileOffsets<K> {
     fn nearest_preceding_file_offset<Q>(&self, k_lo: Option<&Q>) -> FileOffset
     where
         K: PartialOrd<Q>,
@@ -198,21 +199,16 @@ impl<K> SparseIndex<K> {
         }
         let k_lo = k_lo.unwrap();
 
-        // TODO Bisect. Currently this has O(n) cost.
+        let mem_idx_right: usize =
+            bisect::bisect_right(&self.0, 0, self.0.len(), |(sample_k, _offset)| {
+                sample_k.partial_cmp(k_lo).unwrap_or(Ordering::Greater)
+            });
 
-        // Find the max key less than or equal to the desired key.
-        let idx_pos = self.0.iter().rposition(|(sample_k, _off)| {
-            sample_k
-                .partial_cmp(k_lo)
-                .unwrap_or(Ordering::Greater)
-                .is_le()
-        });
-        match idx_pos {
-            None => FileOffset(0),
-            Some(idx_pos) => {
-                let (_, file_offset) = self.0[idx_pos];
-                file_offset
-            }
+        if mem_idx_right == 0 {
+            FileOffset(0)
+        } else {
+            let (_k, offset) = &self.0[mem_idx_right - 1];
+            *offset
         }
     }
 }
