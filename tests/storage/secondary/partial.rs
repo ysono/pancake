@@ -75,8 +75,8 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     db.delete_scnd_idx(&spec_str)?;
     db.delete_scnd_idx(&spec_tup)?;
 
-    verify_get(db, &spec_str, None, None, vec![])?;
-    verify_get(db, &spec_tup, None, None, vec![])?;
+    verify_get(db, &spec_str, None, None, Err(()))?;
+    verify_get(db, &spec_tup, None, None, Err(()))?;
 
     put(db, "complex.4", 40, "complex-subval")?;
     put(db, "complex.3", 30, "complex-subval")?;
@@ -92,12 +92,12 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec_str,
         None,
         None,
-        vec![
+        Ok(vec![
             gen_pkv("complex.1", 10, "complex-subval"),
             gen_pkv("complex.2", 20, "complex-subval"),
             gen_pkv("complex.3", 30, "complex-subval"),
             gen_pkv("complex.4", 40, "complex-subval"),
-        ],
+        ]),
     )?;
 
     verify_get(
@@ -105,12 +105,12 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec_str,
         Some(gen_sv_str("complex-subval")),
         Some(gen_sv_str("complex-subval")),
-        vec![
+        Ok(vec![
             gen_pkv("complex.1", 10, "complex-subval"),
             gen_pkv("complex.2", 20, "complex-subval"),
             gen_pkv("complex.3", 30, "complex-subval"),
             gen_pkv("complex.4", 40, "complex-subval"),
-        ],
+        ]),
     )?;
 
     verify_get(
@@ -118,11 +118,11 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec_tup,
         Some(gen_sv_tup(20, "complex-")),
         None,
-        vec![
+        Ok(vec![
             gen_pkv("complex.2", 20, "complex-subval"),
             gen_pkv("complex.3", 30, "complex-subval"),
             gen_pkv("complex.4", 40, "complex-subval"),
-        ],
+        ]),
     )?;
 
     verify_get(
@@ -130,11 +130,11 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec_tup,
         None,
         Some(gen_sv_tup(30, "complex-subval-zzzz")),
-        vec![
+        Ok(vec![
             gen_pkv("complex.1", 10, "complex-subval"),
             gen_pkv("complex.2", 20, "complex-subval"),
             gen_pkv("complex.3", 30, "complex-subval"),
-        ],
+        ]),
     )?;
 
     verify_get(
@@ -142,7 +142,7 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec_tup,
         Some(gen_sv_tup(20, "complex-")),
         Some(gen_sv_tup(30, "complex-")),
-        vec![gen_pkv("complex.2", 20, "complex-subval")],
+        Ok(vec![gen_pkv("complex.2", 20, "complex-subval")]),
     )?;
 
     del(db, "complex.3")?;
@@ -152,11 +152,11 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec_str,
         None,
         None,
-        vec![
+        Ok(vec![
             gen_pkv("complex.1", 10, "complex-subval"),
             gen_pkv("complex.2", 20, "complex-subval"),
             gen_pkv("complex.4", 40, "complex-subval"),
-        ],
+        ]),
     )?;
 
     Ok(())

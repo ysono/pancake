@@ -2,7 +2,7 @@ use crate::storage::lsm::LSMTree;
 use crate::storage::scnd_idx::SecondaryIndex;
 use crate::storage::types::{PKShared, PVShared, PrimaryKey, SubValue, SubValueSpec};
 use crate::storage::utils;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -52,26 +52,26 @@ impl DB {
         self.prim_lsm.get(pk)
     }
 
-    pub fn get_pk_range(
-        &self,
-        pk_lo: Option<&PrimaryKey>,
-        pk_hi: Option<&PrimaryKey>,
-    ) -> Result<Vec<(PKShared, PVShared)>> {
+    pub fn get_pk_range<'a>(
+        &'a self,
+        pk_lo: Option<&'a PrimaryKey>,
+        pk_hi: Option<&'a PrimaryKey>,
+    ) -> Result<impl 'a + Iterator<Item = Result<(PKShared, PVShared)>>> {
         self.prim_lsm.get_range(pk_lo, pk_hi)
     }
 
-    pub fn get_sv_range(
-        &self,
-        spec: &SubValueSpec,
-        sv_lo: Option<&SubValue>,
-        sv_hi: Option<&SubValue>,
-    ) -> Result<Vec<(PKShared, PVShared)>> {
+    pub fn get_sv_range<'a>(
+        &'a self,
+        spec: &'a SubValueSpec,
+        sv_lo: Option<&'a SubValue>,
+        sv_hi: Option<&'a SubValue>,
+    ) -> Result<impl 'a + Iterator<Item = Result<(PKShared, PVShared)>>> {
         for scnd_idx in self.scnd_idxs.iter() {
             if scnd_idx.spec().as_ref() == spec {
                 return scnd_idx.get_range(sv_lo, sv_hi);
             }
         }
-        Ok(vec![])
+        Err(anyhow!("Secondary index does not exist for {:?}", spec))
     }
 
     pub fn create_scnd_idx(&mut self, spec: Arc<SubValueSpec>) -> Result<()> {

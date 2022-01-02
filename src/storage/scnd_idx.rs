@@ -64,7 +64,8 @@ impl SecondaryIndex {
         spec.ser(&mut spec_file)?;
 
         let mut scnd_lsm = LSMTree::load_or_new(&lsm_dir_path)?;
-        for (pk, pv) in prim_lsm.get_whole_range()? {
+        for res_kv in prim_lsm.get_whole_range()? {
+            let (pk, pv) = res_kv?;
             if let Some(sv) = spec.extract(&pv) {
                 let svpk = SVPKShared { sv, pk };
                 scnd_lsm.put(svpk, Some(pv))?;
@@ -113,16 +114,15 @@ impl SecondaryIndex {
         Ok(())
     }
 
-    pub fn get_range(
-        &self,
-        sv_lo: Option<&SubValue>,
-        sv_hi: Option<&SubValue>,
-    ) -> Result<Vec<(PKShared, PVShared)>> {
+    pub fn get_range<'a>(
+        &'a self,
+        sv_lo: Option<&'a SubValue>,
+        sv_hi: Option<&'a SubValue>,
+    ) -> Result<impl 'a + Iterator<Item = Result<(PKShared, PVShared)>>> {
         let kvs = self.lsm.get_range(sv_lo, sv_hi)?;
         let ret = kvs
             .into_iter()
-            .map(|(svpk, pv)| (svpk.pk, pv))
-            .collect::<Vec<_>>();
+            .map(|res| res.map(|(svpk, pv)| (svpk.pk, pv)));
         Ok(ret)
     }
 }

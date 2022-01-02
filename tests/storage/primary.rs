@@ -49,8 +49,9 @@ pub fn put_del_get_getrange(db: &mut DB) -> Result<()> {
             .collect::<Vec<_>>();
         assert!(exp_range.len() >= 3);
 
-        let act_range =
-            db.get_pk_range(Some(&exp_range[0].0), Some(&exp_range.last().unwrap().0))?;
+        let act_range = db
+            .get_pk_range(Some(&exp_range[0].0), Some(&exp_range.last().unwrap().0))?
+            .collect::<Result<Vec<_>>>()?;
         assert_eq!(exp_range, act_range);
     }
 

@@ -21,7 +21,7 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
 
     db.delete_scnd_idx(&spec)?;
 
-    verify_get(db, &spec, None, None, vec![])?;
+    verify_get(db, &spec, None, None, Err(()))?;
 
     put(db, "g.1", "secidxtest-val-g")?;
     put(db, "f.1", "secidxtest-val-f")?;
@@ -38,14 +38,14 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec,
         Some(gen::gen_str_sv("secidxtest-val-a")),
         Some(gen::gen_str_sv("secidxtest-val-z")),
-        vec![
+        Ok(vec![
             gen::gen_str_pkv("e.1", "secidxtest-val-e"),
             gen::gen_str_pkv("e.2", "secidxtest-val-e"),
             gen::gen_str_pkv("f.1", "secidxtest-val-f"),
             gen::gen_str_pkv("f.2", "secidxtest-val-f"),
             gen::gen_str_pkv("g.1", "secidxtest-val-g"),
             gen::gen_str_pkv("g.2", "secidxtest-val-g"),
-        ],
+        ]),
     )?;
 
     verify_get(
@@ -53,12 +53,12 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec,
         Some(gen::gen_str_sv("secidxtest-val-f")),
         Some(gen::gen_str_sv("secidxtest-val-z")),
-        vec![
+        Ok(vec![
             gen::gen_str_pkv("f.1", "secidxtest-val-f"),
             gen::gen_str_pkv("f.2", "secidxtest-val-f"),
             gen::gen_str_pkv("g.1", "secidxtest-val-g"),
             gen::gen_str_pkv("g.2", "secidxtest-val-g"),
-        ],
+        ]),
     )?;
 
     verify_get(
@@ -66,12 +66,12 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec,
         Some(gen::gen_str_sv("secidxtest-val-a")),
         Some(gen::gen_str_sv("secidxtest-val-f")),
-        vec![
+        Ok(vec![
             gen::gen_str_pkv("e.1", "secidxtest-val-e"),
             gen::gen_str_pkv("e.2", "secidxtest-val-e"),
             gen::gen_str_pkv("f.1", "secidxtest-val-f"),
             gen::gen_str_pkv("f.2", "secidxtest-val-f"),
-        ],
+        ]),
     )?;
 
     verify_get(
@@ -79,14 +79,14 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec,
         Some(gen::gen_str_sv("secidxtest-val-e")),
         Some(gen::gen_str_sv("secidxtest-val-g")),
-        vec![
+        Ok(vec![
             gen::gen_str_pkv("e.1", "secidxtest-val-e"),
             gen::gen_str_pkv("e.2", "secidxtest-val-e"),
             gen::gen_str_pkv("f.1", "secidxtest-val-f"),
             gen::gen_str_pkv("f.2", "secidxtest-val-f"),
             gen::gen_str_pkv("g.1", "secidxtest-val-g"),
             gen::gen_str_pkv("g.2", "secidxtest-val-g"),
-        ],
+        ]),
     )?;
 
     del(db, "f.1")?;
@@ -96,13 +96,13 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         &spec,
         Some(gen::gen_str_sv("secidxtest-val-a")),
         Some(gen::gen_str_sv("secidxtest-val-z")),
-        vec![
+        Ok(vec![
             gen::gen_str_pkv("e.1", "secidxtest-val-e"),
             gen::gen_str_pkv("e.2", "secidxtest-val-e"),
             gen::gen_str_pkv("f.2", "secidxtest-val-f"),
             gen::gen_str_pkv("g.1", "secidxtest-val-g"),
             gen::gen_str_pkv("g.2", "secidxtest-val-g"),
-        ],
+        ]),
     )?;
 
     Ok(())

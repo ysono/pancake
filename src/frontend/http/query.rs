@@ -22,12 +22,14 @@ pub fn query(db: &Arc<RwLock<DB>>, stmt: Statement) -> Result<Response<Body>> {
         }
         Statement::GetPK(SearchRange::Range { lo, hi }) => {
             let db = db.read().unwrap();
-            match db.get_pk_range(lo.as_ref(), hi.as_ref()) {
+            let res_iter = db.get_pk_range(lo.as_ref(), hi.as_ref());
+            match res_iter {
                 Err(e) => resp::err(e),
                 Ok(kvs) => {
                     let mut s = String::new();
-                    for (pk, pv) in kvs.iter() {
-                        pkpv_to_str(&mut s, pk, pv);
+                    for res_kv in kvs {
+                        let (pk, pv) = res_kv?;
+                        pkpv_to_str(&mut s, &pk, &pv);
                     }
                     resp::ok(s)
                 }
@@ -36,12 +38,14 @@ pub fn query(db: &Arc<RwLock<DB>>, stmt: Statement) -> Result<Response<Body>> {
         Statement::GetSV(spec, sv_range) => {
             let (sv_lo, sv_hi) = sv_range.as_ref();
             let db = db.read().unwrap();
-            match db.get_sv_range(&spec, sv_lo, sv_hi) {
+            let res_iter = db.get_sv_range(&spec, sv_lo, sv_hi);
+            match res_iter {
                 Err(e) => resp::err(e),
                 Ok(kvs) => {
                     let mut s = String::new();
-                    for (pk, pv) in kvs.iter() {
-                        pkpv_to_str(&mut s, pk, pv);
+                    for res_kv in kvs {
+                        let (pk, pv) = res_kv?;
+                        pkpv_to_str(&mut s, &pk, &pv);
                     }
                     resp::ok(s)
                 }

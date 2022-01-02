@@ -140,7 +140,11 @@ where
         res.map(|opt_optdat| opt_optdat.and_then(|optdat| optdat.into()))
     }
 
-    pub fn get_range<Q>(&self, k_lo: Option<&Q>, k_hi: Option<&Q>) -> Result<Vec<(K, V)>>
+    pub fn get_range<'a, Q>(
+        &'a self,
+        k_lo: Option<&'a Q>,
+        k_hi: Option<&'a Q>,
+    ) -> Result<impl 'a + Iterator<Item = Result<(K, V)>>>
     where
         K: PartialOrd<Q>,
     {
@@ -207,16 +211,15 @@ where
                 return Some(Ok(kv));
             }
         };
-        std::iter::from_fn(out_iter_fn)
-            .filter_map(|res_kv| match res_kv {
-                Err(e) => Some(Err(e)),
-                Ok((_k, OptDatum::Tombstone)) => None,
-                Ok((k, OptDatum::Some(v))) => Some(Ok((k, v))),
-            })
-            .collect::<Result<Vec<_>>>()
+        let out_iter = std::iter::from_fn(out_iter_fn).filter_map(|res_kv| match res_kv {
+            Err(e) => Some(Err(e)),
+            Ok((_k, OptDatum::Tombstone)) => None,
+            Ok((k, OptDatum::Some(v))) => Some(Ok((k, v))),
+        });
+        Ok(out_iter)
     }
 
-    pub fn get_whole_range(&self) -> Result<Vec<(K, V)>> {
+    pub fn get_whole_range<'a>(&'a self) -> Result<impl 'a + Iterator<Item = Result<(K, V)>>> {
         self.get_range(None, None)
     }
 }
