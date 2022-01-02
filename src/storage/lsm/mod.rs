@@ -41,8 +41,8 @@ use crate::storage::serde::{self, KeyValueIterator, OptDatum, Serializable};
 use crate::storage::utils;
 use sstable::SSTable;
 
-static COMMIT_LOGS_DIR_PATH: &'static str = "commit_logs";
-static SSTABLES_DIR_PATH: &'static str = "sstables";
+static COMMIT_LOG_FILE_NAME: &'static str = "commit_log.data";
+static SSTABLES_DIR_NAME: &'static str = "sstables";
 static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;
 static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 
@@ -62,26 +62,21 @@ where
     V: Serializable + Clone,
 {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        std::fs::create_dir_all(path.as_ref().join(COMMIT_LOGS_DIR_PATH))?;
-        std::fs::create_dir_all(path.as_ref().join(SSTABLES_DIR_PATH))?;
+        let cl_path = path.as_ref().join(COMMIT_LOG_FILE_NAME);
+        let sstables_dir_path = path.as_ref().join(SSTABLES_DIR_NAME);
+        std::fs::create_dir_all(&sstables_dir_path)?;
 
         let mut memtable = Default::default();
-        let mut commit_log_path = None;
-        for path in utils::read_dir_sorted(path.as_ref().join(COMMIT_LOGS_DIR_PATH))? {
-            Self::read_commit_log(&path, &mut memtable)?;
-            commit_log_path = Some(path);
+        if cl_path.exists() {
+            Self::read_commit_log(&cl_path, &mut memtable)?;
         }
 
-        let commit_log_path = commit_log_path.unwrap_or(utils::new_timestamped_path(
-            path.as_ref().join(COMMIT_LOGS_DIR_PATH),
-            "data",
-        ));
         let commit_log = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&commit_log_path)?;
+            .open(&cl_path)?;
 
-        let sstables = utils::read_dir_sorted(path.as_ref().join(SSTABLES_DIR_PATH))?
+        let sstables = utils::read_dir_sorted(sstables_dir_path)?
             .into_iter()
             .map(SSTable::read_from_file)
             .collect::<Result<Vec<_>>>()?;
@@ -108,7 +103,7 @@ where
     fn flush_memtable(&mut self) -> Result<()> {
         let new_sst = SSTable::write_from_mem(
             &self.memtable,
-            utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH), "data"),
+            utils::new_timestamped_path(self.path.join(SSTABLES_DIR_NAME), "data"),
         )?;
         self.sstables.push(new_sst);
 
@@ -119,7 +114,7 @@ where
     }
 
     fn compact_sstables(&mut self) -> Result<()> {
-        let new_table_path = utils::new_timestamped_path(self.path.join(SSTABLES_DIR_PATH), "data");
+        let new_table_path = utils::new_timestamped_path(self.path.join(SSTABLES_DIR_NAME), "data");
         let new_table = SSTable::compact(new_table_path, &self.sstables)?;
         let new_tables = vec![new_table];
 
