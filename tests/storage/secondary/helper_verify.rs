@@ -23,7 +23,9 @@ pub fn verify_get(
                 .into_iter()
                 .map(|(pk, pv)| (Arc::new(pk), Arc::new(pv)))
                 .collect::<Vec<_>>();
-            let act = act.collect::<Result<Vec<_>>>()?;
+            let act = act
+                .map(|entry| entry.take_kv())
+                .collect::<Result<Vec<_>>>()?;
             assert_eq!(exp, act);
         }
         _etc => panic!("ok-err mistmatch"),

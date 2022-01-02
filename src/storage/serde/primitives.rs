@@ -109,7 +109,7 @@ impl Serializable for Datum {
 }
 
 #[derive(Clone, Debug)]
-pub enum OptDatum<T: Serializable> {
+pub enum OptDatum<T> {
     Tombstone,
     Some(T),
 }
@@ -132,7 +132,7 @@ impl<T: Serializable> Serializable for OptDatum<T> {
         Ok(obj)
     }
 }
-impl<T: Serializable> From<Option<T>> for OptDatum<T> {
+impl<T> From<Option<T>> for OptDatum<T> {
     fn from(opt: Option<T>) -> Self {
         match opt {
             None => OptDatum::Tombstone,
@@ -140,7 +140,7 @@ impl<T: Serializable> From<Option<T>> for OptDatum<T> {
         }
     }
 }
-impl<T: Serializable> Into<Option<T>> for OptDatum<T> {
+impl<T> Into<Option<T>> for OptDatum<T> {
     fn into(self) -> Option<T> {
         match self {
             Self::Tombstone => None,

@@ -26,7 +26,14 @@
 //!
 //! ![](https://user-images.githubusercontent.com/5148696/128660102-e6da6e45-b6a1-4a2b-b038-66af51f212c7.png)
 
+mod entry;
 mod lsm_tree;
+mod memlog;
+pub mod merging;
 mod sstable;
 
+use memlog::*;
+use sstable::*;
+
+pub use entry::Entry;
 pub use lsm_tree::LSMTree;

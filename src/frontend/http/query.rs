@@ -11,43 +11,43 @@ pub fn query(db: &Arc<RwLock<DB>>, stmt: Statement) -> Result<Response<Body>> {
         Statement::GetPK(SearchRange::One(pk)) => {
             let db = db.read().unwrap();
             match db.get_pk_one(&pk) {
-                Err(e) => resp::err(e),
-                Ok(None) => resp::no_content(),
-                Ok(Some(pv)) => {
-                    let mut s = String::new();
-                    pkpv_to_str(&mut s, &pk, &pv);
-                    resp::ok(s)
-                }
+                None => return resp::no_content(),
+                Some(entry) => match entry.borrow_res() {
+                    Err(e) => return resp::err(e),
+                    Ok((pk, pv)) => {
+                        let mut s = String::new();
+                        pkpv_to_str(&mut s, &pk, &pv);
+                        return resp::ok(s);
+                    }
+                },
             }
         }
         Statement::GetPK(SearchRange::Range { lo, hi }) => {
             let db = db.read().unwrap();
-            let res_iter = db.get_pk_range(lo.as_ref(), hi.as_ref());
-            match res_iter {
-                Err(e) => resp::err(e),
-                Ok(kvs) => {
-                    let mut s = String::new();
-                    for res_kv in kvs {
-                        let (pk, pv) = res_kv?;
-                        pkpv_to_str(&mut s, &pk, &pv);
-                    }
-                    resp::ok(s)
+            let mut s = String::new();
+            for entry in db.get_pk_range(lo.as_ref(), hi.as_ref()) {
+                match entry.borrow_res() {
+                    Err(e) => return resp::err(e),
+                    Ok((pk, pv)) => pkpv_to_str(&mut s, pk, pv),
                 }
             }
+            return resp::ok(s);
         }
         Statement::GetSV(spec, sv_range) => {
             let (sv_lo, sv_hi) = sv_range.as_ref();
             let db = db.read().unwrap();
             let res_iter = db.get_sv_range(&spec, sv_lo, sv_hi);
             match res_iter {
-                Err(e) => resp::err(e),
-                Ok(kvs) => {
+                Err(e) => return resp::err(e),
+                Ok(entries) => {
                     let mut s = String::new();
-                    for res_kv in kvs {
-                        let (pk, pv) = res_kv?;
-                        pkpv_to_str(&mut s, &pk, &pv);
+                    for entry in entries {
+                        match entry.borrow_res() {
+                            Err(e) => return resp::err(e),
+                            Ok((pk, pv)) => pkpv_to_str(&mut s, pk, pv),
+                        }
                     }
-                    resp::ok(s)
+                    return resp::ok(s);
                 }
             }
         }

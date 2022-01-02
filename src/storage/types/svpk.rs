@@ -1,6 +1,7 @@
 use crate::storage::serde::{serialize_ref_datums, Datum, DatumType, Serializable};
 use crate::storage::types::{PKShared, PrimaryKey, SVShared, SubValue};
 use anyhow::{anyhow, Result};
+use std::borrow::Borrow;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fs::File;
 use std::io::Write;
@@ -38,6 +39,17 @@ impl Serializable for SVPKShared {
     fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
         let dat = Datum::deser(datum_size, datum_type, r)?;
         Self::from_datum(dat)
+    }
+}
+
+impl Borrow<PKShared> for SVPKShared {
+    fn borrow(&self) -> &PKShared {
+        &self.pk
+    }
+}
+impl Into<PKShared> for SVPKShared {
+    fn into(self) -> PKShared {
+        self.pk
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::storage::lsm::LSMTree;
+use crate::storage::lsm::{Entry, LSMTree};
 use crate::storage::types::{PKShared, PVShared, SVPKShared, SubValue, SubValueSpec};
 use crate::storage::utils;
 use anyhow::Result;
@@ -64,9 +64,10 @@ impl SecondaryIndex {
         spec.ser(&mut spec_file)?;
 
         let mut scnd_lsm = LSMTree::load_or_new(&lsm_dir_path)?;
-        for res_kv in prim_lsm.get_whole_range()? {
-            let (pk, pv) = res_kv?;
-            if let Some(sv) = spec.extract(&pv) {
+        for entry in prim_lsm.get_whole_range() {
+            let (_pk, pv) = entry.borrow_res()?;
+            if let Some(sv) = spec.extract(pv) {
+                let (pk, pv) = entry.take_kv()?;
                 let svpk = SVPKShared { sv, pk };
                 scnd_lsm.put(svpk, Some(pv))?;
             }
@@ -118,11 +119,9 @@ impl SecondaryIndex {
         &'a self,
         sv_lo: Option<&'a SubValue>,
         sv_hi: Option<&'a SubValue>,
-    ) -> Result<impl 'a + Iterator<Item = Result<(PKShared, PVShared)>>> {
-        let kvs = self.lsm.get_range(sv_lo, sv_hi)?;
-        let ret = kvs
-            .into_iter()
-            .map(|res| res.map(|(svpk, pv)| (svpk.pk, pv)));
-        Ok(ret)
+    ) -> impl 'a + Iterator<Item = Entry<'a, PKShared, PVShared>> {
+        self.lsm
+            .get_range(sv_lo, sv_hi)
+            .map(|entry| entry.convert::<PKShared, PVShared>())
     }
 }

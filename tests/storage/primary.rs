@@ -32,8 +32,8 @@ pub fn put_del_get_getrange(db: &mut DB) -> Result<()> {
         }
 
         for (pk, exp_pv) in pk_to_expected_pv.iter() {
-            let act_pv = db.get_pk_one(pk).unwrap();
-            assert_eq!(exp_pv, &act_pv);
+            let act_pv = db.get_pk_one(pk).map(|entry| entry.take_v()).transpose()?;
+            assert_eq!(*exp_pv, act_pv);
         }
     }
 
@@ -50,7 +50,8 @@ pub fn put_del_get_getrange(db: &mut DB) -> Result<()> {
         assert!(exp_range.len() >= 3);
 
         let act_range = db
-            .get_pk_range(Some(&exp_range[0].0), Some(&exp_range.last().unwrap().0))?
+            .get_pk_range(Some(&exp_range[0].0), Some(&exp_range.last().unwrap().0))
+            .map(|entry| entry.take_kv())
             .collect::<Result<Vec<_>>>()?;
         assert_eq!(exp_range, act_range);
     }
@@ -61,7 +62,7 @@ pub fn put_del_get_getrange(db: &mut DB) -> Result<()> {
 pub fn nonexistent(db: &mut DB) -> Result<()> {
     let pk = gen::gen_str_pk("nonexistent");
 
-    let actual = db.get_pk_one(&pk)?;
+    let actual = db.get_pk_one(&pk);
     assert!(actual.is_none());
 
     Ok(())
@@ -73,7 +74,7 @@ pub fn zero_byte_value(db: &mut DB) -> Result<()> {
 
     db.put(pk.clone(), Some(pv.clone()))?;
 
-    let actual = db.get_pk_one(&pk)?;
+    let actual = db.get_pk_one(&pk).map(|entry| entry.take_v()).transpose()?;
     assert_eq!(Some(pv), actual);
 
     Ok(())
@@ -105,7 +106,7 @@ pub fn tuple(db: &mut DB) -> Result<()> {
 
     db.put(pk.clone(), Some(pv.clone()))?;
 
-    let actual = db.get_pk_one(&pk)?;
+    let actual = db.get_pk_one(&pk).map(|entry| entry.take_v()).transpose()?;
     assert_eq!(Some(pv), actual);
 
     Ok(())

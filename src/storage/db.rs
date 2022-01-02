@@ -1,4 +1,4 @@
-use crate::storage::lsm::LSMTree;
+use crate::storage::lsm::{Entry, LSMTree};
 use crate::storage::scnd_idx::SecondaryIndex;
 use crate::storage::types::{PKShared, PVShared, PrimaryKey, SubValue, SubValueSpec};
 use crate::storage::utils;
@@ -37,10 +37,13 @@ impl DB {
     }
 
     pub fn put(&mut self, pk: PKShared, pv: Option<PVShared>) -> Result<()> {
-        let old_pv = self.get_pk_one(&pk)?;
+        let opt_entry = self.prim_lsm.get_one(&pk);
+        let opt_res_pair = opt_entry.as_ref().map(|entry| entry.borrow_res());
+        let opt_pair = opt_res_pair.transpose()?;
+        let old_pv: Option<&PVShared> = opt_pair.map(|pair| pair.1);
 
         for scnd_idx in self.scnd_idxs.iter_mut() {
-            scnd_idx.put(pk.clone(), old_pv.as_ref(), pv.as_ref())?;
+            scnd_idx.put(pk.clone(), old_pv, pv.as_ref())?;
         }
 
         self.prim_lsm.put(pk, pv)?;
@@ -48,15 +51,15 @@ impl DB {
         Ok(())
     }
 
-    pub fn get_pk_one(&self, pk: &PrimaryKey) -> Result<Option<PVShared>> {
-        self.prim_lsm.get(pk)
+    pub fn get_pk_one<'a>(&'a self, pk: &'a PrimaryKey) -> Option<Entry<'a, PKShared, PVShared>> {
+        self.prim_lsm.get_one(pk)
     }
 
     pub fn get_pk_range<'a>(
         &'a self,
         pk_lo: Option<&'a PrimaryKey>,
         pk_hi: Option<&'a PrimaryKey>,
-    ) -> Result<impl 'a + Iterator<Item = Result<(PKShared, PVShared)>>> {
+    ) -> impl 'a + Iterator<Item = Entry<'a, PKShared, PVShared>> {
         self.prim_lsm.get_range(pk_lo, pk_hi)
     }
 
@@ -65,10 +68,11 @@ impl DB {
         spec: &'a SubValueSpec,
         sv_lo: Option<&'a SubValue>,
         sv_hi: Option<&'a SubValue>,
-    ) -> Result<impl 'a + Iterator<Item = Result<(PKShared, PVShared)>>> {
+    ) -> Result<impl 'a + Iterator<Item = Entry<'a, PKShared, PVShared>>> {
         for scnd_idx in self.scnd_idxs.iter() {
             if scnd_idx.spec().as_ref() == spec {
-                return scnd_idx.get_range(sv_lo, sv_hi);
+                let iter = scnd_idx.get_range(sv_lo, sv_hi);
+                return Ok(iter);
             }
         }
         Err(anyhow!("Secondary index does not exist for {:?}", spec))
