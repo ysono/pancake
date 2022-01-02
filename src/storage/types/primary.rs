@@ -1,17 +1,30 @@
 use crate::storage::serde::{Datum, DatumType, Serializable};
 use anyhow::Result;
 use derive_more::{Deref, From};
+use std::cmp::{Ordering, PartialOrd};
 use std::fs::File;
 use std::io::Write;
+use std::sync::Arc;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Deref, From, Clone, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Deref, From, Debug)]
 pub struct PrimaryKey(pub Datum);
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Deref, From, Clone, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Deref, From, Debug)]
 pub struct Value(pub Datum);
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Deref, From, Clone, Debug)]
-pub struct SubValue(pub Datum);
+pub type PKShared = Arc<PrimaryKey>;
+pub type PVShared = Arc<Value>;
+
+impl PartialEq<PrimaryKey> for PKShared {
+    fn eq(&self, other: &PrimaryKey) -> bool {
+        (self as &PrimaryKey).eq(other)
+    }
+}
+impl PartialOrd<PrimaryKey> for PKShared {
+    fn partial_cmp(&self, other: &PrimaryKey) -> Option<Ordering> {
+        (self as &PrimaryKey).partial_cmp(other)
+    }
+}
 
 impl<Inner, Outer> Serializable for Outer
 where

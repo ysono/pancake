@@ -9,7 +9,22 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::mem;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Debug)]
+// TODO move somewhere else
+pub fn serialize_ref_datums<'a>(vec: Vec<&'a Datum>, w: &mut impl Write) -> Result<usize> {
+    let mut sz = 0;
+
+    let dtype = DatumType::Tuple;
+    let tup_len_bytes = vec.len().to_le_bytes();
+    sz += serde::write_item(dtype, &tup_len_bytes, w)?;
+
+    for dat in vec.iter() {
+        sz += dat.ser(w)?;
+    }
+
+    Ok(sz)
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Datum {
     Bytes(Vec<u8>),
     I64(i64),
@@ -115,6 +130,22 @@ impl<T: Serializable> Serializable for OptDatum<T> {
             }
         };
         Ok(obj)
+    }
+}
+impl<T: Serializable> From<Option<T>> for OptDatum<T> {
+    fn from(opt: Option<T>) -> Self {
+        match opt {
+            None => OptDatum::Tombstone,
+            Some(t) => OptDatum::Some(t),
+        }
+    }
+}
+impl<T: Serializable> Into<Option<T>> for OptDatum<T> {
+    fn into(self) -> Option<T> {
+        match self {
+            Self::Tombstone => None,
+            Self::Some(t) => Some(t),
+        }
     }
 }
 

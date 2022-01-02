@@ -1,16 +1,17 @@
 use crate::storage::lsm::LSMTree;
 use crate::storage::scnd_idx::SecondaryIndex;
-use crate::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
+use crate::storage::types::{PKShared, PVShared, PrimaryKey, SubValue, SubValueSpec};
 use crate::storage::utils;
 use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 const PRIM_LSM_DIRNAME: &'static str = "prim_lsm";
 const ALL_SCND_IDXS_DIRNAME: &'static str = "scnd_idxs";
 
 pub struct DB {
-    prim_lsm: LSMTree<PrimaryKey, Value>,
+    prim_lsm: LSMTree<PKShared, PVShared>,
     all_scnd_idxs_dir: PathBuf,
     scnd_idxs: Vec<SecondaryIndex>,
 }
@@ -35,11 +36,11 @@ impl DB {
         Ok(db)
     }
 
-    pub fn put(&mut self, pk: PrimaryKey, pv: Value) -> Result<()> {
+    pub fn put(&mut self, pk: PKShared, pv: Option<PVShared>) -> Result<()> {
         let old_pv = self.get_pk_one(&pk)?;
 
         for scnd_idx in self.scnd_idxs.iter_mut() {
-            scnd_idx.put(&pk, old_pv.as_ref(), Some(&pv))?;
+            scnd_idx.put(pk.clone(), old_pv.as_ref(), pv.as_ref())?;
         }
 
         self.prim_lsm.put(pk, pv)?;
@@ -47,19 +48,7 @@ impl DB {
         Ok(())
     }
 
-    pub fn delete(&mut self, pk: PrimaryKey) -> Result<()> {
-        let old_pv = self.get_pk_one(&pk)?;
-
-        for scnd_idx in self.scnd_idxs.iter_mut() {
-            scnd_idx.put(&pk, old_pv.as_ref(), None)?;
-        }
-
-        self.prim_lsm.del(pk)?;
-
-        Ok(())
-    }
-
-    pub fn get_pk_one(&self, pk: &PrimaryKey) -> Result<Option<Value>> {
+    pub fn get_pk_one(&self, pk: &PrimaryKey) -> Result<Option<PVShared>> {
         self.prim_lsm.get(pk)
     }
 
@@ -67,14 +56,8 @@ impl DB {
         &self,
         pk_lo: Option<&PrimaryKey>,
         pk_hi: Option<&PrimaryKey>,
-    ) -> Result<Vec<(PrimaryKey, Value)>> {
-        // The `move` keyword here moves `k_lo: &PrimaryKey` out of the callback for `.map()`
-        // into the following closure.
-        let pk_lo_cmp = pk_lo.map(|pk_lo| move |sample_pk: &PrimaryKey| sample_pk.cmp(pk_lo));
-        let pk_hi_cmp = pk_hi.map(|pk_hi| move |sample_pk: &PrimaryKey| sample_pk.cmp(pk_hi));
-
-        self.prim_lsm
-            .get_range(pk_lo_cmp.as_ref(), pk_hi_cmp.as_ref())
+    ) -> Result<Vec<(PKShared, PVShared)>> {
+        self.prim_lsm.get_range(pk_lo, pk_hi)
     }
 
     pub fn get_sv_range(
@@ -82,16 +65,16 @@ impl DB {
         spec: &SubValueSpec,
         sv_lo: Option<&SubValue>,
         sv_hi: Option<&SubValue>,
-    ) -> Result<Vec<(PrimaryKey, Value)>> {
+    ) -> Result<Vec<(PKShared, PVShared)>> {
         for scnd_idx in self.scnd_idxs.iter() {
-            if scnd_idx.spec() == spec {
+            if scnd_idx.spec().as_ref() == spec {
                 return scnd_idx.get_range(sv_lo, sv_hi);
             }
         }
         Ok(vec![])
     }
 
-    pub fn create_scnd_idx(&mut self, spec: SubValueSpec) -> Result<()> {
+    pub fn create_scnd_idx(&mut self, spec: Arc<SubValueSpec>) -> Result<()> {
         for scnd_idx in self.scnd_idxs.iter() {
             if scnd_idx.spec() == &spec {
                 return Ok(());
@@ -108,7 +91,7 @@ impl DB {
     pub fn delete_scnd_idx(&mut self, spec: &SubValueSpec) -> Result<()> {
         let mut del_idx = None::<usize>;
         for (i, scnd_idx) in self.scnd_idxs.iter().enumerate() {
-            if scnd_idx.spec() == spec {
+            if scnd_idx.spec().as_ref() == spec {
                 del_idx = Some(i);
                 break;
             }

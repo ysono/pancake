@@ -4,6 +4,7 @@ use anyhow::Result;
 use pancake::storage::db::DB;
 use pancake::storage::serde::{Datum, DatumType};
 use pancake::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
+use std::sync::Arc;
 
 /// A spec that extracts `value[1][2]: str`.
 fn spec_1_2_str() -> SubValueSpec {
@@ -62,12 +63,17 @@ fn gen_sv_tup(sv_i: i64, sv_s: &str) -> SubValue {
 
 fn put(db: &mut DB, pk: &str, pv_i: i64, pv_s: &str) -> Result<()> {
     let (pk, pv) = gen_pkv(pk, pv_i, pv_s);
-    db.put(pk, pv)
+    db.put(Arc::new(pk), Some(Arc::new(pv)))
+}
+
+fn del(db: &mut DB, pk: &str) -> Result<()> {
+    let pk = gen::gen_str_pk(pk);
+    db.put(Arc::new(pk), None)
 }
 
 pub fn delete_create_get(db: &mut DB) -> Result<()> {
-    let spec_str = spec_1_2_str();
-    let spec_tup = spec_1_tup();
+    let spec_str = Arc::new(spec_1_2_str());
+    let spec_tup = Arc::new(spec_1_tup());
 
     db.delete_scnd_idx(&spec_str)?;
     db.delete_scnd_idx(&spec_tup)?;
@@ -78,8 +84,8 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
     put(db, "complex.4", 40, "complex-subval")?;
     put(db, "complex.3", 30, "complex-subval")?;
 
-    db.create_scnd_idx(spec_str.clone())?;
-    db.create_scnd_idx(spec_tup.clone())?;
+    db.create_scnd_idx(Arc::clone(&spec_str))?;
+    db.create_scnd_idx(Arc::clone(&spec_tup))?;
 
     put(db, "complex.2", 20, "complex-subval")?;
     put(db, "complex.1", 10, "complex-subval")?;
@@ -142,7 +148,7 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         vec![gen_pkv("complex.2", 20, "complex-subval")],
     )?;
 
-    db.delete(gen::gen_str_pk("complex.3"))?;
+    del(db, "complex.3")?;
 
     verify_get(
         db,

@@ -1,14 +1,17 @@
-use crate::storage::serde::{Datum, DatumType, Serializable};
-use crate::storage::types::{SubValue, Value};
+use crate::storage::serde::{Datum, DatumType, DatumTypeInt};
+use crate::storage::types::{SVShared, Value};
 use anyhow::{anyhow, Result};
 use num_traits::{FromPrimitive, ToPrimitive};
-use std::fs::File;
-use std::io::Write;
+use owning_ref::OwningRef;
+use std::any;
+use std::io::{Read, Write};
+use std::mem;
+use std::sync::Arc;
 
 /// [`SubValueSpec`] specifies a sub-portion of a [`Value`].
 ///
 /// The spec is a DSL for locating this sub-portion,
-/// as well as an extractor of this sub-portion that returns [`SubValue`].
+/// as well as an extractor of this sub-portion that returns [`SVShared`].
 ///
 /// #### Whole
 ///
@@ -67,7 +70,7 @@ use std::io::Write;
 ///
 /// Notice, in this case, `SubValueSpec::Whole(DatumType::Tuple)` specifies the whole tuple,
 /// not further sub-divided.
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum SubValueSpec {
     Whole(DatumType),
     PartialTuple {
@@ -77,17 +80,21 @@ pub enum SubValueSpec {
 }
 
 impl SubValueSpec {
-    pub fn extract(&self, v: &Value) -> Option<SubValue> {
-        self.extract_impl(v).map(SubValue)
+    pub fn extract(&self, pv: &Arc<Value>) -> Option<SVShared> {
+        self.extract_impl(pv).map(|dat| {
+            let dat = dat as *const _;
+            let dat = unsafe { &*dat };
+            let ownref = OwningRef::new(Arc::clone(pv)).map(|_| dat);
+            SVShared::Ref(ownref)
+        })
     }
 
-    // pub fn extract_impl<'a>(&self, dat: &Datum) -> Option<&'a Datum> {
-    fn extract_impl(&self, dat: &Datum) -> Option<Datum> {
+    fn extract_impl<'a>(&self, dat: &'a Datum) -> Option<&'a Datum> {
         match self {
             SubValueSpec::Whole(exp_dtype) => {
                 let actual_dtype = dat.to_type();
                 if exp_dtype == &actual_dtype {
-                    Some(dat.clone())
+                    Some(dat)
                 } else {
                     None
                 }
@@ -105,57 +112,53 @@ impl SubValueSpec {
             }
         }
     }
-
-    // TODO Instead of converting to Datum, serialize directly.
-    fn to_datum(&self) -> Result<Datum> {
-        let dat = match self {
-            SubValueSpec::Whole(datum_type) => {
-                let datum_type = datum_type.to_i64().unwrap();
-                Datum::I64(datum_type)
-            }
-            SubValueSpec::PartialTuple {
-                member_idx,
-                member_spec,
-            } => Datum::Tuple(vec![
-                Datum::I64(*member_idx as i64),
-                member_spec.to_datum()?.clone(),
-            ]),
-        };
-        Ok(dat)
-    }
-
-    fn from_datum(dat: &Datum) -> Result<Self> {
-        if let Datum::I64(dtype) = dat {
-            let dtype =
-                DatumType::from_i64(*dtype).ok_or(anyhow!("Unknown datum type {}", *dtype))?;
-            let ret = SubValueSpec::Whole(dtype);
-            return Ok(ret);
-        } else if let Datum::Tuple(vec) = dat {
-            if let [Datum::I64(member_idx), member_spec] = vec.as_slice() {
-                let member_idx = *member_idx as usize;
-                let member_spec = SubValueSpec::from_datum(member_spec)?;
-                let member_spec = Box::new(member_spec);
-                let ret = SubValueSpec::PartialTuple {
-                    member_idx,
-                    member_spec,
-                };
-                return Ok(ret);
-            }
-        }
-        Err(anyhow!(
-            "SubValueSpec could not be deserialized from {:?}",
-            dat
-        ))
-    }
 }
 
-impl Serializable for SubValueSpec {
-    fn ser(&self, w: &mut impl Write) -> Result<usize> {
-        self.to_datum()?.ser(w)
+impl SubValueSpec {
+    pub fn ser(&self, w: &mut impl Write) -> Result<()> {
+        match self {
+            Self::Whole(datum_type) => {
+                let datum_type_int: DatumTypeInt = datum_type.to_u8().unwrap();
+                w.write(&datum_type_int.to_le_bytes())?;
+                Ok(())
+            }
+            Self::PartialTuple {
+                member_idx,
+                member_spec,
+            } => {
+                /* Write depth-first. Reading will be breadth-first. */
+                member_spec.ser(w)?;
+                w.write(&member_idx.to_le_bytes())?;
+                Ok(())
+            }
+        }
     }
 
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut File) -> Result<Self> {
-        let dat = Datum::deser(datum_size, datum_type, r)?;
-        Self::from_datum(&dat)
+    pub fn deser(r: &mut impl Read) -> Result<Self> {
+        let mut buf = [0u8; mem::size_of::<DatumTypeInt>()];
+        r.read_exact(&mut buf)?;
+        let datum_type_int = DatumTypeInt::from_le_bytes(buf);
+        let datum_type = DatumType::from_u8(datum_type_int)
+            .ok_or(anyhow!("Invalid DatumTypeInt {}", datum_type_int))?;
+        let mut spec = Self::Whole(datum_type);
+
+        loop {
+            let mut buf = [0u8; mem::size_of::<usize>()];
+            let r_len = r.read(&mut buf)?;
+            if r_len == 0 {
+                return Ok(spec);
+            } else if r_len == buf.len() {
+                let member_idx = usize::from_le_bytes(buf);
+                spec = Self::PartialTuple {
+                    member_idx,
+                    member_spec: Box::new(spec),
+                };
+            } else {
+                return Err(anyhow!(
+                    "Byte misalignment in file for {}.",
+                    any::type_name::<Self>()
+                ));
+            }
+        }
     }
 }

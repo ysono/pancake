@@ -108,65 +108,55 @@ where
     /// @return
     ///     `None` if not found within this sstable.
     ///     `Some(_: V)` if found.
-    pub fn get(&self, k: &K) -> Result<Option<V>> {
-        let k_lo_cmp = |sample_k: &K| sample_k.cmp(k);
-        let file_offset = self.sparse_index.nearest_preceding_file_offset(&k_lo_cmp);
-
-        let mut file = File::open(&self.path)?;
-        file.seek(SeekFrom::Start(file_offset))?;
-
-        loop {
-            // Key
-            let found = match serde::read_item::<K>(&mut file)? {
-                ReadItem::EOF => break,
-                ReadItem::Some { read_size: _, obj } => &obj == k,
-            };
-
-            // Value
-            if found {
-                match serde::read_item::<V>(&mut file)? {
-                    ReadItem::EOF => return Err(anyhow!("Unexpected EOF while reading a value.")),
-                    ReadItem::Some { read_size: _, obj } => return Ok(Some(obj)),
+    pub fn get<Q>(&self, k: &Q) -> Result<Option<V>>
+    where
+        K: PartialOrd<Q>,
+    {
+        let mut iter = self.get_range(Some(k), None)?.take(1);
+        match iter.next() {
+            None => Ok(None),
+            Some(Err(e)) => Err(e),
+            Some(Ok((sample_k, sample_v))) => {
+                if sample_k.partial_cmp(k).unwrap_or(Ordering::Equal).is_eq() {
+                    Ok(Some(sample_v))
+                } else {
+                    Ok(None)
                 }
-            } else {
-                serde::skip_item(&mut file)?;
             }
         }
-        Ok(None)
     }
 
-    fn get_range<'a, Flo, Fhi>(
+    fn get_range<'a, Q>(
         &'a self,
-        k_lo_cmp: Option<&'a Flo>,
-        k_hi_cmp: Option<&'a Fhi>,
+        k_lo: Option<&'a Q>,
+        k_hi: Option<&'a Q>,
     ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a>
     where
-        Flo: Fn(&K) -> Ordering,
-        Fhi: Fn(&K) -> Ordering,
+        K: PartialOrd<Q>,
     {
-        let file_offset = match k_lo_cmp {
-            None => 0 as FileOffset,
-            Some(k_lo_cmp) => self.sparse_index.nearest_preceding_file_offset(k_lo_cmp),
-        };
+        let file_offset = self.sparse_index.nearest_preceding_file_offset(k_lo);
 
         let mut file = File::open(&self.path)?;
         file.seek(SeekFrom::Start(file_offset))?;
 
         let iter = KeyValueIterator::<K, V>::from(file)
             .skip_while(move |res| {
-                // This closure moves k_lo_cmp.
-                if let Some(k_lo_cmp) = k_lo_cmp {
-                    if let Ok((k, _v)) = res {
-                        return k_lo_cmp(k).is_lt();
+                // This closure moves k_lo.
+                if let Some(k_lo) = k_lo {
+                    if let Ok((sample_k, _v)) = res {
+                        return sample_k
+                            .partial_cmp(k_lo)
+                            .unwrap_or(Ordering::Greater)
+                            .is_lt();
                     }
                 }
                 false
             })
             .take_while(move |res| {
-                // This closure moves k_hi_cmp.
-                if let Some(k_hi_cmp) = k_hi_cmp {
-                    if let Ok((k, _v)) = res {
-                        return k_hi_cmp(k).is_le();
+                // This closure moves k_hi.
+                if let Some(k_hi) = k_hi {
+                    if let Ok((sample_k, _v)) = res {
+                        return sample_k.partial_cmp(k_hi).unwrap_or(Ordering::Less).is_le();
                     }
                 }
                 true
@@ -180,14 +170,13 @@ where
         Ok(())
     }
 
-    pub fn merge_range<'a, Flo, Fhi>(
+    pub fn merge_range<'a, Q>(
         tables: &'a [Self],
-        k_lo_cmp: Option<&'a Flo>,
-        k_hi_cmp: Option<&'a Fhi>,
+        k_lo: Option<&'a Q>,
+        k_hi: Option<&'a Q>,
     ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a>
     where
-        Flo: Fn(&K) -> Ordering,
-        Fhi: Fn(&K) -> Ordering,
+        K: PartialOrd<Q>,
     {
         let per_table_iters = tables
             .iter()
@@ -195,7 +184,7 @@ where
             .map(|(table_i, sst)| {
                 // NB: the index/position of the sstable is included for the purpose of breaking ties
                 // on duplicate keys.
-                sst.get_range(k_lo_cmp, k_hi_cmp)
+                sst.get_range(k_lo, k_hi)
                     .map(|iter| iter.zip(std::iter::repeat(table_i)))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -242,11 +231,7 @@ where
         let mut sparse_index = SparseIndex::new();
         let mut offset = 0 as FileOffset;
 
-        let merged_iter = Self::merge_range(
-            tables,
-            None::<&Box<dyn Fn(&K) -> Ordering>>,
-            None::<&Box<dyn Fn(&K) -> Ordering>>,
-        )?;
+        let merged_iter = Self::merge_range(tables, None, None)?;
         for (kv_i, res_kv) in merged_iter.enumerate() {
             let (k, v) = res_kv?;
 
@@ -283,14 +268,24 @@ impl<K: Serializable + Ord> SparseIndex<K> {
         }
     }
 
-    fn nearest_preceding_file_offset<Flo>(&self, k_lo_cmp: &Flo) -> FileOffset
+    fn nearest_preceding_file_offset<Q>(&self, k_lo: Option<&Q>) -> FileOffset
     where
-        Flo: Fn(&K) -> Ordering,
+        K: PartialOrd<Q>,
     {
+        if k_lo.is_none() {
+            return 0;
+        }
+        let k_lo = k_lo.unwrap();
+
         // TODO Bisect. Currently this has O(n) cost.
 
         // Find the max key less than or equal to the desired key.
-        let idx_pos = self.ptrs.iter().rposition(|(k, _off)| k_lo_cmp(k).is_le());
+        let idx_pos = self.ptrs.iter().rposition(|(sample_k, _off)| {
+            sample_k
+                .partial_cmp(k_lo)
+                .unwrap_or(Ordering::Greater)
+                .is_le()
+        });
         match idx_pos {
             None => 0u64,
             Some(idx_pos) => {

@@ -76,7 +76,7 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
         }
         Operation::CreateScndIdx(spec) => {
             let mut db = db.write().unwrap();
-            let res = db.create_scnd_idx(spec);
+            let res = db.create_scnd_idx(Arc::new(spec));
             match res {
                 Err(e) => return resp::err(e),
                 Ok(()) => return resp::no_content(),

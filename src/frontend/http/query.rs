@@ -50,8 +50,8 @@ pub fn query(db: &Arc<RwLock<DB>>, stmt: Statement) -> Result<Response<Body>> {
         Statement::Put(pk, opt_pv) => {
             let mut db = db.write().unwrap();
             let res = match opt_pv {
-                None => db.delete(pk),
-                Some(pv) => db.put(pk, pv),
+                None => db.put(Arc::new(pk), None),
+                Some(pv) => db.put(Arc::new(pk), Some(Arc::new(pv))),
             };
             match res {
                 Err(e) => resp::err(e),

@@ -2,6 +2,7 @@ use crate::storage::lsm::sstable::SSTable;
 use crate::storage::serde::{self, KeyValueIterator, OptDatum, Serializable};
 use crate::storage::utils;
 use anyhow::Result;
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
@@ -105,7 +106,9 @@ where
         Ok(())
     }
 
-    fn do_put(&mut self, k: K, v: OptDatum<V>) -> Result<()> {
+    pub fn put(&mut self, k: K, v: Option<V>) -> Result<()> {
+        let v = OptDatum::from(v);
+
         serde::serialize_kv(&k, &v, &mut self.commit_log)?;
 
         self.memtable.insert(k, v);
@@ -115,64 +118,55 @@ where
         Ok(())
     }
 
-    pub fn put(&mut self, k: K, v: V) -> Result<()> {
-        self.do_put(k, OptDatum::Some(v))
-    }
-
-    pub fn del(&mut self, k: K) -> Result<()> {
-        self.do_put(k, OptDatum::Tombstone)
-    }
-
-    fn do_get(&self, k: &K) -> Result<Option<OptDatum<V>>> {
-        if let Some(v) = self.memtable.get(k) {
-            return Ok(Some(v.clone()));
-        }
-        // TODO bloom filter here
-        for ss in self.sstables.iter().rev() {
-            let v = ss.get(k)?;
-            if v.is_some() {
-                return Ok(v);
-            }
-        }
-        Ok(None)
-    }
-    pub fn get(&self, k: &K) -> Result<Option<V>> {
-        match self.do_get(k)? {
-            Some(OptDatum::Tombstone) | None => Ok(None),
-            Some(OptDatum::Some(v)) => Ok(Some(v)),
-        }
-    }
-
-    pub fn get_range<Flo, Fhi>(
-        &self,
-        k_lo_cmp: Option<&Flo>,
-        k_hi_cmp: Option<&Fhi>,
-    ) -> Result<Vec<(K, V)>>
+    pub fn get<Q>(&self, k: &Q) -> Result<Option<V>>
     where
-        Flo: Fn(&K) -> Ordering,
-        Fhi: Fn(&K) -> Ordering,
+        K: Borrow<Q> + PartialOrd<Q>,
+        Q: Ord,
     {
-        let ssts_iter = SSTable::merge_range(&self.sstables, k_lo_cmp, k_hi_cmp)?;
+        let do_get = || {
+            if let Some(v) = self.memtable.get(k) {
+                return Ok(Some(v.clone()));
+            }
+            // TODO bloom filter here
+            for ss in self.sstables.iter().rev() {
+                let v = ss.get(k)?;
+                if v.is_some() {
+                    return Ok(v);
+                }
+            }
+            Ok(None)
+        };
+        let res: Result<Option<OptDatum<V>>> = do_get();
+        res.map(|opt_optdat| opt_optdat.and_then(|optdat| optdat.into()))
+    }
+
+    pub fn get_range<Q>(&self, k_lo: Option<&Q>, k_hi: Option<&Q>) -> Result<Vec<(K, V)>>
+    where
+        K: PartialOrd<Q>,
+    {
+        let ssts_iter = SSTable::merge_range(&self.sstables, k_lo, k_hi)?;
 
         let mut mt_iter = self.memtable.iter();
 
-        if let Some(k_lo_cmp) = k_lo_cmp {
+        if let Some(k_lo) = k_lo {
             // Find the max key less than the desired key. Not equal to it, b/c
             // `.nth()` takes the item at the provided position.
-            if let Some(iter_pos) = self
-                .memtable
-                .iter()
-                .rposition(|(k, _v)| k_lo_cmp(k).is_lt())
-            {
+            if let Some(iter_pos) = self.memtable.iter().rposition(|(sample_k, _v)| {
+                sample_k
+                    .partial_cmp(k_lo)
+                    .unwrap_or(Ordering::Greater)
+                    .is_lt()
+            }) {
                 mt_iter.nth(iter_pos);
             }
         }
 
-        let k_hi_cmp = k_hi_cmp.clone();
-        let mt_iter = mt_iter.take_while(move |(k, _v)| {
-            // This closure moves k_hi_cmp.
-            if let Some(k_hi_cmp) = k_hi_cmp {
-                k_hi_cmp(k).is_le()
+        let mt_iter = mt_iter.take_while(move |(sample_k, _v)| {
+            if let Some(k_hi) = k_hi {
+                sample_k
+                    .partial_cmp(&k_hi)
+                    .unwrap_or(Ordering::Less)
+                    .is_le()
             } else {
                 true
             }
@@ -220,5 +214,9 @@ where
                 Ok((k, OptDatum::Some(v))) => Some(Ok((k, v))),
             })
             .collect::<Result<Vec<_>>>()
+    }
+
+    pub fn get_whole_range(&self) -> Result<Vec<(K, V)>> {
+        self.get_range(None, None)
     }
 }

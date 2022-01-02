@@ -47,8 +47,8 @@
 //! }
 //! ```
 
-mod types;
-pub use types::*;
+mod primitives;
+pub use primitives::*;
 
 use anyhow::{anyhow, Result};
 use num_traits::FromPrimitive;
@@ -57,7 +57,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
 use std::mem::size_of;
 
-type DatumTypeInt = u8;
+pub type DatumTypeInt = u8;
 
 pub trait Serializable: Sized {
     fn ser(&self, w: &mut impl Write) -> Result<usize>;
