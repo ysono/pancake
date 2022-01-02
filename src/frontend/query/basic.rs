@@ -22,8 +22,6 @@
 //! - `SELECT * FROM table WHERE pk BETWEEN ${pk_lo} AND ${pk_hi};`
 //! - `SELECT * FROM table WHERE pk <= ${pk_hi};`
 //!
-//! Note, the comparison between keys is untyped, so the range might cover some data you don't expect.
-//!
 //! - `get between int(50) str(foobar)`
 //! - `get between int(50) _`
 //! - `get between _ str(foobar)`
