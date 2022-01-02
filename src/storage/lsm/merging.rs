@@ -49,7 +49,7 @@ where
         }
     });
 
-    // Manually implement unique_by(key).
+    // Manually implement unique_by(k).
     let mut prev_key: Option<K> = None;
     let deduped_entries = merged_entries.filter(move |(entry, _i)| match entry {
         Err(_) => return true,

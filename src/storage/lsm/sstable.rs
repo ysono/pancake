@@ -22,6 +22,7 @@ fn is_kv_sparsely_captured(entry_i: usize) -> bool {
     entry_i % SSTABLE_IDX_SPARSENESS == SSTABLE_IDX_SPARSENESS - 1
 }
 
+/// An SSTable is an abstraction of a sorted dictionary.
 /// An SSTable has these components:
 /// - A file which stores `(key, val_or_tombstone)` pairs, sorted by key, containing distinct keys.
 /// - An in-memory sorted structure that maps `{key: file_offset}` on sparsely captured keys. The offsets point to locations within the above file.

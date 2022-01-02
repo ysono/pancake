@@ -7,6 +7,30 @@ use std::path::{Path, PathBuf};
 const COMMIT_LOG_FILE_NAME: &'static str = "commit_log.kv";
 const SSTABLES_DIR_NAME: &'static str = "sstables";
 
+#[allow(rustdoc::private_intra_doc_links)]
+/// An LSMTree is an abstraction of a sorted dictionary.
+///
+/// ### API:
+///
+/// The exposed operations are: `put one`, `get one`, `get range`.
+///
+/// Values are immutable. They cannot be modified in-place, and must be replaced.
+///
+/// ### Internals:
+///
+/// One [`MemLog`] holds the most recently inserted `{key: value}` mapping in an in-memory table.
+///
+/// The [`MemLog`] is occasionally flushed into an [`SSTable`].
+///
+/// Multiple [`SSTable`]s are occasionally compacted into one [`SSTable`].
+///
+/// ### Querying:
+///
+/// A `put` operation accesses the Memtable of the [`MemLog`] only.
+///
+/// A `get` operation generally accesses the [`MemLog`] and all [`SSTable`]s.
+///
+/// When the same key exists in multiple internal tables, only the result from the newest table is retrieved.
 pub struct LSMTree<K, V> {
     lsm_dir_path: PathBuf,
     memlog: MemLog<K, V>,
