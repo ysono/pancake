@@ -13,7 +13,7 @@ pub fn merge_sstables<'a, K, V, Q>(
 ) -> impl 'a + Iterator<Item = Result<(K, OptDatum<V>)>>
 where
     K: Serializable + Ord + PartialOrd<Q> + Clone,
-    V: Serializable,
+    OptDatum<V>: Serializable,
 {
     let iter_of_iters = sstables.iter().enumerate().map(|(sst_i, sst)| {
         // NB: the index/position of the sstable is included for the purpose of breaking ties
@@ -77,7 +77,7 @@ pub fn merge_memlog_and_sstables<'a, K, V, Q>(
 ) -> impl 'a + Iterator<Item = Entry<'a, K, OptDatum<V>>>
 where
     K: Serializable + Ord + PartialOrd<Q> + Clone,
-    V: Serializable,
+    OptDatum<V>: Serializable,
 {
     let mut mt_iter = memlog.get_range(k_lo, k_hi).peekable();
     let mut ssts_iter = merge_sstables(sstables, k_lo, k_hi).peekable();

@@ -12,7 +12,7 @@ static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 impl<K, V> LSMTree<K, V>
 where
     K: Serializable + Ord + Clone,
-    V: Serializable + Clone,
+    OptDatum<V>: Serializable,
 {
     pub fn maybe_run_gc(&mut self) -> Result<()> {
         if self.memlog.mem_len() >= MEMTABLE_FLUSH_SIZE_THRESH {

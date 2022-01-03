@@ -1,8 +1,11 @@
 use crate::ds_n_a::bisect;
 use crate::storage::lsm::Entry;
-use crate::storage::serde::{self, KeyValueIterator, OptDatum, ReadItem, Serializable, SkipItem};
+use crate::storage::serde::{
+    DatumReader, DatumWriter, KeyValueIterator, OptDatum, ReadResult, Ser, Serializable,
+};
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut, From};
+use std::any;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
@@ -31,7 +34,7 @@ pub struct SSTable<K, V> {
 impl<K, V> SSTable<K, V>
 where
     K: Serializable + Ord + Clone,
-    V: Serializable,
+    OptDatum<V>: Serializable,
 {
     pub fn new<'a>(
         entries: impl Iterator<Item = Entry<'a, K, OptDatum<V>>>,
@@ -45,14 +48,17 @@ where
             .create_new(true)
             .write(true)
             .open(&path)?;
-        let mut file_writer = BufWriter::new(file);
+        let mut datum_writer = DatumWriter::from(BufWriter::new(file));
 
         let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
         let mut file_offset = FileOffset(0);
 
         for (entry_i, entry) in entries.enumerate() {
             let (k_ref, v_ref) = entry.borrow_res()?;
-            let delta_offset = serde::serialize_kv(k_ref, v_ref, &mut file_writer)?;
+
+            let mut delta_offset = 0;
+            delta_offset += *(k_ref.ser(&mut datum_writer)?);
+            delta_offset += *(v_ref.ser(&mut datum_writer)?);
 
             if is_kv_sparsely_captured(entry_i) {
                 let k_own = entry.take_k()?;
@@ -62,7 +68,7 @@ where
             file_offset.0 += delta_offset as u64;
         }
 
-        file_writer.flush()?;
+        datum_writer.flush()?;
 
         Ok(Self {
             path,
@@ -73,7 +79,7 @@ where
 
     pub fn load(path: PathBuf) -> Result<Self> {
         let file = File::open(&path)?;
-        let mut file_reader = BufReader::new(file);
+        let mut datum_reader = DatumReader::from(BufReader::new(file));
 
         let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
         let mut file_offset = FileOffset(0);
@@ -81,29 +87,33 @@ where
         for entry_i in 0usize.. {
             // Key
             if is_kv_sparsely_captured(entry_i) {
-                match serde::read_item(&mut file_reader)? {
-                    ReadItem::EOF => break,
-                    ReadItem::Some { read_size, obj } => {
-                        sparse_file_offsets.push((obj, file_offset));
-                        file_offset.0 += read_size as u64;
+                match K::deser(&mut datum_reader)? {
+                    ReadResult::EOF => break,
+                    ReadResult::Some(delta_r_len, k) => {
+                        sparse_file_offsets.push((k, file_offset));
+                        file_offset.0 += delta_r_len as u64;
                     }
                 }
             } else {
-                match serde::skip_item(&mut file_reader)? {
-                    SkipItem::EOF => break,
-                    SkipItem::Some { read_size } => {
-                        file_offset.0 += read_size as u64;
+                match datum_reader.skip()? {
+                    ReadResult::EOF => break,
+                    ReadResult::Some(delta_r_len, ()) => {
+                        file_offset.0 += delta_r_len as u64;
                     }
                 }
             }
 
             // Value
-            match serde::skip_item(&mut file_reader)? {
-                SkipItem::EOF => {
-                    return Err(anyhow!("EOF while reading a Value from {:?}.", path));
+            match datum_reader.skip()? {
+                ReadResult::EOF => {
+                    return Err(anyhow!(
+                        "EOF while skipping a {} from {:?}.",
+                        any::type_name::<V>(),
+                        path
+                    ));
                 }
-                SkipItem::Some { read_size } => {
-                    file_offset.0 += read_size as u64;
+                ReadResult::Some(delta_r_len, ()) => {
+                    file_offset.0 += delta_r_len as u64;
                 }
             }
         }

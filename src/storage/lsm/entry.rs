@@ -69,7 +69,7 @@ impl<'a, K, V> Entry<'a, K, V> {
 impl<'a, K, V> Entry<'a, K, OptDatum<V>>
 where
     K: Clone,
-    V: Serializable + Clone,
+    OptDatum<V>: Serializable,
 {
     pub fn to_option_entry(self) -> Option<Entry<'a, K, V>> {
         match self {

@@ -6,7 +6,8 @@ use std::cmp::{Ord, PartialOrd};
 use std::ops::Deref;
 use std::sync::Arc;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Deref, From, Debug)]
+/// A sub-portion of a [Value](crate::storage::types::Value)
+#[derive(From, Deref, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct SubValue(pub Datum);
 
 #[derive(Clone, Debug)]

@@ -7,7 +7,7 @@ use std::borrow::Borrow;
 impl<K, V> LSMTree<K, V>
 where
     K: Serializable + Ord + Clone,
-    V: Serializable + Clone,
+    OptDatum<V>: Serializable,
 {
     pub fn put(&mut self, k: K, v: Option<V>) -> Result<()> {
         let v = OptDatum::from(v);

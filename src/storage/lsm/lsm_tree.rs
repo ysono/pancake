@@ -1,5 +1,5 @@
 use crate::storage::lsm::{MemLog, SSTable};
-use crate::storage::serde::Serializable;
+use crate::storage::serde::{OptDatum, Serializable};
 use crate::storage::utils;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ pub struct LSMTree<K, V> {
 impl<K, V> LSMTree<K, V>
 where
     K: Serializable + Ord + Clone,
-    V: Serializable + Clone,
+    OptDatum<V>: Serializable,
 {
     pub fn load_or_new<P: AsRef<Path>>(lsm_dir_path: P) -> Result<Self> {
         let log_file_path = lsm_dir_path.as_ref().join(COMMIT_LOG_FILE_NAME);

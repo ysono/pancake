@@ -1,7 +1,6 @@
 use crate::storage::serde::{Datum, DatumType, DatumTypeInt};
 use crate::storage::types::{SVShared, Value};
 use anyhow::{anyhow, Result};
-use num_traits::{FromPrimitive, ToPrimitive};
 use owning_ref::OwningRef;
 use std::any;
 use std::io::{Read, Write};
@@ -86,7 +85,7 @@ impl SubValueSpec {
             }
         }
 
-        if dat.to_type() == self.datum_type {
+        if DatumType::from(dat) == self.datum_type {
             let dat = dat as *const _;
             let dat = unsafe { &*dat };
             let ownref = OwningRef::new(Arc::clone(pv)).map(|_| dat);
@@ -100,22 +99,19 @@ impl SubValueSpec {
 impl SubValueSpec {
     pub fn ser(&self, w: &mut impl Write) -> Result<()> {
         // Write datum_type first, for easy alignemnt during reading.
-        let datum_type_int: DatumTypeInt = self.datum_type.to_u8().unwrap();
-        w.write(&datum_type_int.to_le_bytes())?;
+        let datum_type_int = DatumTypeInt::from(self.datum_type);
+        w.write(&datum_type_int.to_ne_bytes())?;
 
         for member_idx in self.member_idxs.iter() {
-            w.write(&member_idx.to_le_bytes())?;
+            w.write(&member_idx.to_ne_bytes())?;
         }
 
         Ok(())
     }
 
     pub fn deser(r: &mut impl Read) -> Result<Self> {
-        let mut buf = [0u8; mem::size_of::<DatumTypeInt>()];
-        r.read_exact(&mut buf)?;
-        let datum_type_int = DatumTypeInt::from_le_bytes(buf);
-        let datum_type = DatumType::from_u8(datum_type_int)
-            .ok_or(anyhow!("Invalid DatumTypeInt {}", datum_type_int))?;
+        let (_r_len, datum_type_int) = DatumTypeInt::read(r).map_err(|e| anyhow!(e))?;
+        let datum_type = DatumType::try_from(datum_type_int)?;
 
         let mut member_idxs = vec![];
         loop {
@@ -124,7 +120,7 @@ impl SubValueSpec {
             if r_len == 0 {
                 break;
             } else if r_len == buf.len() {
-                let member_idx = usize::from_le_bytes(buf);
+                let member_idx = usize::from_ne_bytes(buf);
                 member_idxs.push(member_idx);
             } else {
                 return Err(anyhow!(
@@ -140,3 +136,6 @@ impl SubValueSpec {
         })
     }
 }
+
+#[cfg(test)]
+mod test;

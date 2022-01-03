@@ -1,20 +1,28 @@
-use crate::storage::serde::{serialize_ref_datums, Datum, DatumType, Serializable};
+use crate::storage::serde::{Datum, DatumWriter, Ser, Serializable, WriteLen};
 use crate::storage::types::{PKShared, PrimaryKey, SVShared, SubValue};
 use anyhow::{anyhow, Result};
 use std::borrow::Borrow;
 use std::cmp::{Ord, Ordering, PartialOrd};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync::Arc;
 
-/// SubValue and PrimaryKey.
+/// A tuple containing [`SubValue`] and [`PrimaryKey`].
+/// Orderable by sub-value first, then by primary-key.
 #[derive(PartialEq, Eq, Clone)]
 pub struct SVPKShared {
     pub sv: SVShared,
     pub pk: PKShared,
 }
 
-impl SVPKShared {
-    fn from_datum(mut dat: Datum) -> Result<Self> {
+impl Ser for SVPKShared {
+    fn ser<W: Write>(&self, w: &mut DatumWriter<W>) -> Result<WriteLen> {
+        let data = [&self.sv as &Datum, &self.pk as &Datum];
+        w.ser_root_tuple(&data[..])
+    }
+}
+impl TryFrom<Datum> for SVPKShared {
+    type Error = anyhow::Error;
+    fn try_from(mut dat: Datum) -> Result<Self> {
         if let Datum::Tuple(tup) = dat {
             match tup.try_into() as Result<[Datum; 2], _> {
                 Ok([sv, pk]) => {
@@ -28,18 +36,7 @@ impl SVPKShared {
         Err(anyhow!("SVPK could not be deserialized from {:?}", dat))
     }
 }
-
-impl Serializable for SVPKShared {
-    fn ser(&self, w: &mut impl Write) -> Result<usize> {
-        let tup = vec![&self.sv as &Datum, &self.pk as &Datum];
-        serialize_ref_datums(tup, w)
-    }
-
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut impl Read) -> Result<Self> {
-        let dat = Datum::deser(datum_size, datum_type, r)?;
-        Self::from_datum(dat)
-    }
-}
+impl Serializable for SVPKShared {}
 
 impl Borrow<PKShared> for SVPKShared {
     fn borrow(&self) -> &PKShared {

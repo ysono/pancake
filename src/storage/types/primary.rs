@@ -1,14 +1,14 @@
-use crate::storage::serde::{Datum, DatumType, Serializable};
+use crate::storage::serde::{Datum, DatumWriter, OptDatum, Ser, Serializable, WriteLen};
 use anyhow::Result;
 use derive_more::{Deref, From};
 use std::cmp::{Ordering, PartialOrd};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync::Arc;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Deref, From, Debug)]
+#[derive(From, Deref, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct PrimaryKey(pub Datum);
 
-#[derive(PartialEq, Eq, Deref, From, Debug)]
+#[derive(From, Deref, PartialEq, Eq, Debug)]
 pub struct Value(pub Datum);
 
 pub type PKShared = Arc<PrimaryKey>;
@@ -25,18 +25,29 @@ impl PartialOrd<PrimaryKey> for PKShared {
     }
 }
 
-impl<Inner, Outer> Serializable for Outer
-where
-    Inner: Serializable,
-    Outer: std::ops::Deref<Target = Inner> + std::convert::From<Inner>,
-{
-    fn ser(&self, w: &mut impl Write) -> Result<usize> {
-        self.deref().ser(w)
-    }
-
-    fn deser(datum_size: usize, datum_type: DatumType, r: &mut impl Read) -> Result<Self> {
-        let inner = Inner::deser(datum_size, datum_type, r)?;
-        let outer = Outer::from(inner);
-        Ok(outer)
+impl Ser for PKShared {
+    fn ser<W: Write>(&self, w: &mut DatumWriter<W>) -> Result<WriteLen> {
+        w.ser_dat(self)
     }
 }
+impl From<Datum> for PKShared {
+    fn from(dat: Datum) -> Self {
+        Arc::new(PrimaryKey(dat))
+    }
+}
+impl Serializable for PKShared {}
+
+impl Ser for OptDatum<PVShared> {
+    fn ser<W: Write>(&self, w: &mut DatumWriter<W>) -> Result<WriteLen> {
+        match self {
+            OptDatum::Tombstone => w.ser_optdat(&OptDatum::Tombstone),
+            OptDatum::Some(pv) => w.ser_dat(pv),
+        }
+    }
+}
+impl From<Datum> for PVShared {
+    fn from(dat: Datum) -> Self {
+        Arc::new(Value(dat))
+    }
+}
+impl Serializable for OptDatum<PVShared> {}

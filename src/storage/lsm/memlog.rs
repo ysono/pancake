@@ -1,4 +1,4 @@
-use crate::storage::serde::{self, KeyValueIterator, OptDatum, Serializable};
+use crate::storage::serde::{DatumWriter, KeyValueIterator, OptDatum, Ser, Serializable};
 use anyhow::Result;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
@@ -10,13 +10,13 @@ use std::path::{Path, PathBuf};
 pub struct MemLog<K, V> {
     memtable: BTreeMap<K, OptDatum<V>>,
     log_path: PathBuf,
-    log_writer: BufWriter<File>,
+    log_writer: DatumWriter<File>,
 }
 
 impl<K, V> MemLog<K, V>
 where
     K: Serializable + Ord,
-    V: Serializable,
+    OptDatum<V>: Serializable,
 {
     pub fn load_or_new<P: AsRef<Path>>(log_path: P) -> Result<Self> {
         let mut memtable = BTreeMap::default();
@@ -33,7 +33,7 @@ where
             .create(true)
             .append(true) // *Not* write(true)
             .open(&log_path)?;
-        let log_writer = BufWriter::new(log_file);
+        let log_writer = DatumWriter::from(BufWriter::new(log_file));
 
         Ok(Self {
             memtable,
@@ -47,7 +47,7 @@ where
         self.log_writer.flush()?;
         let log_file = OpenOptions::new().write(true).open(&self.log_path)?;
         log_file.set_len(0)?;
-        self.log_writer = BufWriter::new(log_file);
+        self.log_writer = DatumWriter::from(BufWriter::new(log_file));
         Ok(())
     }
 
@@ -56,7 +56,9 @@ where
     }
 
     pub fn put(&mut self, k: K, v: OptDatum<V>) -> Result<()> {
-        serde::serialize_kv(&k, &v, &mut self.log_writer)?;
+        k.ser(&mut self.log_writer)?;
+        v.ser(&mut self.log_writer)?;
+        self.log_writer.flush()?;
 
         self.memtable.insert(k, v);
 
