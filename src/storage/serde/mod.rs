@@ -76,6 +76,7 @@
 
 mod datum_type;
 mod iter;
+mod iter_skipping;
 mod lengths;
 mod primitives;
 mod serde_reader;
@@ -87,6 +88,7 @@ mod serde_rw_test;
 
 pub use datum_type::*;
 pub use iter::*;
+pub use iter_skipping::*;
 pub use lengths::*;
 pub use primitives::*;
 pub use serde_reader::*;

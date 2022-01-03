@@ -1,4 +1,4 @@
-use crate::storage::serde::{DatumReader, ReadResult, Serializable};
+use crate::storage::serde::{DatumReader, Deser, ReadResult};
 use anyhow::{anyhow, Result};
 use std::any;
 use std::fs::File;
@@ -21,8 +21,8 @@ impl<K, V> From<File> for KeyValueIterator<K, V> {
 
 impl<K, V> Iterator for KeyValueIterator<K, V>
 where
-    K: Serializable,
-    V: Serializable,
+    K: Deser,
+    V: Deser,
 {
     type Item = Result<(K, V)>;
 

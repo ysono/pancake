@@ -1,7 +1,7 @@
 use crate::ds_n_a::bisect;
 use crate::storage::lsm::Entry;
 use crate::storage::serde::{
-    DatumReader, DatumWriter, KeyValueIterator, OptDatum, ReadResult, Ser, Serializable,
+    DatumReader, DatumWriter, KeyValueRangeIterator, OptDatum, ReadResult, Ser, Serializable,
 };
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut, From};
@@ -153,40 +153,13 @@ where
                 file.seek(SeekFrom::Start(file_offset.0)).map(|_| file)
             })
             .map_err(|e| anyhow!(e))
-            .map(|file| {
-                KeyValueIterator::<K, OptDatum<V>>::from(file)
-                    .skip_while(move |res| {
-                        // This closure moves k_lo.
-                        if let Some(k_lo) = k_lo {
-                            if let Ok((sample_k, _v)) = res {
-                                return sample_k
-                                    .partial_cmp(k_lo)
-                                    .unwrap_or(Ordering::Greater)
-                                    .is_lt();
-                            }
-                        }
-                        false
-                    })
-                    .take_while(move |res| {
-                        // This closure moves k_hi.
-                        if let Some(k_hi) = k_hi {
-                            if let Ok((sample_k, _v)) = res {
-                                return sample_k
-                                    .partial_cmp(k_hi)
-                                    .unwrap_or(Ordering::Less)
-                                    .is_le();
-                            }
-                        }
-                        true
-                    })
-            });
+            .map(|file| KeyValueRangeIterator::new(file, k_lo, k_hi));
 
         let ret_iter_fn = move || -> Option<Result<(K, OptDatum<V>)>> {
             match res_file_iter.as_mut() {
-                Err(e) =>
-                // This error occurred during the construction of the iter.
-                // Return the err as an iterator item.
-                {
+                Err(e) => {
+                    // This error occurred during the construction of the iterator.
+                    // Return the err as an iterator item.
                     Some(Err(anyhow!(e.to_string())))
                 }
                 Ok(file_iter) => file_iter.next(),
