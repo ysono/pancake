@@ -8,23 +8,18 @@ use std::io::{Read, Write};
 use std::mem;
 use std::sync::Arc;
 
-/// [`SubValueSpec`] specifies a sub-portion of a [`Value`].
+/// [`SubValueSpec`] specifies a contiguous sub-portion of a [`Value`].
 ///
 /// The spec is a DSL for locating this sub-portion,
 /// as well as an extractor of this sub-portion that returns [`SVShared`].
 ///
-/// #### Whole
+/// #### Specification
 ///
-/// [`SubValueSpec::Whole`] specifies non-subdivided [`Datum`].
-/// For example, it can be used to specify the whole [`Value`].
+/// The [`DatumType`] of the target sub-portion must be specified.
+/// The target could be a [`DatumType::Tuple`].
 ///
-/// #### Partial
-///
-/// [`SubValueSpec::PartialTuple`] specifies a member of a [`Datum::Tuple`].
-/// The member is identified by the member index as well as a [`SubValueSpec`]
-/// that's applicable at this member index.
-///
-/// This nested [`SubValueSpec`], in turn, can be [`SubValueSpec::Whole`] or [`SubValueSpec::PartialTuple`].
+/// If the sub-portion is actually the entire [`Value`], `member_idxs` is empty.
+/// If the sub-portion is nested with a [`Datum::Tuple`], then `member_idxs` specifies the member idx at each depth.
 ///
 /// For example in pseudocode, given a tuple-typed [`Value`]
 ///
@@ -47,12 +42,9 @@ use std::sync::Arc;
 /// If you want to specify the `Datum::I64(1)`:
 ///
 /// ```text
-/// SubValueSpec::PartialTuple {
-///     member_idx: 1,
-///     member_spec: Box::new(SubValueSpec::PartialTuple {
-///         member_idx: 0,
-///         member_spec: SubValueSpec::Whole(DatumType::I64)
-///     })
+/// SubValueSpec {
+///     member_idxs: vec![1, 0],
+///     datum_type: DatumType::I64,
 /// }
 /// ```
 ///
@@ -60,78 +52,62 @@ use std::sync::Arc;
 ///
 /// ```text
 /// SubValueSpec::PartialTuple {
-///     member_idx: 1,
-///     member_spec: Box::new(SubValueSpec::PartialTuple {
-///         member_idx: 0,
-///         member_spec: SubValueSpec::Whole(DatumType::Tuple)
-///     })
+///     member_idxs: vec![1, 2],
+///     datum_type: DatumType::Tuple,
 /// }
 /// ```
 ///
 /// Notice, in this case, `SubValueSpec::Whole(DatumType::Tuple)` specifies the whole tuple,
 /// not further sub-divided.
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub enum SubValueSpec {
-    Whole(DatumType),
-    PartialTuple {
-        member_idx: usize,
-        member_spec: Box<SubValueSpec>,
-    },
+#[derive(PartialEq, Eq, Hash, Debug)]
+pub struct SubValueSpec {
+    pub member_idxs: Vec<usize>,
+    pub datum_type: DatumType,
+}
+
+impl From<DatumType> for SubValueSpec {
+    fn from(datum_type: DatumType) -> Self {
+        Self {
+            member_idxs: vec![],
+            datum_type,
+        }
+    }
 }
 
 impl SubValueSpec {
     pub fn extract(&self, pv: &Arc<Value>) -> Option<SVShared> {
-        self.extract_impl(pv).map(|dat| {
+        let mut dat: &Datum = pv;
+        for member_idx in self.member_idxs.iter() {
+            match dat {
+                Datum::Tuple(members) if *member_idx < members.len() => {
+                    dat = &members[*member_idx];
+                }
+                _ => return None,
+            }
+        }
+
+        if dat.to_type() == self.datum_type {
             let dat = dat as *const _;
             let dat = unsafe { &*dat };
             let ownref = OwningRef::new(Arc::clone(pv)).map(|_| dat);
-            SVShared::Ref(ownref)
-        })
-    }
-
-    fn extract_impl<'a>(&self, dat: &'a Datum) -> Option<&'a Datum> {
-        match self {
-            SubValueSpec::Whole(exp_dtype) => {
-                let actual_dtype = dat.to_type();
-                if exp_dtype == &actual_dtype {
-                    Some(dat)
-                } else {
-                    None
-                }
-            }
-            SubValueSpec::PartialTuple {
-                member_idx,
-                member_spec,
-            } => {
-                if let Datum::Tuple(members) = dat {
-                    if let Some(member_dat) = members.get(*member_idx) {
-                        return member_spec.extract_impl(member_dat);
-                    }
-                }
-                None
-            }
+            return Some(SVShared::Ref(ownref));
         }
+
+        None
     }
 }
 
 impl SubValueSpec {
     pub fn ser(&self, w: &mut impl Write) -> Result<()> {
-        match self {
-            Self::Whole(datum_type) => {
-                let datum_type_int: DatumTypeInt = datum_type.to_u8().unwrap();
-                w.write(&datum_type_int.to_le_bytes())?;
-                Ok(())
-            }
-            Self::PartialTuple {
-                member_idx,
-                member_spec,
-            } => {
-                /* Write depth-first. Reading will be breadth-first. */
-                member_spec.ser(w)?;
-                w.write(&member_idx.to_le_bytes())?;
-                Ok(())
-            }
+        // Write datum_type first, for easy alignemnt during reading.
+        let datum_type_int: DatumTypeInt = self.datum_type.to_u8().unwrap();
+        w.write(&datum_type_int.to_le_bytes())?;
+
+        for member_idx in self.member_idxs.iter() {
+            w.write(&member_idx.to_le_bytes())?;
         }
+
+        Ok(())
     }
 
     pub fn deser(r: &mut impl Read) -> Result<Self> {
@@ -140,19 +116,16 @@ impl SubValueSpec {
         let datum_type_int = DatumTypeInt::from_le_bytes(buf);
         let datum_type = DatumType::from_u8(datum_type_int)
             .ok_or(anyhow!("Invalid DatumTypeInt {}", datum_type_int))?;
-        let mut spec = Self::Whole(datum_type);
 
+        let mut member_idxs = vec![];
         loop {
             let mut buf = [0u8; mem::size_of::<usize>()];
             let r_len = r.read(&mut buf)?;
             if r_len == 0 {
-                return Ok(spec);
+                break;
             } else if r_len == buf.len() {
                 let member_idx = usize::from_le_bytes(buf);
-                spec = Self::PartialTuple {
-                    member_idx,
-                    member_spec: Box::new(spec),
-                };
+                member_idxs.push(member_idx);
             } else {
                 return Err(anyhow!(
                     "Byte misalignment in file for {}.",
@@ -160,5 +133,10 @@ impl SubValueSpec {
                 ));
             }
         }
+
+        Ok(Self {
+            member_idxs,
+            datum_type,
+        })
     }
 }

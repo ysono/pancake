@@ -17,7 +17,7 @@ fn del(db: &mut DB, pk: &str) -> Result<()> {
 }
 
 pub fn delete_create_get(db: &mut DB) -> Result<()> {
-    let spec = Arc::new(SubValueSpec::Whole(DatumType::Str));
+    let spec = Arc::new(SubValueSpec::from(DatumType::Str));
 
     db.delete_scnd_idx(&spec)?;
 

@@ -8,21 +8,18 @@ use std::sync::Arc;
 
 /// A spec that extracts `value[1][2]: str`.
 fn spec_1_2_str() -> SubValueSpec {
-    SubValueSpec::PartialTuple {
-        member_idx: 1,
-        member_spec: Box::new(SubValueSpec::PartialTuple {
-            member_idx: 2,
-            member_spec: Box::new(SubValueSpec::Whole(DatumType::Str)),
-        }),
+    SubValueSpec {
+        member_idxs: vec![1, 2],
+        datum_type: DatumType::Str,
     }
 }
 
 /// A spec that extracts `value[1]: tuple`.
 /// The type of the contents of the tuple is opaque in the view of this spec.
 fn spec_1_tup() -> SubValueSpec {
-    SubValueSpec::PartialTuple {
-        member_idx: 1,
-        member_spec: Box::new(SubValueSpec::Whole(DatumType::Tuple)),
+    SubValueSpec {
+        member_idxs: vec![1],
+        datum_type: DatumType::Tuple,
     }
 }
 

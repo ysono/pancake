@@ -49,11 +49,11 @@
 //!
 //! Index all entries by sub-value specification.
 //!
-//! `create index tup( 0 str )`
+//! `create index nested( 0 str )`
 //!
 //! Index all entries by nested sub-value specification.
 //!
-//! `create index tup( 1 tup( 0 int ) )`
+//! `create index nested( 1 0 int )`
 //!
 //! ### Index-based selection
 //!
@@ -78,15 +78,15 @@
 //!
 //! Get all entries by sub-value specification.
 //!
-//! - `get where tup( 0 str ) str(s6000)`
-//! - `get where tup( 0 str ) between str(s1000) str(s9000)`
-//! - `get where tup( 0 str ) _`
+//! - `get where nested( 0 str ) str(s6000)`
+//! - `get where nested( 0 str ) between str(s1000) str(s9000)`
+//! - `get where nested( 0 str ) _`
 //!
 //! Get all entries by nested sub-value specification.
 //!
-//! - `get where tup( 1 tup( 0 int ) ) int(60)`
-//! - `get where tup( 1 tup( 0 int ) ) between int(60) int(61)`
-//! - `get where tup( 1 tup( 0 int ) ) _`
+//! - `get where nested( 1 0 int ) int(60)`
+//! - `get where nested( 1 0 int ) between int(60) int(61)`
+//! - `get where nested( 1 0 int ) _`
 //!
 //! # Caveats
 //!
@@ -279,37 +279,53 @@ fn datum<'a, I: Iterator<Item = &'a str>>(iter: &mut Peekable<I>) -> Result<Datu
 
 fn subvalspec<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<SubValueSpec> {
     match iter.next() {
-        Some("str") => return Ok(SubValueSpec::Whole(DatumType::Str)),
-        Some("int") => return Ok(SubValueSpec::Whole(DatumType::I64)),
-        Some("tup") => match iter.next() {
-            Some("(") => match iter.next() {
-                Some(int_literal) => {
-                    let member_idx = int_literal.parse::<usize>().context(format!(
-                        "Expected subvalspec tuple member_idx but found {:?}",
-                        int_literal
-                    ))?;
-                    let member_spec = subvalspec(iter)?;
-                    let member_spec = Box::new(member_spec);
+        Some("str") => return Ok(SubValueSpec::from(DatumType::Str)),
+        Some("int") => return Ok(SubValueSpec::from(DatumType::I64)),
+        Some("nested") => match iter.next() {
+            Some("(") => {
+                let mut member_idxs = vec![];
+                let mut datum_type = None;
+                loop {
                     match iter.next() {
-                        Some(")") => {
-                            return Ok(SubValueSpec::PartialTuple {
-                                member_idx,
-                                member_spec,
-                            })
+                        Some(")") => break,
+                        Some(token) => {
+                            if datum_type.is_some() {
+                                return Err(anyhow!("Nested subvalspec's datum_type is followed by an extra token {}.", token));
+                            }
+                            if token == "str" {
+                                datum_type = Some(DatumType::Str);
+                            } else if token == "int" {
+                                datum_type = Some(DatumType::I64);
+                            } else {
+                                let member_idx = token.parse::<usize>().context(format!(
+                                    "Expected nested subvalspec member_idx but found {}.",
+                                    token
+                                ))?;
+                                member_idxs.push(member_idx);
+                            }
                         }
-                        x => {
-                            return Err(anyhow!(
-                                "Expected closing of subvalspec tuple but found {:?}",
-                                x
-                            ))
+                        None => {
+                            return Err(anyhow!("Expected nested subvalspec defn but found EOS"))
                         }
                     }
                 }
-                x => return Err(anyhow!("Expected subvalspec tuple member {:?}", x)),
-            },
+                match datum_type {
+                    None => {
+                        return Err(anyhow!(
+                            "Nested subvalspec defn did not contain datum_type."
+                        ))
+                    }
+                    Some(datum_type) => {
+                        return Ok(SubValueSpec {
+                            member_idxs,
+                            datum_type,
+                        })
+                    }
+                }
+            }
             x => {
                 return Err(anyhow!(
-                    "Expected opening of subvalspec tuple but found {:?}",
+                    "Expected opening of nested subvalspec but found {:?}",
                     x
                 ))
             }
@@ -431,26 +447,23 @@ mod test {
     fn get_where() -> Result<()> {
         let q_str = "get where int _";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::Whole(DatumType::I64),
+            SubValueSpec::from(DatumType::I64),
             SearchRange::all(),
         ));
         assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get where int int(123)";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::Whole(DatumType::I64),
+            SubValueSpec::from(DatumType::I64),
             SearchRange::One(SubValue(Datum::I64(123))),
         ));
         assert!(parse(q_str)? == exp_q_obj);
 
-        let q_str = "get where tup( 1 tup( 0 str ) ) str(subval_a)";
+        let q_str = "get where nested( 1 0 str ) str(subval_a)";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::PartialTuple {
-                member_idx: 1,
-                member_spec: Box::new(SubValueSpec::PartialTuple {
-                    member_idx: 0,
-                    member_spec: Box::new(SubValueSpec::Whole(DatumType::Str)),
-                }),
+            SubValueSpec {
+                member_idxs: vec![1, 0],
+                datum_type: DatumType::Str,
             },
             SearchRange::One(SubValue(Datum::Str(String::from("subval_a")))),
         ));
@@ -463,7 +476,7 @@ mod test {
     fn get_where_between() -> Result<()> {
         let q_str = "get where int between int(123) int(234)";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::Whole(DatumType::I64),
+            SubValueSpec::from(DatumType::I64),
             SearchRange::Range {
                 lo: Some(SubValue(Datum::I64(123))),
                 hi: Some(SubValue(Datum::I64(234))),
@@ -473,7 +486,7 @@ mod test {
 
         let q_str = "get where int between int(123) _";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::Whole(DatumType::I64),
+            SubValueSpec::from(DatumType::I64),
             SearchRange::Range {
                 lo: Some(SubValue(Datum::I64(123))),
                 hi: None,
@@ -483,7 +496,7 @@ mod test {
 
         let q_str = "get where int between _ int(234)";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::Whole(DatumType::I64),
+            SubValueSpec::from(DatumType::I64),
             SearchRange::Range {
                 lo: None,
                 hi: Some(SubValue(Datum::I64(234))),
@@ -493,7 +506,7 @@ mod test {
 
         let q_str = "get where int between _ _";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::Whole(DatumType::I64),
+            SubValueSpec::from(DatumType::I64),
             SearchRange::all(),
         ));
         assert!(parse(q_str)? == exp_q_obj);
@@ -504,23 +517,20 @@ mod test {
     #[test]
     fn create_scnd_idx() -> Result<()> {
         let q_str = "create index int";
-        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec::Whole(DatumType::I64));
+        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec::from(DatumType::I64));
         assert!(parse(q_str)? == exp_q_obj);
 
-        let q_str = "create index tup( 2 int )";
-        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec::PartialTuple {
-            member_idx: 2,
-            member_spec: Box::new(SubValueSpec::Whole(DatumType::I64)),
+        let q_str = "create index nested( 2 int )";
+        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec {
+            member_idxs: vec![2],
+            datum_type: DatumType::I64,
         });
         assert!(parse(q_str)? == exp_q_obj);
 
-        let q_str = "create index tup( 1 tup( 0 str ) )";
-        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec::PartialTuple {
-            member_idx: 1,
-            member_spec: Box::new(SubValueSpec::PartialTuple {
-                member_idx: 0,
-                member_spec: Box::new(SubValueSpec::Whole(DatumType::Str)),
-            }),
+        let q_str = "create index nested( 1 0 str )";
+        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec {
+            member_idxs: vec![1, 0],
+            datum_type: DatumType::Str,
         });
         assert!(parse(q_str)? == exp_q_obj);
 
