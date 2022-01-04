@@ -1,6 +1,6 @@
 use super::helpers::gen;
 use anyhow::Result;
-use pancake::storage::db::DB;
+use pancake::storage::engine_serial::db::DB;
 use pancake::storage::serde::Datum;
 use pancake::storage::types::{PKShared, PVShared, PrimaryKey, Value};
 use rand;

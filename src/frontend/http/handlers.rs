@@ -1,7 +1,7 @@
 use super::{query, resp};
 use crate::frontend::api::{Operation, SearchRange, Statement};
 use crate::frontend::query::basic::{self as query_basic};
-use crate::storage::db::DB;
+use crate::storage::engine_serial::db::DB;
 use crate::storage::serde::Datum;
 use crate::storage::types::{PrimaryKey, Value};
 use anyhow::{Error, Result};

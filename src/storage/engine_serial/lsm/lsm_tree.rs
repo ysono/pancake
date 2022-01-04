@@ -1,6 +1,6 @@
 use crate::ds_n_a::persisted_u64::PersistedU64;
-use crate::storage::fs_utils::{self, UniqueId};
-use crate::storage::lsm::{MemLog, SSTable};
+use crate::storage::engine_serial::fs_utils::{self, UniqueId};
+use crate::storage::engine_serial::lsm::{MemLog, SSTable};
 use crate::storage::serde::{OptDatum, Serializable};
 use anyhow::Result;
 use std::path::{Path, PathBuf};

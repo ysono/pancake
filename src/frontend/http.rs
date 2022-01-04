@@ -2,7 +2,7 @@ mod handlers;
 pub(self) mod query;
 pub(self) mod resp;
 
-use crate::storage::db::DB;
+use crate::storage::engine_serial::db::DB;
 use anyhow::{Error, Result};
 use hyper::{Body, Request, Response, Server, StatusCode};
 use routerify::prelude::*;

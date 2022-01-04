@@ -1,5 +1,5 @@
 use super::LSMTree;
-use crate::storage::lsm::{merging, Entry, SSTable};
+use crate::storage::engine_serial::lsm::{merging, Entry, SSTable};
 use crate::storage::serde::{OptDatum, Serializable};
 use anyhow::Result;
 use std::mem;

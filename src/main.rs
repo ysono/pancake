@@ -1,4 +1,4 @@
-use pancake::storage::db::DB;
+use pancake::storage::engine_serial::db::DB;
 use std::env;
 use std::sync::{Arc, RwLock};
 

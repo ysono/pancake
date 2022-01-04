@@ -1,5 +1,5 @@
 use super::LSMTree;
-use crate::storage::lsm::{merging, Entry};
+use crate::storage::engine_serial::lsm::{merging, Entry};
 use crate::storage::serde::{OptDatum, Serializable};
 use anyhow::Result;
 use std::borrow::Borrow;

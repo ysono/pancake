@@ -1,6 +1,6 @@
 use super::resp;
 use crate::frontend::api::{SearchRange, Statement};
-use crate::storage::db::DB;
+use crate::storage::engine_serial::db::DB;
 use crate::storage::types::{PrimaryKey, Value};
 use anyhow::Result;
 use hyper::{Body, Response};

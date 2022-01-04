@@ -1,4 +1,4 @@
-use crate::storage::lsm::{Entry, MemLog, SSTable};
+use crate::storage::engine_serial::lsm::{Entry, MemLog, SSTable};
 use crate::storage::serde::{OptDatum, Serializable};
 use anyhow::Result;
 use itertools::Itertools;

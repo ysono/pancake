@@ -1,5 +1,5 @@
 use anyhow::Result;
-use pancake::storage::db::DB;
+use pancake::storage::engine_serial::db::DB;
 use pancake::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
 use std::sync::Arc;
 
