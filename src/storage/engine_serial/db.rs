@@ -1,7 +1,8 @@
 use crate::ds_n_a::persisted_u64::PersistedU64;
-use crate::storage::engine_serial::fs_utils::{self, UniqueId};
-use crate::storage::engine_serial::lsm::{Entry, LSMTree};
+use crate::storage::engine_serial::lsm::LSMTree;
 use crate::storage::engine_serial::scnd_idx::SecondaryIndex;
+use crate::storage::engines_common::fs_utils::{self, UniqueId};
+use crate::storage::engines_common::Entry;
 use crate::storage::types::{PKShared, PVShared, PrimaryKey, SubValue, SubValueSpec};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;

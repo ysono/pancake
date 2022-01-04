@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "*"
 derive_more = "*"
+hashbag = "0.1"
 hyper = { version = "*", features = ["full"] }
 itertools = "*"
 num-derive = "0.3"
@@ -15,8 +16,10 @@ num-traits = "0.2"
 owning_ref = "0.4"
 regex = "*"
 routerify = "*"
-tokio = { version = "1", features = ["full"] }
+shorthand = "0.1"
+tokio = { version = "1.15", features = ["full"] }
 
 [dev-dependencies]
+async-trait = "0.1"
 rand = "*"
 rusty-hook = "^0.11.0"

@@ -65,20 +65,26 @@ impl Ord for SVPKShared {
     }
 }
 
-/* SVPKShared is comparable against SubValue. */
-impl PartialEq<SubValue> for SVPKShared {
-    fn eq(&self, other: &SubValue) -> bool {
-        (&self.sv as &SubValue).eq(other)
+/* SVPKShared is comparable against {SubValue, &SubValue, etc}. */
+impl<O> PartialEq<O> for SVPKShared
+where
+    O: Borrow<SubValue>,
+{
+    fn eq(&self, other: &O) -> bool {
+        (&self.sv as &SubValue).eq(other.borrow())
     }
 }
-impl PartialOrd<SubValue> for SVPKShared {
+impl<O> PartialOrd<O> for SVPKShared
+where
+    O: Borrow<SubValue>,
+{
     /// In case `self SV == param SV`, the partial ordering is undefined and depends on the context:
     /// - When seeking the lower bound, self is greater than param.
     /// - When seeking the upper bound, self is greater than param.
     ///
     /// Caller must call `.unwrap_or(Ordering::Greater)` or `.unwrap_or(Ordering::Less)`, accordingly.
-    fn partial_cmp(&self, other: &SubValue) -> Option<Ordering> {
-        match (&self.sv as &SubValue).cmp(other) {
+    fn partial_cmp(&self, other: &O) -> Option<Ordering> {
+        match (&self.sv as &SubValue).cmp(other.borrow()) {
             Ordering::Equal => None,
             ord => Some(ord),
         }

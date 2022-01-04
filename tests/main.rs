@@ -1,18 +1,24 @@
 use anyhow::Result;
-use pancake::storage::engine_serial::db::DB;
+use pancake::storage::engine_serial::db::DB as SerialDb;
+use pancake::storage::engine_ssi::DB as SsiDb;
 use std::env;
 use std::fs;
+use std::sync::atomic::Ordering;
 
 mod storage;
-use storage::{primary, secondary};
+use storage::concurrent_txns::test_concurrent_txns;
+use storage::helpers::one_stmt::{OneStmtSerialDbAdaptor, OneStmtSsiDbAdaptor};
+use storage::individual_stmts::test_stmts_serially;
 
-#[test]
-fn test_main() -> Result<()> {
-    let db_dir = env::temp_dir().join("pancake");
-    if db_dir.exists() {
+#[tokio::test]
+async fn test_main() -> Result<()> {
+    let parent_dir = env::temp_dir().join("pancake");
+    let serial_db_dir = parent_dir.join("serial");
+    let ssi_db_dir = parent_dir.join("ssi");
+    if parent_dir.exists() {
         /* Don't remove the dir itself, so that symbolic links remain valid.
         This is for tester's convenience only.*/
-        for sub in fs::read_dir(&db_dir)? {
+        for sub in fs::read_dir(&parent_dir)? {
             let sub = sub?.path();
             let meta = fs::metadata(&sub)?;
             if meta.is_file() {
@@ -22,15 +28,22 @@ fn test_main() -> Result<()> {
             }
         }
     }
-    let mut db = DB::load_or_new(db_dir)?;
 
-    primary::put_del_get_getrange(&mut db)?;
-    primary::nonexistent(&mut db)?;
-    primary::zero_byte_value(&mut db)?;
-    primary::tuple(&mut db)?;
+    let mut serial_db = SerialDb::load_or_new(serial_db_dir)?;
+    let mut serial_db_adap = OneStmtSerialDbAdaptor { db: &mut serial_db };
 
-    secondary::whole::delete_create_get(&mut db)?;
-    secondary::partial::delete_create_get(&mut db)?;
+    let (ssi_db, ssi_gc_job_fut) = SsiDb::load_db_and_gc_job(ssi_db_dir)?;
+    let ssi_gc_task = tokio::spawn(ssi_gc_job_fut);
+    let mut ssi_db_adap = OneStmtSsiDbAdaptor { db: &ssi_db };
+
+    test_stmts_serially(&mut serial_db_adap).await?;
+    test_stmts_serially(&mut ssi_db_adap).await?;
+
+    test_concurrent_txns(&ssi_db).await?;
+
+    ssi_db.is_terminating().store(true, Ordering::SeqCst);
+    ssi_db.send_job_cv();
+    ssi_gc_task.await??;
 
     Ok(())
 }

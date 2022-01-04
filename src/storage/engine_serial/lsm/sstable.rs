@@ -1,5 +1,5 @@
 use crate::ds_n_a::bisect;
-use crate::storage::engine_serial::lsm::Entry;
+use crate::storage::engines_common::Entry;
 use crate::storage::serde::{
     DatumReader, DatumWriter, KeyValueRangeIterator, OptDatum, ReadResult, Ser, Serializable,
 };

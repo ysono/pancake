@@ -26,6 +26,18 @@ impl PartialOrd<PrimaryKey> for PKShared {
     }
 }
 
+/* PKShared is comparable against &PrimaryKey. */
+impl PartialEq<&PrimaryKey> for PKShared {
+    fn eq(&self, other: &&PrimaryKey) -> bool {
+        (self as &PrimaryKey).eq(other)
+    }
+}
+impl PartialOrd<&PrimaryKey> for PKShared {
+    fn partial_cmp(&self, other: &&PrimaryKey) -> Option<Ordering> {
+        (self as &PrimaryKey).partial_cmp(other)
+    }
+}
+
 /* PKShared is Serializable. */
 impl Ser for PKShared {
     fn ser<W: Write>(&self, w: &mut DatumWriter<W>) -> Result<WriteLen> {

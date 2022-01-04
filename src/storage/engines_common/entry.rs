@@ -1,6 +1,8 @@
+use crate::ds_n_a::cmp::TryPartialOrd;
 use crate::storage::serde::OptDatum;
 use anyhow::{anyhow, Result};
 use std::borrow::Borrow;
+use std::cmp::Ordering;
 
 /// [`Entry`] is the API for the content of the DB.
 ///
@@ -83,6 +85,21 @@ impl<'a, K, V> Entry<'a, K, OptDatum<V>> {
                 Ok((_k, OptDatum::Tombstone)) => None,
                 Ok((k, OptDatum::Some(v))) => Some(Entry::Own(Ok((k, v)))),
             },
+        }
+    }
+}
+
+impl<K, V, O> TryPartialOrd<O> for Entry<'_, K, V>
+where
+    K: PartialOrd<O>,
+{
+    fn try_partial_cmp(&self, other: &O) -> Result<Option<Ordering>> {
+        match self {
+            Self::Ref((k, _)) => Ok(k.partial_cmp(&other)),
+            Self::Own(res) => res
+                .as_ref()
+                .map_err(|e| anyhow!(e.to_string()))
+                .map(|(k, _)| k.partial_cmp(other)),
         }
     }
 }

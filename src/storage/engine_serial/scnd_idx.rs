@@ -1,4 +1,5 @@
-use crate::storage::engine_serial::lsm::{Entry, LSMTree};
+use crate::storage::engine_serial::lsm::LSMTree;
+use crate::storage::engines_common::Entry;
 use crate::storage::types::{PKShared, PVShared, SVPKShared, SubValue, SubValueSpec};
 use anyhow::Result;
 use std::fs::{self, File, OpenOptions};

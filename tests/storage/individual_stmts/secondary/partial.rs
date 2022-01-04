@@ -1,7 +1,6 @@
-use super::super::helpers::gen;
+use super::super::super::helpers::{gen, one_stmt::OneStmtDbAdaptor};
 use super::helper_verify::verify_get;
 use anyhow::Result;
-use pancake::storage::engine_serial::db::DB;
 use pancake::storage::serde::{Datum, DatumType};
 use pancake::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
 use std::sync::Arc;
@@ -58,34 +57,34 @@ fn gen_sv_tup(sv_i: i64, sv_s: &str) -> SubValue {
     ]))
 }
 
-fn put(db: &mut DB, pk: &str, pv_i: i64, pv_s: &str) -> Result<()> {
+async fn put(db: &mut impl OneStmtDbAdaptor, pk: &str, pv_i: i64, pv_s: &str) -> Result<()> {
     let (pk, pv) = gen_pkv(pk, pv_i, pv_s);
-    db.put(Arc::new(pk), Some(Arc::new(pv)))
+    db.put(Arc::new(pk), Some(Arc::new(pv))).await
 }
 
-fn del(db: &mut DB, pk: &str) -> Result<()> {
+async fn del(db: &mut impl OneStmtDbAdaptor, pk: &str) -> Result<()> {
     let pk = gen::gen_str_pk(pk);
-    db.put(Arc::new(pk), None)
+    db.put(Arc::new(pk), None).await
 }
 
-pub fn delete_create_get(db: &mut DB) -> Result<()> {
+pub async fn delete_create_get(db: &mut impl OneStmtDbAdaptor) -> Result<()> {
     let spec_str = Arc::new(spec_1_2_str());
     let spec_tup = Arc::new(spec_1_tup());
 
-    db.delete_scnd_idx(&spec_str)?;
-    db.delete_scnd_idx(&spec_tup)?;
+    db.delete_scnd_idx(&spec_str).await?;
+    db.delete_scnd_idx(&spec_tup).await?;
 
-    verify_get(db, &spec_str, None, None, Err(()))?;
-    verify_get(db, &spec_tup, None, None, Err(()))?;
+    verify_get(db, &spec_str, None, None, Err(())).await?;
+    verify_get(db, &spec_tup, None, None, Err(())).await?;
 
-    put(db, "complex.4", 40, "complex-subval")?;
-    put(db, "complex.3", 30, "complex-subval")?;
+    put(db, "complex.4", 40, "complex-subval").await?;
+    put(db, "complex.3", 30, "complex-subval").await?;
 
-    db.create_scnd_idx(Arc::clone(&spec_str))?;
-    db.create_scnd_idx(Arc::clone(&spec_tup))?;
+    db.create_scnd_idx(Arc::clone(&spec_str)).await?;
+    db.create_scnd_idx(Arc::clone(&spec_tup)).await?;
 
-    put(db, "complex.2", 20, "complex-subval")?;
-    put(db, "complex.1", 10, "complex-subval")?;
+    put(db, "complex.2", 20, "complex-subval").await?;
+    put(db, "complex.1", 10, "complex-subval").await?;
 
     verify_get(
         db,
@@ -98,7 +97,8 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
             gen_pkv("complex.3", 30, "complex-subval"),
             gen_pkv("complex.4", 40, "complex-subval"),
         ]),
-    )?;
+    )
+    .await?;
 
     verify_get(
         db,
@@ -111,7 +111,8 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
             gen_pkv("complex.3", 30, "complex-subval"),
             gen_pkv("complex.4", 40, "complex-subval"),
         ]),
-    )?;
+    )
+    .await?;
 
     verify_get(
         db,
@@ -123,7 +124,8 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
             gen_pkv("complex.3", 30, "complex-subval"),
             gen_pkv("complex.4", 40, "complex-subval"),
         ]),
-    )?;
+    )
+    .await?;
 
     verify_get(
         db,
@@ -135,7 +137,8 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
             gen_pkv("complex.2", 20, "complex-subval"),
             gen_pkv("complex.3", 30, "complex-subval"),
         ]),
-    )?;
+    )
+    .await?;
 
     verify_get(
         db,
@@ -143,9 +146,10 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
         Some(gen_sv_tup(20, "complex-")),
         Some(gen_sv_tup(30, "complex-")),
         Ok(vec![gen_pkv("complex.2", 20, "complex-subval")]),
-    )?;
+    )
+    .await?;
 
-    del(db, "complex.3")?;
+    del(db, "complex.3").await?;
 
     verify_get(
         db,
@@ -157,7 +161,8 @@ pub fn delete_create_get(db: &mut DB) -> Result<()> {
             gen_pkv("complex.2", 20, "complex-subval"),
             gen_pkv("complex.4", 40, "complex-subval"),
         ]),
-    )?;
+    )
+    .await?;
 
     Ok(())
 }

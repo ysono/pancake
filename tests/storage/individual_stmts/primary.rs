@@ -1,13 +1,12 @@
-use super::helpers::gen;
+use super::super::helpers::{gen, one_stmt::OneStmtDbAdaptor};
 use anyhow::Result;
-use pancake::storage::engine_serial::db::DB;
 use pancake::storage::serde::Datum;
 use pancake::storage::types::{PKShared, PVShared, PrimaryKey, Value};
 use rand;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-pub fn put_del_get_getrange(db: &mut DB) -> Result<()> {
+pub async fn put_del_get_getrange(db: &mut impl OneStmtDbAdaptor) -> Result<()> {
     let mut pk_to_expected_pv = BTreeMap::<PKShared, Option<PVShared>>::new();
 
     let data_count = 100usize;
@@ -20,19 +19,19 @@ pub fn put_del_get_getrange(db: &mut DB) -> Result<()> {
             let pk = Arc::new(gen::gen_str_pk(format!("key{}", i)));
             let pv = Arc::new(gen::gen_str_pv(format!("val{}", i)));
 
-            db.put(pk.clone(), Some(pv.clone()))?;
+            db.put(pk.clone(), Some(pv.clone())).await?;
 
             let keep = rand::random::<f32>() < 0.7;
             if keep {
                 pk_to_expected_pv.insert(pk, Some(pv));
             } else {
-                db.put(pk.clone(), None)?;
+                db.put(pk.clone(), None).await?;
                 pk_to_expected_pv.insert(pk, None);
             }
         }
 
         for (pk, exp_pv) in pk_to_expected_pv.iter() {
-            let act_pv = db.get_pk_one(pk).map(|entry| entry.take_v()).transpose()?;
+            let act_pv = db.get_pk_one(pk).await?.map(|(_k, v)| v);
             assert_eq!(*exp_pv, act_pv);
         }
     }
@@ -51,36 +50,35 @@ pub fn put_del_get_getrange(db: &mut DB) -> Result<()> {
 
         let act_range = db
             .get_pk_range(Some(&exp_range[0].0), Some(&exp_range.last().unwrap().0))
-            .map(|entry| entry.take_kv())
-            .collect::<Result<Vec<_>>>()?;
+            .await?;
         assert_eq!(exp_range, act_range);
     }
 
     Ok(())
 }
 
-pub fn nonexistent(db: &mut DB) -> Result<()> {
+pub async fn nonexistent(db: &mut impl OneStmtDbAdaptor) -> Result<()> {
     let pk = gen::gen_str_pk("nonexistent");
 
-    let actual = db.get_pk_one(&pk);
+    let actual = db.get_pk_one(&pk).await?;
     assert!(actual.is_none());
 
     Ok(())
 }
 
-pub fn zero_byte_value(db: &mut DB) -> Result<()> {
+pub async fn zero_byte_value(db: &mut impl OneStmtDbAdaptor) -> Result<()> {
     let pk = Arc::new(gen::gen_str_pk("empty"));
     let pv = Arc::new(Value(Datum::Bytes(vec![])));
 
-    db.put(pk.clone(), Some(pv.clone()))?;
+    db.put(pk.clone(), Some(pv.clone())).await?;
 
-    let actual = db.get_pk_one(&pk).map(|entry| entry.take_v()).transpose()?;
+    let actual = db.get_pk_one(&pk).await?.map(|(_k, v)| v);
     assert_eq!(Some(pv), actual);
 
     Ok(())
 }
 
-pub fn tuple(db: &mut DB) -> Result<()> {
+pub async fn tuple(db: &mut impl OneStmtDbAdaptor) -> Result<()> {
     let pk = {
         let dat = Datum::Tuple(vec![
             Datum::Bytes(vec![16u8, 17u8, 18u8]),
@@ -104,9 +102,9 @@ pub fn tuple(db: &mut DB) -> Result<()> {
         Arc::new(Value(dat))
     };
 
-    db.put(pk.clone(), Some(pv.clone()))?;
+    db.put(pk.clone(), Some(pv.clone())).await?;
 
-    let actual = db.get_pk_one(&pk).map(|entry| entry.take_v()).transpose()?;
+    let actual = db.get_pk_one(&pk).await?.map(|(_k, v)| v);
     assert_eq!(Some(pv), actual);
 
     Ok(())

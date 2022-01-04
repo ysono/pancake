@@ -1,8 +1,9 @@
-mod handlers;
-pub(self) mod query;
-pub(self) mod resp;
+mod engine_serial;
+mod engine_ssi;
+mod resp;
 
-use crate::storage::engine_serial::db::DB;
+use crate::storage::engine_serial::db::DB as SerialDb;
+use crate::storage::engine_ssi::DB as SsiDb;
 use anyhow::{Error, Result};
 use hyper::{Body, Request, Response, Server, StatusCode};
 use routerify::prelude::*;
@@ -28,16 +29,19 @@ async fn error_handler(err: routerify::RouteError, _: RequestInfo) -> Response<B
         .unwrap()
 }
 
-fn router(db: Arc<RwLock<DB>>) -> Router<Body, Error> {
-    let rb = Router::builder()
+fn router(serial_db: Arc<RwLock<SerialDb>>, ssi_db: Arc<SsiDb>) -> Router<Body, Error> {
+    let mut rb = Router::builder()
         .middleware(Middleware::pre(logger))
         .err_handler_with_info(error_handler)
-        .data(db);
-    handlers::add_routers(rb).build().unwrap()
+        .data(serial_db)
+        .data(ssi_db);
+    rb = engine_serial::handlers::add_routes(rb);
+    rb = engine_ssi::handlers::add_routes(rb);
+    rb.build().unwrap()
 }
 
-pub async fn main(db: Arc<RwLock<DB>>) {
-    let router = router(db);
+pub async fn main(serial_db: Arc<RwLock<SerialDb>>, ssi_db: Arc<SsiDb>) {
+    let router = router(serial_db, ssi_db);
 
     let service = RouterService::new(router).unwrap();
 

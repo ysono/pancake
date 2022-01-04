@@ -1,20 +1,24 @@
-use super::{query, resp};
+use super::query;
 use crate::frontend::api::{Operation, SearchRange, Statement};
+use crate::frontend::http::resp;
 use crate::frontend::query::basic::{self as query_basic};
-use crate::storage::engine_serial::db::DB;
+use crate::storage::engine_ssi::oper::scnd_idx_mod::{
+    self, CreateScndIdxResult, DeleteScndIdxResult,
+};
+use crate::storage::engine_ssi::DB;
 use crate::storage::serde::Datum;
 use crate::storage::types::{PrimaryKey, Value};
 use anyhow::{Error, Result};
 use hyper::{Body, Request, Response};
 use routerify::prelude::*;
 use routerify::RouterBuilder;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
-pub fn add_routers(rb: RouterBuilder<Body, Error>) -> RouterBuilder<Body, Error> {
-    rb.get("/key/:key", get_handler)
-        .put("/key/:key", put_handler)
-        .delete("/key/:key", delete_handler)
-        .post("/query", query_handler)
+pub fn add_routes(rb: RouterBuilder<Body, Error>) -> RouterBuilder<Body, Error> {
+    rb.get("/ssi/key/:key", get_handler)
+        .put("/ssi/key/:key", put_handler)
+        .delete("/ssi/key/:key", delete_handler)
+        .post("/ssi/query", query_handler)
 }
 
 async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
@@ -23,9 +27,9 @@ async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
 
     let stmt = Statement::GetPK(SearchRange::One(key));
 
-    let db = req.data::<Arc<RwLock<DB>>>().unwrap();
+    let db = req.data::<Arc<DB>>().unwrap();
 
-    query::query(db, stmt)
+    query::query(db, stmt).await
 }
 
 async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
@@ -40,9 +44,9 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
 
     let stmt = Statement::Put(key, Some(val));
 
-    let db = parts.data::<Arc<RwLock<DB>>>().unwrap();
+    let db = parts.data::<Arc<DB>>().unwrap();
 
-    query::query(db, stmt)
+    query::query(db, stmt).await
 }
 
 async fn delete_handler(req: Request<Body>) -> Result<Response<Body>> {
@@ -51,9 +55,9 @@ async fn delete_handler(req: Request<Body>) -> Result<Response<Body>> {
 
     let stmt = Statement::Put(key, None);
 
-    let db = req.data::<Arc<RwLock<DB>>>().unwrap();
+    let db = req.data::<Arc<DB>>().unwrap();
 
-    query::query(db, stmt)
+    query::query(db, stmt).await
 }
 
 async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
@@ -62,27 +66,23 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
     let body = hyper::body::to_bytes(body).await?;
     let body = String::from_utf8(body.into_iter().collect())?;
 
-    let db = parts.data::<Arc<RwLock<DB>>>().unwrap();
+    let db = parts.data::<Arc<DB>>().unwrap();
 
     match query_basic::parse(&body)? {
         Operation::Query(stmt) => {
-            return query::query(db, stmt);
+            return query::query(db, stmt).await;
         }
         Operation::CreateScndIdx(spec) => {
-            let mut db = db.write().unwrap();
-            let res = db.create_scnd_idx(Arc::new(spec));
-            match res {
+            match scnd_idx_mod::create_scnd_idx(&db, Arc::new(spec)).await {
                 Err(e) => return resp::err(e),
-                Ok(()) => return resp::no_content(),
+                Ok(CreateScndIdxResult::NoOp(msg)) => return resp::ok(msg),
+                Ok(CreateScndIdxResult::Success) => return resp::no_content(),
             }
         }
-        Operation::DelScndIdx(spec) => {
-            let mut db = db.write().unwrap();
-            let res = db.delete_scnd_idx(&spec);
-            match res {
-                Err(e) => return resp::err(e),
-                Ok(()) => return resp::no_content(),
-            }
-        }
+        Operation::DelScndIdx(spec) => match scnd_idx_mod::delete_scnd_idx(&db, &spec).await {
+            Err(e) => return resp::err(e),
+            Ok(DeleteScndIdxResult::NoOp(msg)) => return resp::ok(msg),
+            Ok(DeleteScndIdxResult::Success) => return resp::no_content(),
+        },
     }
 }
