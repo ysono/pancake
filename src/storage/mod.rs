@@ -1,6 +1,6 @@
 pub mod db;
+pub mod fs_utils;
 pub mod lsm;
 pub mod scnd_idx;
 pub mod serde;
 pub mod types;
-pub mod utils;

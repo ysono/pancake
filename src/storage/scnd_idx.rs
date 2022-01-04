@@ -1,6 +1,5 @@
 use crate::storage::lsm::{Entry, LSMTree};
 use crate::storage::types::{PKShared, PVShared, SVPKShared, SubValue, SubValueSpec};
-use crate::storage::utils;
 use anyhow::Result;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write};
@@ -50,11 +49,10 @@ impl SecondaryIndex {
     }
 
     pub fn new<P: AsRef<Path>>(
-        all_scnd_idxs_dir_path: P,
+        scnd_idx_dir_path: P,
         spec: Arc<SubValueSpec>,
         prim_lsm: &LSMTree<PKShared, PVShared>,
     ) -> Result<Self> {
-        let scnd_idx_dir_path = utils::new_timestamped_path(&all_scnd_idxs_dir_path, "");
         let spec_file_path = Self::spec_file_path(&scnd_idx_dir_path);
         let lsm_dir_path = Self::lsm_dir_path(&scnd_idx_dir_path);
         fs::create_dir_all(&lsm_dir_path)?;
@@ -78,13 +76,13 @@ impl SecondaryIndex {
         }
 
         Ok(Self {
-            dir_path: scnd_idx_dir_path,
+            dir_path: scnd_idx_dir_path.as_ref().into(),
             spec,
             lsm: scnd_lsm,
         })
     }
 
-    pub fn remove_files(&self) -> Result<()> {
+    pub fn remove_dir(&self) -> Result<()> {
         fs::remove_dir_all(&self.dir_path)?;
         Ok(())
     }

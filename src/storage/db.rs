@@ -1,42 +1,51 @@
+use crate::ds_n_a::persisted_u64::PersistedU64;
+use crate::storage::fs_utils::{self, UniqueId};
 use crate::storage::lsm::{Entry, LSMTree};
 use crate::storage::scnd_idx::SecondaryIndex;
 use crate::storage::types::{PKShared, PVShared, PrimaryKey, SubValue, SubValueSpec};
-use crate::storage::utils;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-const PRIM_LSM_DIRNAME: &'static str = "prim_lsm";
-const ALL_SCND_IDXS_DIRNAME: &'static str = "scnd_idxs";
+const PRIM_LSM_DIR_NAME: &str = "prim_lsm";
+const ALL_SCND_IDXS_DIR_NAME: &str = "scnd_idxs";
+const UNIQUE_ID_FILE_NAME: &str = "unique_id.u64";
 
 pub struct DB {
     prim_lsm: LSMTree<PKShared, PVShared>,
-    all_scnd_idxs_dir: PathBuf,
     scnd_idxs: HashMap<Arc<SubValueSpec>, SecondaryIndex>,
+    all_scnd_idxs_dir: PathBuf,
+    unique_id: PersistedU64<UniqueId>,
 }
 
 impl DB {
-    pub fn load_or_new<P: AsRef<Path>>(path: P) -> Result<DB> {
-        let prim_lsm = LSMTree::load_or_new(path.as_ref().join(PRIM_LSM_DIRNAME))?;
-
-        let all_scnd_idxs_dir = path.as_ref().join(ALL_SCND_IDXS_DIRNAME);
+    pub fn load_or_new<P: AsRef<Path>>(db_dir_path: P) -> Result<DB> {
+        let prim_lsm_dir_path = db_dir_path.as_ref().join(PRIM_LSM_DIR_NAME);
+        let all_scnd_idxs_dir = db_dir_path.as_ref().join(ALL_SCND_IDXS_DIR_NAME);
+        let unique_id_path = db_dir_path.as_ref().join(UNIQUE_ID_FILE_NAME);
         fs::create_dir_all(&all_scnd_idxs_dir)?;
 
-        let scnd_idxs = utils::read_dir(&all_scnd_idxs_dir)?
-            .into_iter()
-            .map(|scnd_idx_dir| {
-                let scnd_idx = SecondaryIndex::load(scnd_idx_dir)?;
-                let spec = scnd_idx.spec().clone();
-                Ok((spec, scnd_idx))
+        let prim_lsm = LSMTree::load_or_new(prim_lsm_dir_path)?;
+
+        let scnd_idxs = fs_utils::read_dir(&all_scnd_idxs_dir)?
+            .map(|res_path| {
+                res_path.and_then(|scnd_idx_dir_path| {
+                    let scnd_idx = SecondaryIndex::load(scnd_idx_dir_path)?;
+                    let spec = scnd_idx.spec().clone();
+                    Ok((spec, scnd_idx))
+                })
             })
             .collect::<Result<HashMap<_, _>>>()?;
 
+        let unique_id = PersistedU64::load_or_new(unique_id_path)?;
+
         let db = DB {
             prim_lsm,
-            all_scnd_idxs_dir,
             scnd_idxs,
+            all_scnd_idxs_dir,
+            unique_id,
         };
         Ok(db)
     }
@@ -86,8 +95,11 @@ impl DB {
             return Ok(());
         }
 
-        let scnd_idx =
-            SecondaryIndex::new(&self.all_scnd_idxs_dir, Arc::clone(&spec), &self.prim_lsm)?;
+        let id = self.unique_id.get_and_inc()?;
+        let scnd_idx_dir_path = self
+            .all_scnd_idxs_dir
+            .join(format!("scnd_idx-{}", id.to_shortform_string()));
+        let scnd_idx = SecondaryIndex::new(scnd_idx_dir_path, Arc::clone(&spec), &self.prim_lsm)?;
         self.scnd_idxs.insert(spec, scnd_idx);
 
         Ok(())
@@ -96,7 +108,7 @@ impl DB {
     pub fn delete_scnd_idx(&mut self, spec: &SubValueSpec) -> Result<()> {
         let scnd_idx = self.scnd_idxs.remove(spec);
         if let Some(scnd_idx) = scnd_idx {
-            scnd_idx.remove_files()?;
+            scnd_idx.remove_dir()?;
         }
 
         Ok(())

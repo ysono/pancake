@@ -1,7 +1,6 @@
-use super::{LSMTree, SSTABLES_DIR_NAME};
+use super::LSMTree;
 use crate::storage::lsm::{merging, Entry, SSTable};
 use crate::storage::serde::{OptDatum, Serializable};
-use crate::storage::utils;
 use anyhow::Result;
 use std::mem;
 use std::path::PathBuf;
@@ -25,9 +24,11 @@ where
     }
 
     fn flush_memtable(&mut self) -> Result<()> {
+        let sst_path = self.format_new_sstable_file_path()?;
+
         let entries = self.memlog.get_whole_range().map(Entry::Ref);
-        let path = self.format_new_sstable_file_path();
-        let new_sst = SSTable::new(entries, path)?;
+
+        let new_sst = SSTable::new(entries, sst_path)?;
 
         self.sstables.push(new_sst);
 
@@ -38,6 +39,8 @@ where
 
     /// For now, always compact all SSTables into one SSTable.
     fn compact_sstables(&mut self) -> Result<()> {
+        let sst_path = self.format_new_sstable_file_path()?;
+
         let entries = merging::merge_sstables(&self.sstables[..], None, None)
             // skip tombstones
             .filter(|res| match res {
@@ -48,8 +51,8 @@ where
                 },
             })
             .map(Entry::Own);
-        let path = self.format_new_sstable_file_path();
-        let new_sst = SSTable::new(entries, path)?;
+
+        let new_sst = SSTable::new(entries, sst_path)?;
 
         let new_ssts = vec![new_sst];
         let old_ssts = mem::replace(&mut self.sstables, new_ssts);
@@ -60,8 +63,11 @@ where
         Ok(())
     }
 
-    fn format_new_sstable_file_path(&self) -> PathBuf {
-        let ssts_dir_path = self.lsm_dir_path.join(SSTABLES_DIR_NAME);
-        utils::new_timestamped_path(ssts_dir_path, "kv")
+    fn format_new_sstable_file_path(&mut self) -> Result<PathBuf> {
+        let id = self.unique_id.get_and_inc()?;
+        let sst_path = self
+            .sstables_dir_path
+            .join(format!("{}.kv", id.to_alphanum_orderable_string()));
+        Ok(sst_path)
     }
 }

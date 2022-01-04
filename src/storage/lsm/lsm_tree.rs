@@ -1,11 +1,13 @@
+use crate::ds_n_a::persisted_u64::PersistedU64;
+use crate::storage::fs_utils::{self, UniqueId};
 use crate::storage::lsm::{MemLog, SSTable};
 use crate::storage::serde::{OptDatum, Serializable};
-use crate::storage::utils;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-const COMMIT_LOG_FILE_NAME: &'static str = "commit_log.kv";
-const SSTABLES_DIR_NAME: &'static str = "sstables";
+const LOG_FILE_NAME: &str = "commit_log.kv";
+const SSTABLES_DIR_NAME: &str = "sstables";
+const UNIQUE_ID_FILE_NAME: &str = "unique_id.u64";
 
 #[allow(rustdoc::private_intra_doc_links)]
 /// An LSMTree is an abstraction of a sorted dictionary.
@@ -32,9 +34,10 @@ const SSTABLES_DIR_NAME: &'static str = "sstables";
 ///
 /// When the same key exists in multiple internal tables, only the result from the newest table is retrieved.
 pub struct LSMTree<K, V> {
-    lsm_dir_path: PathBuf,
     memlog: MemLog<K, V>,
     sstables: Vec<SSTable<K, V>>,
+    sstables_dir_path: PathBuf,
+    unique_id: PersistedU64<UniqueId>,
 }
 
 impl<K, V> LSMTree<K, V>
@@ -43,21 +46,25 @@ where
     OptDatum<V>: Serializable,
 {
     pub fn load_or_new<P: AsRef<Path>>(lsm_dir_path: P) -> Result<Self> {
-        let log_file_path = lsm_dir_path.as_ref().join(COMMIT_LOG_FILE_NAME);
-        let ssts_dir_path = lsm_dir_path.as_ref().join(SSTABLES_DIR_NAME);
-        std::fs::create_dir_all(&ssts_dir_path)?;
+        let log_file_path = lsm_dir_path.as_ref().join(LOG_FILE_NAME);
+        let sstables_dir_path = lsm_dir_path.as_ref().join(SSTABLES_DIR_NAME);
+        let unique_id_file_path = lsm_dir_path.as_ref().join(UNIQUE_ID_FILE_NAME);
+        std::fs::create_dir_all(&sstables_dir_path)?;
 
         let memlog = MemLog::load_or_new(&log_file_path)?;
 
-        let sstables = utils::read_dir_sorted(ssts_dir_path)?
+        let sstables = fs_utils::read_dir_sorted(&sstables_dir_path)?
             .into_iter()
             .map(SSTable::load)
             .collect::<Result<Vec<_>>>()?;
 
+        let unique_id = PersistedU64::load_or_new(unique_id_file_path)?;
+
         Ok(Self {
-            lsm_dir_path: lsm_dir_path.as_ref().into(),
             memlog,
             sstables,
+            sstables_dir_path,
+            unique_id,
         })
     }
 }

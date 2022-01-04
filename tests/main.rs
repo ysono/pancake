@@ -1,6 +1,5 @@
 use anyhow::Result;
 use pancake::storage::db::DB;
-use pancake::storage::utils;
 use std::env;
 use std::fs;
 
@@ -9,15 +8,21 @@ use storage::{primary, secondary};
 
 #[test]
 fn test_main() -> Result<()> {
-    let dir = env::temp_dir().join("pancake");
-    if dir.exists() {
+    let db_dir = env::temp_dir().join("pancake");
+    if db_dir.exists() {
         /* Don't remove the dir itself, so that symbolic links remain valid.
         This is for tester's convenience only.*/
-        for subdir in utils::read_dir(&dir)? {
-            fs::remove_dir_all(subdir)?;
+        for sub in fs::read_dir(&db_dir)? {
+            let sub = sub?.path();
+            let meta = fs::metadata(&sub)?;
+            if meta.is_file() {
+                fs::remove_file(sub)?;
+            } else {
+                fs::remove_dir_all(sub)?;
+            }
         }
     }
-    let mut db = DB::load_or_new(dir)?;
+    let mut db = DB::load_or_new(db_dir)?;
 
     primary::put_del_get_getrange(&mut db)?;
     primary::nonexistent(&mut db)?;
