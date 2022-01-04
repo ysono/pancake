@@ -14,6 +14,7 @@ pub struct Value(pub Datum);
 pub type PKShared = Arc<PrimaryKey>;
 pub type PVShared = Arc<Value>;
 
+/* PKShared is comparable against PrimaryKey. */
 impl PartialEq<PrimaryKey> for PKShared {
     fn eq(&self, other: &PrimaryKey) -> bool {
         (self as &PrimaryKey).eq(other)
@@ -25,6 +26,7 @@ impl PartialOrd<PrimaryKey> for PKShared {
     }
 }
 
+/* PKShared is Serializable. */
 impl Ser for PKShared {
     fn ser<W: Write>(&self, w: &mut DatumWriter<W>) -> Result<WriteLen> {
         w.ser_dat(self)
@@ -37,6 +39,7 @@ impl From<Datum> for PKShared {
 }
 impl Serializable for PKShared {}
 
+/* OptDatum<PVShared> is Serializable. */
 impl Ser for OptDatum<PVShared> {
     fn ser<W: Write>(&self, w: &mut DatumWriter<W>) -> Result<WriteLen> {
         match self {

@@ -12,26 +12,26 @@ pub fn query(db: &Arc<RwLock<DB>>, stmt: Statement) -> Result<Response<Body>> {
             let db = db.read().unwrap();
             match db.get_pk_one(&pk) {
                 None => return resp::no_content(),
-                Some(entry) => match entry.borrow_res() {
+                Some(entry) => match entry.try_borrow() {
                     Err(e) => return resp::err(e),
                     Ok((pk, pv)) => {
-                        let mut s = String::new();
-                        pkpv_to_str(&mut s, &pk, &pv);
-                        return resp::ok(s);
+                        let mut body = String::new();
+                        pkpv_to_str(&mut body, &pk, &pv);
+                        return resp::ok(body);
                     }
                 },
             }
         }
         Statement::GetPK(SearchRange::Range { lo, hi }) => {
             let db = db.read().unwrap();
-            let mut s = String::new();
+            let mut body = String::new();
             for entry in db.get_pk_range(lo.as_ref(), hi.as_ref()) {
-                match entry.borrow_res() {
+                match entry.try_borrow() {
                     Err(e) => return resp::err(e),
-                    Ok((pk, pv)) => pkpv_to_str(&mut s, pk, pv),
+                    Ok((pk, pv)) => pkpv_to_str(&mut body, pk, pv),
                 }
             }
-            return resp::ok(s);
+            return resp::ok(body);
         }
         Statement::GetSV(spec, sv_range) => {
             let (sv_lo, sv_hi) = sv_range.as_ref();
@@ -40,14 +40,14 @@ pub fn query(db: &Arc<RwLock<DB>>, stmt: Statement) -> Result<Response<Body>> {
             match res_iter {
                 Err(e) => return resp::err(e),
                 Ok(entries) => {
-                    let mut s = String::new();
+                    let mut body = String::new();
                     for entry in entries {
-                        match entry.borrow_res() {
+                        match entry.try_borrow() {
                             Err(e) => return resp::err(e),
-                            Ok((pk, pv)) => pkpv_to_str(&mut s, pk, pv),
+                            Ok((pk, pv)) => pkpv_to_str(&mut body, pk, pv),
                         }
                     }
-                    return resp::ok(s);
+                    return resp::ok(body);
                 }
             }
         }
@@ -65,7 +65,7 @@ pub fn query(db: &Arc<RwLock<DB>>, stmt: Statement) -> Result<Response<Body>> {
     }
 }
 
-fn pkpv_to_str(s: &mut String, pk: &PrimaryKey, pv: &Value) {
-    let s2 = format!("Key:\r\n{:?}\r\nValue:\r\n{:?}\r\n", pk, pv);
-    s.push_str(&s2);
+fn pkpv_to_str(body: &mut String, pk: &PrimaryKey, pv: &Value) {
+    let s = format!("Key:\r\n{:?}\r\nValue:\r\n{:?}\r\n", pk, pv);
+    body.push_str(&s);
 }

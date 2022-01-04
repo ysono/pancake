@@ -54,9 +54,7 @@ where
     let deduped_entries = merged_entries.filter(move |(entry, _i)| match entry {
         Err(_) => return true,
         Ok((k, _)) => match prev_key.as_ref() {
-            Some(prv_k) if prv_k == k => {
-                return false;
-            }
+            Some(prv_k) if prv_k == k => return false,
             _ => {
                 prev_key = Some(k.clone());
                 return true;

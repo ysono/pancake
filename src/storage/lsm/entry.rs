@@ -1,4 +1,4 @@
-use crate::storage::serde::{OptDatum, Serializable};
+use crate::storage::serde::OptDatum;
 use anyhow::{anyhow, Result};
 use std::borrow::Borrow;
 
@@ -8,13 +8,13 @@ pub enum Entry<'a, K, V> {
 }
 
 impl<'a, K, V> Entry<'a, K, V> {
-    pub fn borrow_res(&'a self) -> Result<(&'a K, &'a V)> {
+    pub fn try_borrow(&'a self) -> Result<(&'a K, &'a V)> {
         match self {
             Self::Ref((k, v)) => Ok((k, v)),
             Self::Own(res) => res
                 .as_ref()
-                .map(|(k, v)| (k, v))
-                .or_else(|e| Err(anyhow!(e.to_string()))),
+                .map_err(|e| anyhow!(e.to_string()))
+                .map(|(k, v)| (k, v)),
         }
     }
 }
@@ -66,11 +66,7 @@ impl<'a, K, V> Entry<'a, K, V> {
     }
 }
 
-impl<'a, K, V> Entry<'a, K, OptDatum<V>>
-where
-    K: Clone,
-    OptDatum<V>: Serializable,
-{
+impl<'a, K, V> Entry<'a, K, OptDatum<V>> {
     pub fn to_option_entry(self) -> Option<Entry<'a, K, V>> {
         match self {
             Self::Ref((k, optdat_v)) => match optdat_v {

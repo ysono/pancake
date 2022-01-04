@@ -13,22 +13,22 @@ use std::iter;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
-#[derive(Clone, Copy)]
-struct FileOffset(u64);
-
-static SSTABLE_IDX_SPARSENESS: usize = 3;
+const FILE_OFFSETS_SPARSENESS: usize = 3;
 
 fn is_kv_sparsely_captured(entry_i: usize) -> bool {
-    entry_i % SSTABLE_IDX_SPARSENESS == SSTABLE_IDX_SPARSENESS - 1
+    entry_i % FILE_OFFSETS_SPARSENESS == FILE_OFFSETS_SPARSENESS - 1
 }
+
+#[derive(Clone, Copy)]
+struct FileOffset(u64);
 
 /// An SSTable is an abstraction of a sorted dictionary.
 /// An SSTable has these components:
 /// - A file which stores `(key, val_or_tombstone)` pairs, sorted by key, containing distinct keys.
 /// - An in-memory sorted structure that maps `{key: file_offset}` on sparsely captured keys. The offsets point to locations within the above file.
 pub struct SSTable<K, V> {
-    path: PathBuf,
     sparse_file_offsets: SparseFileOffsets<K>,
+    kv_file_path: PathBuf,
     _phant: PhantomData<V>,
 }
 
@@ -39,23 +39,23 @@ where
 {
     pub fn new<'a>(
         entries: impl Iterator<Item = Entry<'a, K, OptDatum<V>>>,
-        path: PathBuf,
+        kv_file_path: PathBuf,
     ) -> Result<Self>
     where
         K: 'a,
         V: 'a,
     {
-        let file = OpenOptions::new()
+        let kv_file = OpenOptions::new()
             .create_new(true)
             .write(true)
-            .open(&path)?;
-        let mut datum_writer = DatumWriter::from(BufWriter::new(file));
+            .open(&kv_file_path)?;
+        let mut datum_writer = DatumWriter::from(BufWriter::new(kv_file));
 
         let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
         let mut file_offset = FileOffset(0);
 
         for (entry_i, entry) in entries.enumerate() {
-            let (k_ref, v_ref) = entry.borrow_res()?;
+            let (k_ref, v_ref) = entry.try_borrow()?;
 
             let mut delta_offset = 0;
             delta_offset += *(k_ref.ser(&mut datum_writer)?);
@@ -72,15 +72,15 @@ where
         datum_writer.flush()?;
 
         Ok(Self {
-            path,
             sparse_file_offsets,
+            kv_file_path,
             _phant: PhantomData,
         })
     }
 
-    pub fn load(path: PathBuf) -> Result<Self> {
-        let file = File::open(&path)?;
-        let mut datum_reader = DatumReader::from(BufReader::new(file));
+    pub fn load(kv_file_path: PathBuf) -> Result<Self> {
+        let kv_file = File::open(&kv_file_path)?;
+        let mut datum_reader = DatumReader::from(BufReader::new(kv_file));
 
         let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
         let mut file_offset = FileOffset(0);
@@ -110,7 +110,7 @@ where
                     return Err(anyhow!(
                         "EOF while skipping a {} from {:?}.",
                         any::type_name::<V>(),
-                        path
+                        kv_file_path
                     ));
                 }
                 ReadResult::Some(delta_r_len, ()) => {
@@ -120,8 +120,8 @@ where
         }
 
         Ok(Self {
-            path,
             sparse_file_offsets,
+            kv_file_path,
             _phant: PhantomData,
         })
     }
@@ -149,7 +149,7 @@ where
     {
         let file_offset = self.sparse_file_offsets.nearest_preceding_file_offset(k_lo);
 
-        let mut res_file_iter = File::open(&self.path)
+        let mut res_file_iter = File::open(&self.kv_file_path)
             .and_then(|mut file| -> Result<File, _> {
                 file.seek(SeekFrom::Start(file_offset.0)).map(|_| file)
             })
@@ -170,7 +170,7 @@ where
     }
 
     pub fn remove_file(&self) -> Result<()> {
-        fs::remove_file(&self.path)?;
+        fs::remove_file(&self.kv_file_path)?;
         Ok(())
     }
 }
@@ -196,7 +196,7 @@ impl<K> SparseFileOffsets<K> {
         if mem_idx_right == 0 {
             FileOffset(0)
         } else {
-            let (_k, offset) = &self.0[mem_idx_right - 1];
+            let (_k, offset) = &self[mem_idx_right - 1];
             *offset
         }
     }

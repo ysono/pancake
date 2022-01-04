@@ -29,6 +29,7 @@ impl Deref for SVShared {
     }
 }
 
+/* SVShared is comparable against the same type. */
 impl PartialEq for SVShared {
     fn eq(&self, other: &SVShared) -> bool {
         (self as &SubValue).eq(other as &SubValue)

@@ -52,7 +52,7 @@ impl DB {
 
     pub fn put(&mut self, pk: PKShared, pv: Option<PVShared>) -> Result<()> {
         let opt_entry = self.prim_lsm.get_one(&pk);
-        let opt_res_pair = opt_entry.as_ref().map(|entry| entry.borrow_res());
+        let opt_res_pair = opt_entry.as_ref().map(|entry| entry.try_borrow());
         let opt_pair = opt_res_pair.transpose()?;
         let old_pv: Option<&PVShared> = opt_pair.map(|pair| pair.1);
 

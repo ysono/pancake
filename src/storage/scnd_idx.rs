@@ -67,7 +67,7 @@ impl SecondaryIndex {
 
         let mut scnd_lsm = LSMTree::load_or_new(&lsm_dir_path)?;
         for entry in prim_lsm.get_whole_range() {
-            let (_pk, pv) = entry.borrow_res()?;
+            let (_pk, pv) = entry.try_borrow()?;
             if let Some(sv) = spec.extract(pv) {
                 let (pk, pv) = entry.take_kv()?;
                 let svpk = SVPKShared { sv, pk };

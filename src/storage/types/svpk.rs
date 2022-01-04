@@ -14,6 +14,7 @@ pub struct SVPKShared {
     pub pk: PKShared,
 }
 
+/* SVPKShared is Serializable. */
 impl Ser for SVPKShared {
     fn ser<W: Write>(&self, w: &mut DatumWriter<W>) -> Result<WriteLen> {
         let data = [&self.sv as &Datum, &self.pk as &Datum];
@@ -38,6 +39,7 @@ impl TryFrom<Datum> for SVPKShared {
 }
 impl Serializable for SVPKShared {}
 
+/* SVPKShared can be converted (= Borrow + Into) into PKShared. */
 impl Borrow<PKShared> for SVPKShared {
     fn borrow(&self) -> &PKShared {
         &self.pk
@@ -49,6 +51,7 @@ impl Into<PKShared> for SVPKShared {
     }
 }
 
+/* SVPKShared is comparable against the same type. */
 impl PartialOrd for SVPKShared {
     fn partial_cmp(&self, other: &SVPKShared) -> Option<Ordering> {
         let ord = self.sv.cmp(&other.sv).then_with(|| self.pk.cmp(&other.pk));
@@ -61,6 +64,7 @@ impl Ord for SVPKShared {
     }
 }
 
+/* SVPKShared is comparable against SubValue. */
 impl PartialEq<SubValue> for SVPKShared {
     fn eq(&self, other: &SubValue) -> bool {
         (&self.sv as &SubValue).eq(other)

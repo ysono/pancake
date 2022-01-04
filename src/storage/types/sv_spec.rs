@@ -3,7 +3,7 @@ use crate::storage::types::{SVShared, Value};
 use anyhow::{anyhow, Result};
 use owning_ref::OwningRef;
 use std::any;
-use std::io::{Read, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::mem;
 use std::sync::Arc;
 
@@ -55,15 +55,13 @@ use std::sync::Arc;
 ///     datum_type: DatumType::Tuple,
 /// }
 /// ```
-///
-/// Notice, in this case, `SubValueSpec::Whole(DatumType::Tuple)` specifies the whole tuple,
-/// not further sub-divided.
 #[derive(PartialEq, Eq, Hash, Debug)]
 pub struct SubValueSpec {
     pub member_idxs: Vec<usize>,
     pub datum_type: DatumType,
 }
 
+/* Shorthand helper for a non-nested spec. */
 impl From<DatumType> for SubValueSpec {
     fn from(datum_type: DatumType) -> Self {
         Self {
@@ -73,6 +71,7 @@ impl From<DatumType> for SubValueSpec {
     }
 }
 
+/* Extraction. */
 impl SubValueSpec {
     pub fn extract(&self, pv: &Arc<Value>) -> Option<SVShared> {
         let mut dat: &Datum = pv;
@@ -96,8 +95,9 @@ impl SubValueSpec {
     }
 }
 
+/* De/Serialization. */
 impl SubValueSpec {
-    pub fn ser(&self, w: &mut impl Write) -> Result<()> {
+    pub fn ser<W: Write>(&self, w: &mut BufWriter<W>) -> Result<()> {
         // Write datum_type first, for easy alignemnt during reading.
         let datum_type_int = DatumTypeInt::from(self.datum_type);
         w.write(&datum_type_int.to_ne_bytes())?;
@@ -109,7 +109,7 @@ impl SubValueSpec {
         Ok(())
     }
 
-    pub fn deser(r: &mut impl Read) -> Result<Self> {
+    pub fn deser<R: Read>(r: &mut BufReader<R>) -> Result<Self> {
         let (_r_len, datum_type_int) = DatumTypeInt::read(r).map_err(|e| anyhow!(e))?;
         let datum_type = DatumType::try_from(datum_type_int)?;
 
