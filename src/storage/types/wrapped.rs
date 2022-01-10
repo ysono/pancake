@@ -1,5 +1,4 @@
-use crate::storage::serde::{DatumType, Serializable};
-use crate::storage::types::Datum;
+use crate::storage::serde::{Datum, DatumType, Serializable};
 use anyhow::Result;
 use derive_more::{Deref, From};
 use std::fs::File;

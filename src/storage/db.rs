@@ -1,6 +1,6 @@
 use crate::storage::lsm::LSMTree;
 use crate::storage::sec_idx::SecondaryIndex;
-use crate::storage::types::{OptDatum, PrimaryKey, SubValue, SubValueSpec, Value};
+use crate::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
 use crate::storage::utils;
 use anyhow::Result;
 use std::fs;
@@ -10,7 +10,7 @@ const PRIMARY_INDEX: &'static str = "primary_index";
 const SECONDARY_INDEXES: &'static str = "secondary_indexes";
 
 pub struct DB {
-    primary_index: LSMTree<PrimaryKey, OptDatum<Value>>,
+    primary_index: LSMTree<PrimaryKey, Value>,
     all_secidxs_dir: PathBuf,
     secondary_indexes: Vec<SecondaryIndex>,
 }
@@ -42,7 +42,7 @@ impl DB {
             secidx.put(&k, old_v.as_ref(), Some(&v))?;
         }
 
-        self.primary_index.put(k, OptDatum::Some(v))?;
+        self.primary_index.put(k, v)?;
 
         Ok(())
     }
@@ -54,16 +54,13 @@ impl DB {
             secidx.put(&k, old_v.as_ref(), None)?;
         }
 
-        self.primary_index.put(k, OptDatum::Tombstone)?;
+        self.primary_index.del(k)?;
 
         Ok(())
     }
 
     pub fn get(&self, k: &PrimaryKey) -> Result<Option<Value>> {
-        match self.primary_index.get(k)? {
-            Some(OptDatum::Some(dat)) => Ok(Some(dat)),
-            Some(OptDatum::Tombstone) | None => Ok(None),
-        }
+        self.primary_index.get(k)
     }
 
     pub fn get_range(
@@ -76,18 +73,8 @@ impl DB {
         let k_lo_cmp = k_lo.map(|k_lo| move |sample_k: &PrimaryKey| sample_k.cmp(k_lo));
         let k_hi_cmp = k_hi.map(|k_hi| move |sample_k: &PrimaryKey| sample_k.cmp(k_hi));
 
-        let ret = self
-            .primary_index
-            .get_range(k_lo_cmp.as_ref(), k_hi_cmp.as_ref())?
-            .filter_map(|res_kv| match res_kv {
-                Err(e) => Some(Err(e)),
-                Ok((k, v)) => match v {
-                    OptDatum::Tombstone => None,
-                    OptDatum::Some(v) => Some(Ok((k, v))),
-                },
-            })
-            .collect::<Result<Vec<_>>>();
-        ret
+        self.primary_index
+            .get_range(k_lo_cmp.as_ref(), k_hi_cmp.as_ref())
     }
 
     pub fn get_by_sub_value(

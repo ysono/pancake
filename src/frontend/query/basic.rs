@@ -100,8 +100,8 @@
 //! It's meant to be a stop-gap impl.
 //! It ought to be replaced by one based on a lexer and a parser.
 
-use crate::storage::serde::DatumType;
-use crate::storage::types::{Datum, PrimaryKey, SubValue, SubValueSpec, Value};
+use crate::storage::serde::{Datum, DatumType};
+use crate::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
 use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 use std::iter::Peekable;

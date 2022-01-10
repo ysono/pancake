@@ -294,8 +294,8 @@ impl<K: Serializable + Ord> SparseIndex<K> {
         match idx_pos {
             None => 0u64,
             Some(idx_pos) => {
-                let (_, file_offset) = self.ptrs.iter().nth(idx_pos).unwrap();
-                *file_offset
+                let (_, file_offset) = self.ptrs[idx_pos];
+                file_offset
             }
         }
     }

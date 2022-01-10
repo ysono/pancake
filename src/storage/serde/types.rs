@@ -1,5 +1,9 @@
-use crate::storage::serde::{self, DatumType, ReadItem, Serializable};
+//! This mod contains types that are directly serializable and deserializable.
+//! All other types are derivatives of these primitive types.
+
+use crate::storage::serde::{self, ReadItem, Serializable};
 use anyhow::{anyhow, Result};
+use num_derive::{FromPrimitive, ToPrimitive};
 use std::cmp::{Eq, Ord, PartialEq, PartialOrd};
 use std::fs::File;
 use std::io::{Read, Write};
@@ -23,12 +27,6 @@ impl Datum {
         }
     }
     // TODO below, in Datum and OptDatum, use this to_type().
-}
-
-#[derive(Clone, Debug)]
-pub enum OptDatum<T: Serializable> {
-    Tombstone,
-    Some(T),
 }
 
 impl Serializable for Datum {
@@ -95,6 +93,11 @@ impl Serializable for Datum {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum OptDatum<T: Serializable> {
+    Tombstone,
+    Some(T),
+}
 impl<T: Serializable> Serializable for OptDatum<T> {
     fn ser(&self, w: &mut impl Write) -> Result<usize> {
         match self {
@@ -113,4 +116,17 @@ impl<T: Serializable> Serializable for OptDatum<T> {
         };
         Ok(obj)
     }
+}
+
+/// We manually map enum members to data_type integers because:
+/// - Rust does not support specifying discriminants on an enum containing non-simple members. [RFC](https://github.com/rust-lang/rust/issues/60553)
+/// - One member, Tombstone, is outside the Datum enum.
+/// - An automatic discriminant may change w/ enum definition change or compilation, according to [`std::mem::discriminant()`] doc.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, FromPrimitive, ToPrimitive, Debug)]
+pub enum DatumType {
+    Tombstone = 0,
+    Bytes = 1,
+    I64 = 2,
+    Str = 3,
+    Tuple = 4,
 }

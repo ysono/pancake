@@ -26,6 +26,8 @@
 //!
 //! ![](https://user-images.githubusercontent.com/5148696/128660102-e6da6e45-b6a1-4a2b-b038-66af51f212c7.png)
 
+mod sstable;
+
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
@@ -36,22 +38,25 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 
-use crate::storage::serde::{self, KeyValueIterator, Serializable};
-use crate::storage::sstable::SSTable;
+use crate::storage::serde::{self, KeyValueIterator, OptDatum, Serializable};
 use crate::storage::utils;
+use sstable::SSTable;
 
 static COMMIT_LOGS_DIR_PATH: &'static str = "commit_logs";
 static SSTABLES_DIR_PATH: &'static str = "sstables";
 static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;
 static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 
-pub struct LSMTree<K, V> {
+pub struct LSMTree<K, V>
+where
+    V: Serializable + Clone,
+{
     path: PathBuf,
-    memtable: BTreeMap<K, V>,
+    memtable: BTreeMap<K, OptDatum<V>>,
     commit_log_path: PathBuf,
     commit_log: File,
-    memtable_in_flush: Option<BTreeMap<K, V>>,
-    sstables: Vec<SSTable<K, V>>,
+    memtable_in_flush: Option<BTreeMap<K, OptDatum<V>>>,
+    sstables: Vec<SSTable<K, OptDatum<V>>>,
 }
 
 impl<K, V> LSMTree<K, V>
@@ -63,7 +68,7 @@ where
         std::fs::create_dir_all(path.as_ref().join(COMMIT_LOGS_DIR_PATH))?;
         std::fs::create_dir_all(path.as_ref().join(SSTABLES_DIR_PATH))?;
 
-        let mut memtable = BTreeMap::<K, V>::new();
+        let mut memtable = Default::default();
         let mut commit_log_path = None;
         for path in utils::read_dir_sorted(path.as_ref().join(COMMIT_LOGS_DIR_PATH))? {
             Self::read_commit_log(&path, &mut memtable)?;
@@ -95,9 +100,9 @@ where
         Ok(ret)
     }
 
-    fn read_commit_log(path: &PathBuf, memtable: &mut BTreeMap<K, V>) -> Result<()> {
+    fn read_commit_log(path: &PathBuf, memtable: &mut BTreeMap<K, OptDatum<V>>) -> Result<()> {
         let file = File::open(path)?;
-        let iter = KeyValueIterator::<K, V>::from(file);
+        let iter = KeyValueIterator::<K, OptDatum<V>>::from(file);
         for file_data in iter {
             let (key, val) = file_data?;
             memtable.insert(key, val);
@@ -165,7 +170,7 @@ where
         Ok(())
     }
 
-    pub fn put(&mut self, k: K, v: V) -> Result<()> {
+    fn do_put(&mut self, k: K, v: OptDatum<V>) -> Result<()> {
         serde::serialize_kv(&k, &v, &mut self.commit_log)?;
 
         self.memtable.insert(k, v);
@@ -175,7 +180,15 @@ where
         Ok(())
     }
 
-    pub fn get(&self, k: &K) -> Result<Option<V>> {
+    pub fn put(&mut self, k: K, v: V) -> Result<()> {
+        self.do_put(k, OptDatum::Some(v))
+    }
+
+    pub fn del(&mut self, k: K) -> Result<()> {
+        self.do_put(k, OptDatum::Tombstone)
+    }
+
+    fn do_get(&self, k: &K) -> Result<Option<OptDatum<V>>> {
         if let Some(v) = self.memtable.get(k) {
             return Ok(Some(v.clone()));
         }
@@ -193,12 +206,18 @@ where
         }
         Ok(None)
     }
+    pub fn get(&self, k: &K) -> Result<Option<V>> {
+        match self.do_get(k)? {
+            Some(OptDatum::Tombstone) | None => Ok(None),
+            Some(OptDatum::Some(v)) => Ok(Some(v)),
+        }
+    }
 
-    pub fn get_range<'a, Flo, Fhi>(
-        &'a self,
-        k_lo_cmp: Option<&'a Flo>,
-        k_hi_cmp: Option<&'a Fhi>,
-    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a>
+    pub fn get_range<Flo, Fhi>(
+        &self,
+        k_lo_cmp: Option<&Flo>,
+        k_hi_cmp: Option<&Fhi>,
+    ) -> Result<Vec<(K, V)>>
     where
         Flo: Fn(&K) -> Ordering,
         Fhi: Fn(&K) -> Ordering,
@@ -240,7 +259,13 @@ where
         let mut ssts_iter = ssts_iter.peekable();
         let mut mts_iter = mts_iter.peekable();
 
-        let out_iter_fn = move || -> Option<Result<(K, V)>> {
+        /*
+        Here we're doing k-merge between (the iterator of all sstables) and (the iterator of all memtables).
+        We have to do this manually due to type difference.
+        An sstable iterator yields Item = Result<(K, V)>.
+        A memtable iterator yields Item = (&K, &V).
+        */
+        let out_iter_fn = move || -> Option<Result<(K, OptDatum<V>)>> {
             let next_is_sst = match (ssts_iter.peek(), mts_iter.peek()) {
                 (None, None) => return None,
                 (None, Some(_)) => false,
@@ -266,7 +291,12 @@ where
                 return Some(Ok(kv));
             }
         };
-        let out_iter = std::iter::from_fn(out_iter_fn);
-        Ok(out_iter)
+        std::iter::from_fn(out_iter_fn)
+            .filter_map(|res_kv| match res_kv {
+                Err(e) => Some(Err(e)),
+                Ok((_k, OptDatum::Tombstone)) => None,
+                Ok((k, OptDatum::Some(v))) => Some(Ok((k, v))),
+            })
+            .collect::<Result<Vec<_>>>()
     }
 }

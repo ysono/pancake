@@ -1,5 +1,5 @@
-use crate::storage::serde::{DatumType, Serializable};
-use crate::storage::types::{Datum, PrimaryKey, SubValue};
+use crate::storage::serde::{Datum, DatumType, Serializable};
+use crate::storage::types::{PrimaryKey, SubValue};
 use anyhow::{anyhow, Result};
 use std::fs::File;
 use std::io::Write;

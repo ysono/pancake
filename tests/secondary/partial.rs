@@ -1,7 +1,7 @@
 use anyhow::Result;
 use pancake::storage::db::DB;
-use pancake::storage::serde::DatumType;
-use pancake::storage::types::{Datum, PrimaryKey, SubValue, SubValueSpec, Value};
+use pancake::storage::serde::{Datum, DatumType};
+use pancake::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
 
 /// A spec that extracts `value[1][2]: str`.
 fn spec_1_2_str() -> SubValueSpec {

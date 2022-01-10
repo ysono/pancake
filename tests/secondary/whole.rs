@@ -1,7 +1,7 @@
 use anyhow::Result;
 use pancake::storage::db::DB;
-use pancake::storage::serde::DatumType;
-use pancake::storage::types::{Datum, PrimaryKey, SubValue, SubValueSpec, Value};
+use pancake::storage::serde::{Datum, DatumType};
+use pancake::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
 
 fn key(k: &str) -> PrimaryKey {
     PrimaryKey(Datum::Str(String::from(k)))
