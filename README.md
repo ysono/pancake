@@ -5,7 +5,8 @@ Pancake is an experimental database with the following features:
 - Data model = Document store. Documents are dynamically typed.
 - Secondary indexes work on key definitions that are one contiguous sub-portion of values.
 - Storage engine = LSM Tree.
-- Operations are executed serially.
+- Isolation = Serializable Snapshot Isolation (SSI) and Serial execution. There are two separate corresponding implementations of the storage engine.
+- No partitioning or replication (yet).
 
 ## Architecture
 
@@ -16,7 +17,8 @@ Rustdoc is [here](https://ysono.github.io/pancake/pancake/index.html).
 ## Usage
 
 ```sh
-DB="localhost:3000"
+ENGINE_VARIETY="${1:-ssi}"
+DB="localhost:3000/${ENGINE_VARIETY}"
 
 ### Basic put/delete/get ###
 
