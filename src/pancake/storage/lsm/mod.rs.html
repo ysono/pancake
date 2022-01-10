@@ -1,6 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/storage/lsm.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lsm.rs - source</title><link rel="stylesheet" type="text/css" href="../../../normalize.css"><link rel="stylesheet" type="text/css" href="../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../../ayu.css" disabled ><script id="default-settings"></script><script src="../../../storage.js"></script><script src="../../../crates.js"></script><noscript><link rel="stylesheet" href="../../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../../favicon.svg">
-<link rel="alternate icon" type="image/png" href="../../../favicon-16x16.png">
-<link rel="alternate icon" type="image/png" href="../../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../../pancake/index.html'><div class='logo-container rust-logo'><img src='../../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu" title="themes"><img src="../../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" id="help-button" title="help">?</button><a id="settings-menu" href="../../../settings.html" title="settings"><img src="../../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">  1</span>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src&#x2F;storage&#x2F;lsm&#x2F;mod.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>mod.rs - source</title><link rel="stylesheet" type="text/css" href="../../../../normalize.css"><link rel="stylesheet" type="text/css" href="../../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../../../ayu.css" disabled ><script id="default-settings" ></script><script src="../../../../storage.js"></script><script src="../../../../crates.js"></script><noscript><link rel="stylesheet" href="../../../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../../../favicon.svg"><style type="text/css">#crate-search{background-image:url("../../../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../../../pancake/index.html'><div class='logo-container rust-logo'><img src='../../../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu" title="themes"><img width="18" height="18" alt="Pick another theme!" src="../../../../brush.svg"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" id="help-button" title="help">?</button><a id="settings-menu" href="../../../../settings.html" title="settings"><img width="18" height="18" alt="Change settings" src="../../../../wheel.svg"></a></div></form></nav><section id="main" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">  1</span>
 <span id="2">  2</span>
 <span id="3">  3</span>
 <span id="4">  4</span>
@@ -272,8 +270,37 @@
 <span id="270">270</span>
 <span id="271">271</span>
 <span id="272">272</span>
-</pre><pre class="rust">
-<span class="doccomment">//! An LSM-Tree is an abstraction of a sorted key-value dictionary.</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+</pre><pre class="rust"><code><span class="doccomment">//! An LSM-Tree is an abstraction of a sorted key-value dictionary.</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! ### API:</span>
 <span class="doccomment">//!</span>
@@ -301,6 +328,8 @@
 <span class="doccomment">//!</span>
 <span class="doccomment">//! ![](https://user-images.githubusercontent.com/5148696/128660102-e6da6e45-b6a1-4a2b-b038-66af51f212c7.png)</span>
 
+<span class="kw">mod</span> <span class="ident">sstable</span>;
+
 <span class="kw">use</span> <span class="ident">std::cmp::Ordering</span>;
 <span class="kw">use</span> <span class="ident">std::collections::BTreeMap</span>;
 <span class="kw">use</span> <span class="ident">std::fs</span>::{<span class="self">self</span>, <span class="ident">File</span>, <span class="ident">OpenOptions</span>};
@@ -311,22 +340,25 @@
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">anyhow</span>, <span class="prelude-ty">Result</span>};
 <span class="kw">use</span> <span class="ident">itertools::Itertools</span>;
 
-<span class="kw">use</span> <span class="kw">crate</span><span class="ident">::storage::serde</span>::{<span class="self">self</span>, <span class="ident">KeyValueIterator</span>, <span class="ident">Serializable</span>};
-<span class="kw">use</span> <span class="kw">crate</span><span class="ident">::storage::sstable::SSTable</span>;
-<span class="kw">use</span> <span class="kw">crate</span><span class="ident">::storage::utils</span>;
+<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::serde</span>::{<span class="self">self</span>, <span class="ident">KeyValueIterator</span>, <span class="ident">OptDatum</span>, <span class="ident">Serializable</span>};
+<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::utils</span>;
+<span class="kw">use</span> <span class="ident">sstable::SSTable</span>;
 
 <span class="kw">static</span> <span class="ident">COMMIT_LOGS_DIR_PATH</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;commit_logs&quot;</span>;
 <span class="kw">static</span> <span class="ident">SSTABLES_DIR_PATH</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;sstables&quot;</span>;
 <span class="kw">static</span> <span class="ident">MEMTABLE_FLUSH_SIZE_THRESH</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">7</span>;
 <span class="kw">static</span> <span class="ident">SSTABLE_COMPACT_COUNT_THRESH</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">4</span>;
 
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">LSMTree</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">V</span><span class="op">&gt;</span> {
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">LSMTree</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">V</span><span class="op">&gt;</span>
+<span class="kw">where</span>
+    <span class="ident">V</span>: <span class="ident">Serializable</span> <span class="op">+</span> <span class="ident">Clone</span>,
+{
     <span class="ident">path</span>: <span class="ident">PathBuf</span>,
-    <span class="ident">memtable</span>: <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">V</span><span class="op">&gt;</span>,
+    <span class="ident">memtable</span>: <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span>,
     <span class="ident">commit_log_path</span>: <span class="ident">PathBuf</span>,
     <span class="ident">commit_log</span>: <span class="ident">File</span>,
-    <span class="ident">memtable_in_flush</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span>,
-    <span class="ident">sstables</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">SSTable</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span>,
+    <span class="ident">memtable_in_flush</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>,
+    <span class="ident">sstables</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">SSTable</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>,
 }
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">LSMTree</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">V</span><span class="op">&gt;</span>
@@ -334,14 +366,14 @@
     <span class="ident">K</span>: <span class="ident">Serializable</span> <span class="op">+</span> <span class="ident">Ord</span> <span class="op">+</span> <span class="ident">Hash</span> <span class="op">+</span> <span class="ident">Clone</span>,
     <span class="ident">V</span>: <span class="ident">Serializable</span> <span class="op">+</span> <span class="ident">Clone</span>,
 {
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">open</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">AsRef</span><span class="op">&lt;</span><span class="ident">Path</span><span class="op">&gt;</span><span class="op">&gt;</span>(<span class="ident">path</span>: <span class="ident">P</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">open</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">AsRef</span><span class="op">&lt;</span><span class="ident">Path</span><span class="op">&gt;</span><span class="op">&gt;</span>(<span class="ident">path</span>: <span class="ident">P</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
         <span class="ident">std::fs::create_dir_all</span>(<span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">join</span>(<span class="ident">COMMIT_LOGS_DIR_PATH</span>))<span class="question-mark">?</span>;
         <span class="ident">std::fs::create_dir_all</span>(<span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">join</span>(<span class="ident">SSTABLES_DIR_PATH</span>))<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">memtable</span> <span class="op">=</span> <span class="ident">BTreeMap</span>::<span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">V</span><span class="op">&gt;</span><span class="ident">::new</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">memtable</span> <span class="op">=</span> <span class="ident">Default::default</span>();
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">commit_log_path</span> <span class="op">=</span> <span class="prelude-val">None</span>;
         <span class="kw">for</span> <span class="ident">path</span> <span class="kw">in</span> <span class="ident">utils::read_dir_sorted</span>(<span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">join</span>(<span class="ident">COMMIT_LOGS_DIR_PATH</span>))<span class="question-mark">?</span> {
-            <span class="self">Self</span><span class="ident">::read_commit_log</span>(<span class="kw-2">&amp;</span><span class="ident">path</span>, <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">memtable</span>)<span class="question-mark">?</span>;
+            <span class="ident"><span class="self">Self</span>::read_commit_log</span>(<span class="kw-2">&amp;</span><span class="ident">path</span>, <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">memtable</span>)<span class="question-mark">?</span>;
             <span class="ident">commit_log_path</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">path</span>);
         }
 
@@ -370,9 +402,9 @@
         <span class="prelude-val">Ok</span>(<span class="ident">ret</span>)
     }
 
-    <span class="kw">fn</span> <span class="ident">read_commit_log</span>(<span class="ident">path</span>: <span class="kw-2">&amp;</span><span class="ident">PathBuf</span>, <span class="ident">memtable</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">V</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">read_commit_log</span>(<span class="ident">path</span>: <span class="kw-2">&amp;</span><span class="ident">PathBuf</span>, <span class="ident">memtable</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">file</span> <span class="op">=</span> <span class="ident">File::open</span>(<span class="ident">path</span>)<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">iter</span> <span class="op">=</span> <span class="ident">KeyValueIterator</span>::<span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">V</span><span class="op">&gt;</span><span class="ident">::from</span>(<span class="ident">file</span>);
+        <span class="kw">let</span> <span class="ident">iter</span> <span class="op">=</span> <span class="ident">KeyValueIterator</span>::<span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="ident">::from</span>(<span class="ident">file</span>);
         <span class="kw">for</span> <span class="ident">file_data</span> <span class="kw">in</span> <span class="ident">iter</span> {
             <span class="kw">let</span> (<span class="ident">key</span>, <span class="ident">val</span>) <span class="op">=</span> <span class="ident">file_data</span><span class="question-mark">?</span>;
             <span class="ident">memtable</span>.<span class="ident">insert</span>(<span class="ident">key</span>, <span class="ident">val</span>);
@@ -380,7 +412,7 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn</span> <span class="ident">flush_memtable</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">flush_memtable</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">new_cl_path</span> <span class="op">=</span> <span class="ident">utils::new_timestamped_path</span>(<span class="self">self</span>.<span class="ident">path</span>.<span class="ident">join</span>(<span class="ident">COMMIT_LOGS_DIR_PATH</span>), <span class="string">&quot;data&quot;</span>);
         <span class="kw">let</span> <span class="ident">new_cl</span> <span class="op">=</span> <span class="ident">OpenOptions::new</span>()
             .<span class="ident">create_new</span>(<span class="bool-val">true</span>)
@@ -415,7 +447,7 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn</span> <span class="ident">compact_sstables</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">compact_sstables</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">new_table_path</span> <span class="op">=</span> <span class="ident">utils::new_timestamped_path</span>(<span class="self">self</span>.<span class="ident">path</span>.<span class="ident">join</span>(<span class="ident">SSTABLES_DIR_PATH</span>), <span class="string">&quot;data&quot;</span>);
         <span class="kw">let</span> <span class="ident">new_table</span> <span class="op">=</span> <span class="ident">SSTable::compact</span>(<span class="ident">new_table_path</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">sstables</span>)<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">new_tables</span> <span class="op">=</span> <span class="macro">vec!</span>[<span class="ident">new_table</span>];
@@ -430,7 +462,7 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn</span> <span class="ident">check_start_job</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">check_start_job</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">if</span> <span class="self">self</span>.<span class="ident">memtable</span>.<span class="ident">len</span>() <span class="op">&gt;</span><span class="op">=</span> <span class="ident">MEMTABLE_FLUSH_SIZE_THRESH</span> {
             <span class="self">self</span>.<span class="ident">flush_memtable</span>()<span class="question-mark">?</span>;
         }
@@ -440,7 +472,7 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">put</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">k</span>: <span class="ident">K</span>, <span class="ident">v</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">do_put</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">k</span>: <span class="ident">K</span>, <span class="ident">v</span>: <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="ident">serde::serialize_kv</span>(<span class="kw-2">&amp;</span><span class="ident">k</span>, <span class="kw-2">&amp;</span><span class="ident">v</span>, <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">commit_log</span>)<span class="question-mark">?</span>;
 
         <span class="self">self</span>.<span class="ident">memtable</span>.<span class="ident">insert</span>(<span class="ident">k</span>, <span class="ident">v</span>);
@@ -450,7 +482,15 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">get</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">k</span>: <span class="kw-2">&amp;</span><span class="ident">K</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">put</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">k</span>: <span class="ident">K</span>, <span class="ident">v</span>: <span class="ident">V</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="self">self</span>.<span class="ident">do_put</span>(<span class="ident">k</span>, <span class="ident">OptDatum::Some</span>(<span class="ident">v</span>))
+    }
+
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">del</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">k</span>: <span class="ident">K</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="self">self</span>.<span class="ident">do_put</span>(<span class="ident">k</span>, <span class="ident">OptDatum::Tombstone</span>)
+    }
+
+    <span class="kw">fn</span> <span class="ident">do_get</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">k</span>: <span class="kw-2">&amp;</span><span class="ident">K</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span> {
         <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">v</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">memtable</span>.<span class="ident">get</span>(<span class="ident">k</span>) {
             <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(<span class="ident">v</span>.<span class="ident">clone</span>()));
         }
@@ -468,15 +508,21 @@
         }
         <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
     }
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">get</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">k</span>: <span class="kw-2">&amp;</span><span class="ident">K</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span> {
+        <span class="kw">match</span> <span class="self">self</span>.<span class="ident">do_get</span>(<span class="ident">k</span>)<span class="question-mark">?</span> {
+            <span class="prelude-val">Some</span>(<span class="ident">OptDatum::Tombstone</span>) <span class="op">|</span> <span class="prelude-val">None</span> =&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>),
+            <span class="prelude-val">Some</span>(<span class="ident">OptDatum::Some</span>(<span class="ident">v</span>)) =&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(<span class="ident">v</span>)),
+        }
+    }
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">get_range</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, <span class="ident">Flo</span>, <span class="ident">Fhi</span><span class="op">&gt;</span>(
-        <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="self">self</span>,
-        <span class="ident">k_lo_cmp</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">Flo</span><span class="op">&gt;</span>,
-        <span class="ident">k_hi_cmp</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">Fhi</span><span class="op">&gt;</span>,
-    ) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="kw">impl</span> <span class="ident">Iterator</span><span class="op">&lt;</span><span class="ident">Item</span> <span class="op">=</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>(<span class="ident">K</span>, <span class="ident">V</span>)<span class="op">&gt;</span><span class="op">&gt;</span> <span class="op">+</span> <span class="lifetime">&#39;a</span><span class="op">&gt;</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">get_range</span><span class="op">&lt;</span><span class="ident">Flo</span>, <span class="ident">Fhi</span><span class="op">&gt;</span>(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        <span class="ident">k_lo_cmp</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="ident">Flo</span><span class="op">&gt;</span>,
+        <span class="ident">k_hi_cmp</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="ident">Fhi</span><span class="op">&gt;</span>,
+    ) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span>(<span class="ident">K</span>, <span class="ident">V</span>)<span class="op">&gt;</span><span class="op">&gt;</span>
     <span class="kw">where</span>
-        <span class="ident">Flo</span>: <span class="ident">Fn</span>(<span class="kw-2">&amp;</span><span class="ident">K</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Ordering</span>,
-        <span class="ident">Fhi</span>: <span class="ident">Fn</span>(<span class="kw-2">&amp;</span><span class="ident">K</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Ordering</span>,
+        <span class="ident">Flo</span>: <span class="ident">Fn</span>(<span class="kw-2">&amp;</span><span class="ident">K</span>) -&gt; <span class="ident">Ordering</span>,
+        <span class="ident">Fhi</span>: <span class="ident">Fn</span>(<span class="kw-2">&amp;</span><span class="ident">K</span>) -&gt; <span class="ident">Ordering</span>,
     {
         <span class="kw">let</span> <span class="ident">ssts_iter</span> <span class="op">=</span> <span class="ident">SSTable::merge_range</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">sstables</span>, <span class="ident">k_lo_cmp</span>, <span class="ident">k_hi_cmp</span>)<span class="question-mark">?</span>;
 
@@ -507,7 +553,7 @@
                 .<span class="ident">zip</span>(<span class="ident">std::iter::repeat</span>(<span class="ident">mt_i</span>))
             })
             .<span class="ident">kmerge_by</span>(<span class="op">|</span>((<span class="ident">a_k</span>, <span class="ident">_a_v</span>), <span class="ident">a_i</span>), ((<span class="ident">b_k</span>, <span class="ident">_b_v</span>), <span class="ident">b_i</span>)<span class="op">|</span> {
-                <span class="ident">a_k</span> <span class="op">&lt;</span> <span class="ident">b_k</span> <span class="op">|</span><span class="op">|</span> (<span class="ident">a_k</span> <span class="op">=</span><span class="op">=</span> <span class="ident">b_k</span> <span class="op">&amp;&amp;</span> <span class="ident">a_i</span> <span class="op">&gt;</span> <span class="ident">b_i</span>)
+                <span class="ident">a_k</span> <span class="op">&lt;</span> <span class="ident">b_k</span> <span class="op">|</span><span class="op">|</span> (<span class="ident">a_k</span> <span class="op">==</span> <span class="ident">b_k</span> <span class="op">&amp;&amp;</span> <span class="ident">a_i</span> <span class="op">&gt;</span> <span class="ident">b_i</span>)
             })
             .<span class="ident">unique_by</span>(<span class="op">|</span>((<span class="ident">k</span>, <span class="ident">_v</span>), <span class="ident">_mt_i</span>)<span class="op">|</span> <span class="ident">k</span>.<span class="ident">clone</span>())
             .<span class="ident">map</span>(<span class="op">|</span>(<span class="ident">kv</span>, <span class="ident">_mt_i</span>)<span class="op">|</span> <span class="ident">kv</span>);
@@ -515,13 +561,19 @@
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">ssts_iter</span> <span class="op">=</span> <span class="ident">ssts_iter</span>.<span class="ident">peekable</span>();
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mts_iter</span> <span class="op">=</span> <span class="ident">mts_iter</span>.<span class="ident">peekable</span>();
 
-        <span class="kw">let</span> <span class="ident">out_iter_fn</span> <span class="op">=</span> <span class="kw">move</span> <span class="op">|</span><span class="op">|</span> <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="prelude-ty">Result</span><span class="op">&lt;</span>(<span class="ident">K</span>, <span class="ident">V</span>)<span class="op">&gt;</span><span class="op">&gt;</span> {
+        <span class="comment">/*
+        Here we&#39;re doing k-merge between (the iterator of all sstables) and (the iterator of all memtables).
+        We have to do this manually due to type difference.
+        An sstable iterator yields Item = Result&lt;(K, V)&gt;.
+        A memtable iterator yields Item = (&amp;K, &amp;V).
+        */</span>
+        <span class="kw">let</span> <span class="ident">out_iter_fn</span> <span class="op">=</span> <span class="kw">move</span> <span class="op">|</span><span class="op">|</span> -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="prelude-ty">Result</span><span class="op">&lt;</span>(<span class="ident">K</span>, <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span>)<span class="op">&gt;</span><span class="op">&gt;</span> {
             <span class="kw">let</span> <span class="ident">next_is_sst</span> <span class="op">=</span> <span class="kw">match</span> (<span class="ident">ssts_iter</span>.<span class="ident">peek</span>(), <span class="ident">mts_iter</span>.<span class="ident">peek</span>()) {
-                (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">return</span> <span class="prelude-val">None</span>,
-                (<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="kw">_</span>)) <span class="op">=</span><span class="op">&gt;</span> <span class="bool-val">false</span>,
-                (<span class="prelude-val">Some</span>(<span class="kw">_</span>), <span class="prelude-val">None</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="bool-val">true</span>,
-                (<span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(<span class="kw">_</span>)), <span class="kw">_</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="bool-val">true</span>,
-                (<span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>((<span class="ident">sst_k</span>, <span class="ident">_sst_v</span>))), <span class="prelude-val">Some</span>((<span class="ident">mt_k</span>, <span class="ident">_mt_v</span>))) <span class="op">=</span><span class="op">&gt;</span> {
+                (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) =&gt; <span class="kw">return</span> <span class="prelude-val">None</span>,
+                (<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="kw">_</span>)) =&gt; <span class="bool-val">false</span>,
+                (<span class="prelude-val">Some</span>(<span class="kw">_</span>), <span class="prelude-val">None</span>) =&gt; <span class="bool-val">true</span>,
+                (<span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(<span class="kw">_</span>)), <span class="kw">_</span>) =&gt; <span class="bool-val">true</span>,
+                (<span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>((<span class="ident">sst_k</span>, <span class="ident">_sst_v</span>))), <span class="prelude-val">Some</span>((<span class="ident">mt_k</span>, <span class="ident">_mt_v</span>))) =&gt; {
                     <span class="kw">if</span> <span class="kw-2">&amp;</span><span class="ident">sst_k</span> <span class="op">&lt;</span> <span class="ident">mt_k</span> {
                         <span class="bool-val">true</span>
                     } <span class="kw">else</span> <span class="kw">if</span> <span class="kw-2">&amp;</span><span class="ident">sst_k</span> <span class="op">&gt;</span> <span class="ident">mt_k</span> {
@@ -541,9 +593,16 @@
                 <span class="kw">return</span> <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(<span class="ident">kv</span>));
             }
         };
-        <span class="kw">let</span> <span class="ident">out_iter</span> <span class="op">=</span> <span class="ident">std::iter::from_fn</span>(<span class="ident">out_iter_fn</span>);
-        <span class="prelude-val">Ok</span>(<span class="ident">out_iter</span>)
+        <span class="ident">std::iter::from_fn</span>(<span class="ident">out_iter_fn</span>)
+            .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">res_kv</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">res_kv</span> {
+                <span class="prelude-val">Err</span>(<span class="ident">e</span>) =&gt; <span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(<span class="ident">e</span>)),
+                <span class="prelude-val">Ok</span>((<span class="ident">_k</span>, <span class="ident">OptDatum::Tombstone</span>)) =&gt; <span class="prelude-val">None</span>,
+                <span class="prelude-val">Ok</span>((<span class="ident">k</span>, <span class="ident">OptDatum::Some</span>(<span class="ident">v</span>))) =&gt; <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>((<span class="ident">k</span>, <span class="ident">v</span>))),
+            })
+            .<span class="ident">collect</span>::<span class="op">&lt;</span><span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="kw">_</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>()
     }
 }
-</pre></div>
-</section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="pancake" data-search-index-js="../../../search-index.js" data-search-js="../../../search.js"></div><script src="../../../main.js"></script><script src="../../../source-script.js"></script><script src="../../../source-files.js"></script></body></html>
+</code></pre></div>
+</section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../../../" data-current-crate="pancake" data-search-index-js="../../../../search-index.js" data-search-js="../../../../search.js"></div>
+    <script src="../../../../main.js"></script><script src="../../../../source-script.js"></script><script src="../../../../source-files.js"></script>
+</body></html>
