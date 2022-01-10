@@ -1,47 +1,67 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Serialization format"><meta name="keywords" content="rust, rustlang, rust-lang, serde"><title>pancake::storage::serde - Rust</title><link rel="stylesheet" type="text/css" href="../../../normalize.css"><link rel="stylesheet" type="text/css" href="../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../../ayu.css" disabled ><script id="default-settings" ></script><script src="../../../storage.js"></script><script src="../../../crates.js"></script><noscript><link rel="stylesheet" href="../../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../../favicon.svg"><style type="text/css">#crate-search{background-image:url("../../../down-arrow.svg");}</style></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../../pancake/index.html'><div class='logo-container rust-logo'><img src='../../../rust-logo.png' alt='logo'></div></a><h2 class="location">Module serde</h2><div class="sidebar-elems"><div class="block items"><ul><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li><li><a href="#traits">Traits</a></li><li><a href="#functions">Functions</a></li></ul></div><div id="sidebar-vars" data-name="serde" data-ty="mod" data-relpath="./"></div><script defer src="./sidebar-items.js"></script></div></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu" title="themes"><img width="18" height="18" alt="Pick another theme!" src="../../../brush.svg"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" id="help-button" title="help">?</button><a id="settings-menu" href="../../../settings.html" title="settings"><img width="18" height="18" alt="Change settings" src="../../../wheel.svg"></a></div></form></nav><section id="main" class="content"><h1 class="fqn"><span class="in-band">Module <a href="../../index.html">pancake</a>::<wbr><a href="../index.html">storage</a>::<wbr><a class="mod" href="#">serde</a><button id="copy-path" onclick="copy_path(this)" title="Copy item path to clipboard"><img src="../../../clipboard.svg" width="19" height="18" alt="Copy item path"></button></span><span class="out-of-band"><span id="render-detail"><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class="inner">&#x2212;</span>]</a></span><a class="srclink" href="../../../src/pancake/storage/serde/mod.rs.html#1-203" title="goto source code">[src]</a></span></h1><details class="rustdoc-toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="serialization-format" class="section-header"><a href="#serialization-format">Serialization format</a></h2>
-<p>Following pseudocode depicts the byte representation on disk. The actual struct definitions do not exit.</p>
-<p>This file format is applicable for both the commit log and ss tables.</p>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Serialization format"><meta name="keywords" content="rust, rustlang, rust-lang, serde"><title>pancake::storage::serde - Rust</title><link rel="stylesheet" type="text/css" href="../../../normalize.css"><link rel="stylesheet" type="text/css" href="../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../../ayu.css" disabled ><script id="default-settings" ></script><script src="../../../storage.js"></script><script src="../../../crates.js"></script><noscript><link rel="stylesheet" href="../../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../../favicon.svg"><style type="text/css">#crate-search{background-image:url("../../../down-arrow.svg");}</style></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../../pancake/index.html'><div class='logo-container rust-logo'><img src='../../../rust-logo.png' alt='logo'></div></a><h2 class="location">Module serde</h2><div class="sidebar-elems"><div class="block items"><ul><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li><li><a href="#traits">Traits</a></li></ul></div><div id="sidebar-vars" data-name="serde" data-ty="mod" data-relpath="./"></div><script defer src="./sidebar-items.js"></script></div></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu" title="themes"><img width="18" height="18" alt="Pick another theme!" src="../../../brush.svg"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" id="help-button" title="help">?</button><a id="settings-menu" href="../../../settings.html" title="settings"><img width="18" height="18" alt="Change settings" src="../../../wheel.svg"></a></div></form></nav><section id="main" class="content"><h1 class="fqn"><span class="in-band">Module <a href="../../index.html">pancake</a>::<wbr><a href="../index.html">storage</a>::<wbr><a class="mod" href="#">serde</a><button id="copy-path" onclick="copy_path(this)" title="Copy item path to clipboard"><img src="../../../clipboard.svg" width="19" height="18" alt="Copy item path"></button></span><span class="out-of-band"><span id="render-detail"><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class="inner">&#x2212;</span>]</a></span><a class="srclink" href="../../../src/pancake/storage/serde/mod.rs.html#1-98" title="goto source code">[src]</a></span></h1><details class="rustdoc-toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="serialization-format" class="section-header"><a href="#serialization-format">Serialization format</a></h2>
+<p>Following pseudocode depicts the byte representation on disk.
+In-memory representations look similar but are distinct from this.</p>
+<p>This file format is applicable for both commit logs and ss tables.</p>
 <div class="example-wrap"><pre class="language-text"><code>struct File {
-    k0: Item,
-    v0: Item,
-    k1: Item,
-    v1: Item,
+    k0: Datum,
+    v0: Datum,
+    k1: Datum,
+    v1: Datum,
     ...
-    // There are no separators in between Items and nothing to indicate
-    // whether an Item is a key or a value.
+    // There are no separators in between Datums and nothing to indicate
+    // whether an Datum is a key or a value.
+}</code></pre></div>
+<p><code>Datum</code> comes in several varieties.</p>
+<p>They all start with <code>datum_type</code>, which is encoded in <code>u8</code>.
+In case we need to deprecate supported datum_types over time, this allows us
+<code>(pow(2, 8) - count_of_active_datum_types)</code> deprecations, before rolling over to zero.</p>
+<div class="example-wrap"><pre class="language-text"><code>struct OptDatum::Tombstone {
+    datum_type:     DatumTypeInt(u8),
 }
 
-struct Item {
-    // Encodes the on-disk byte size of `datum_type` and `datum`.
-    // Span size is placed first, so that a reader that is uninterested
-    // in deserializing datum can skip over it.
-    span_size: usize,
+struct Datum::I64 {
+    datum_type:     DatumTypeInt(u8),
+    datum_body:     [u8; 4],
+}
 
-    // Identifies how `datum` should be deserialized.
-    // The choice of u8 is arbitrary. In case we need to deprecate
-    // supported datum_types over time, this allows us
-    // (pow(2, 8) - count_of_active_datum_types) deprecations, before
-    // rolling over to zero.
-    datum_type: u8,
-
-    // Datum may be empty. Examples: tombstone, empty string, empty
-    // map, custom serialization.
-    datum: [u8; variable_length],
+struct Datum::Bytes or Datum::Str {
+    datum_type:     DatumTypeInt(u8),
+    datum_body_len: DatumBodyLen(usize),
+    datum_body:     [u8; datum_body_len],
 }</code></pre></div>
-<p>A tuple is a type of datum that can nest other data, including other tuple-typed data.
-For a tuple, the <code>datum</code> byte sequence encodes the following structure:</p>
-<div class="example-wrap"><pre class="language-text"><code>struct TupleDatum {
-    length_of_tuple: usize,
-    member_0: Item,
-    member_1: Item,
-    ...
-    member_n-1: Item,
-}</code></pre></div></div></details><h2 id="structs" class="section-header"><a href="#structs">Structs</a></h2>
-<div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.KeyValueIterator.html" title="pancake::storage::serde::KeyValueIterator struct">KeyValueIterator</a></div><div class="item-right docblock-short"></div></div></div><h2 id="enums" class="section-header"><a href="#enums">Enums</a></h2>
+<p>A <code>Tuple</code>-typed <code>Datum</code> nests other <code>Datum</code>s, including possibly other <code>Tuple</code>-typed <code>Datum</code>s.</p>
+<div class="example-wrap"><pre class="language-text"><code>struct Datum::Tuple {
+    datum_type:     DatumTypeInt(u8),
+    datum_body_len: DatumBodyLen(usize),
+    datum_body:     TupleBody {
+        members_count:  MembersCount(usize),
+        member_0:       Datum::I64 {
+            datum_type:     DatumTypeInt(u8),
+            datum_body:     [u8; 4],
+        },
+        member_1:       Datum::Bytes or Datum::Str {
+            datum_type:     DatumTypeInt(u8),
+            datum_body_len: DatumBodyLen(usize),
+            datum_body:     [u8; datum_body_len],
+        },
+        member_2:       Datum::Tuple {
+            datum_type:     DatumTypeInt(u8),
+            datum_body: TupleBody {
+                members_count:  MembersCount(usize),
+                member_0:       Datum::*,
+                ...
+            }
+        },
+        ...
+        // Tombstone may not be nested under Tuple.
+    }
+}</code></pre></div>
+<p>A <code>Datum</code> can be skipped over without being deserialized.
+The amount of bytes to skip is derived dynamically according to <code>datum_type</code>.</p>
+</div></details><h2 id="structs" class="section-header"><a href="#structs">Structs</a></h2>
+<div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.DatumReader.html" title="pancake::storage::serde::DatumReader struct">DatumReader</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.DatumTypeInt.html" title="pancake::storage::serde::DatumTypeInt struct">DatumTypeInt</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.DatumWriter.html" title="pancake::storage::serde::DatumWriter struct">DatumWriter</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.WriteLen.html" title="pancake::storage::serde::WriteLen struct">WriteLen</a></div><div class="item-right docblock-short"></div></div></div><h2 id="enums" class="section-header"><a href="#enums">Enums</a></h2>
 <div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="enum" href="enum.Datum.html" title="pancake::storage::serde::Datum enum">Datum</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="enum" href="enum.DatumType.html" title="pancake::storage::serde::DatumType enum">DatumType</a></div><div class="item-right docblock-short"><p>We manually map enum members to data_type integers because:</p>
-</div></div><div class="item-row"><div class="item-left module-item"><a class="enum" href="enum.OptDatum.html" title="pancake::storage::serde::OptDatum enum">OptDatum</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="enum" href="enum.ReadItem.html" title="pancake::storage::serde::ReadItem enum">ReadItem</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="enum" href="enum.SkipItem.html" title="pancake::storage::serde::SkipItem enum">SkipItem</a></div><div class="item-right docblock-short"></div></div></div><h2 id="traits" class="section-header"><a href="#traits">Traits</a></h2>
-<div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="trait" href="trait.Serializable.html" title="pancake::storage::serde::Serializable trait">Serializable</a></div><div class="item-right docblock-short"></div></div></div><h2 id="functions" class="section-header"><a href="#functions">Functions</a></h2>
-<div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="fn" href="fn.read_item.html" title="pancake::storage::serde::read_item fn">read_item</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="fn" href="fn.serialize_kv.html" title="pancake::storage::serde::serialize_kv fn">serialize_kv</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="fn" href="fn.skip_item.html" title="pancake::storage::serde::skip_item fn">skip_item</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="fn" href="fn.write_item.html" title="pancake::storage::serde::write_item fn">write_item</a></div><div class="item-right docblock-short"><p>@return Total count of bytes that are written to file.</p>
-</div></div></div></section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="pancake" data-search-index-js="../../../search-index.js" data-search-js="../../../search.js"></div>
+</div></div><div class="item-row"><div class="item-left module-item"><a class="enum" href="enum.OptDatum.html" title="pancake::storage::serde::OptDatum enum">OptDatum</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="enum" href="enum.ReadResult.html" title="pancake::storage::serde::ReadResult enum">ReadResult</a></div><div class="item-right docblock-short"></div></div></div><h2 id="traits" class="section-header"><a href="#traits">Traits</a></h2>
+<div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="trait" href="trait.Deser.html" title="pancake::storage::serde::Deser trait">Deser</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="trait" href="trait.Ser.html" title="pancake::storage::serde::Ser trait">Ser</a></div><div class="item-right docblock-short"></div></div><div class="item-row"><div class="item-left module-item"><a class="trait" href="trait.Serializable.html" title="pancake::storage::serde::Serializable trait">Serializable</a></div><div class="item-right docblock-short"></div></div></div></section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="pancake" data-search-index-js="../../../search-index.js" data-search-js="../../../search.js"></div>
     <script src="../../../main.js"></script>
 </body></html>

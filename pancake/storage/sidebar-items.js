@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["db",""],["lsm","An LSM-Tree is an abstraction of a sorted key-value dictionary."],["sec_idx","A secondary index is an abstraction that maps `{ sub-portion of value : [ primary key ] }`."],["serde","Serialization format"],["types",""],["utils",""]]});
+initSidebarItems({"mod":[["engine_serial",""],["engine_ssi",""],["engines_common",""],["serde","Serialization format"],["types",""]]});

@@ -1,0 +1,1 @@
+initSidebarItems({"mod":[["merging",""]],"struct":[["LSMTree","An LSMTree is an abstraction of a sorted dictionary."]]});

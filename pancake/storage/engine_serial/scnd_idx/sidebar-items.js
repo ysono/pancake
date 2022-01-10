@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["SecondaryIndex","A secondary index is an abstraction of as sorted dictionary mapping `(sub-portion of value , primary key)` : `value`."]]});

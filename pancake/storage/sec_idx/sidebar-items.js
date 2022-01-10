@@ -1,1 +1,0 @@
-initSidebarItems({"struct":[["SecondaryIndex","Each instance of [`SecondaryIndex`] is defined by a [`SubValueSpec`]."]]});

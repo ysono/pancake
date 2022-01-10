@@ -1,1 +1,1 @@
-initSidebarItems({"enum":[["SubValueSpec","[`SubValueSpec`] specifies a sub-portion of a [`Value`]."]],"struct":[["Empty",""],["PrimaryKey",""],["SubValue",""],["SubValueAndKey",""],["Value",""]]});
+initSidebarItems({"enum":[["SVShared",""]],"struct":[["PrimaryKey",""],["SVPKShared","A tuple containing [`SVShared`] and [`PKShared`]."],["SubValue","A sub-portion of a Value"],["SubValueSpec","[`SubValueSpec`] specifies a contiguous sub-portion of a [`Value`]."],["Value",""]],"type":[["PKShared",""],["PVShared",""]]});

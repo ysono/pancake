@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["CreateScndIdxResult",""],["DeleteScndIdxResult",""]],"fn":[["create_scnd_idx",""],["delete_scnd_idx",""]]});

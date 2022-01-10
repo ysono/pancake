@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["merge_memlog_and_sstables",""],["merge_sstables","@arg sstables: From older to newer."]]});

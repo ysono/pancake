@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["http",""],["query",""]]});
+initSidebarItems({"mod":[["api",""],["http",""],["query",""]]});

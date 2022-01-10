@@ -1,1 +1,1 @@
-initSidebarItems({"enum":[["Query",""]],"fn":[["parse",""]]});
+initSidebarItems({"fn":[["parse",""]]});
