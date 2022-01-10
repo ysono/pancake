@@ -254,52 +254,6 @@
 <span id="254">254</span>
 <span id="255">255</span>
 <span id="256">256</span>
-<span id="257">257</span>
-<span id="258">258</span>
-<span id="259">259</span>
-<span id="260">260</span>
-<span id="261">261</span>
-<span id="262">262</span>
-<span id="263">263</span>
-<span id="264">264</span>
-<span id="265">265</span>
-<span id="266">266</span>
-<span id="267">267</span>
-<span id="268">268</span>
-<span id="269">269</span>
-<span id="270">270</span>
-<span id="271">271</span>
-<span id="272">272</span>
-<span id="273">273</span>
-<span id="274">274</span>
-<span id="275">275</span>
-<span id="276">276</span>
-<span id="277">277</span>
-<span id="278">278</span>
-<span id="279">279</span>
-<span id="280">280</span>
-<span id="281">281</span>
-<span id="282">282</span>
-<span id="283">283</span>
-<span id="284">284</span>
-<span id="285">285</span>
-<span id="286">286</span>
-<span id="287">287</span>
-<span id="288">288</span>
-<span id="289">289</span>
-<span id="290">290</span>
-<span id="291">291</span>
-<span id="292">292</span>
-<span id="293">293</span>
-<span id="294">294</span>
-<span id="295">295</span>
-<span id="296">296</span>
-<span id="297">297</span>
-<span id="298">298</span>
-<span id="299">299</span>
-<span id="300">300</span>
-<span id="301">301</span>
-<span id="302">302</span>
 </pre><pre class="rust"><code><span class="doccomment">//! An LSM-Tree is an abstraction of a sorted key-value dictionary.</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! ### API:</span>
@@ -332,20 +286,19 @@
 
 <span class="kw">use</span> <span class="ident">std::cmp::Ordering</span>;
 <span class="kw">use</span> <span class="ident">std::collections::BTreeMap</span>;
-<span class="kw">use</span> <span class="ident">std::fs</span>::{<span class="self">self</span>, <span class="ident">File</span>, <span class="ident">OpenOptions</span>};
+<span class="kw">use</span> <span class="ident">std::fs</span>::{<span class="ident">File</span>, <span class="ident">OpenOptions</span>};
 <span class="kw">use</span> <span class="ident">std::hash::Hash</span>;
 <span class="kw">use</span> <span class="ident">std::mem</span>;
 <span class="kw">use</span> <span class="ident">std::path</span>::{<span class="ident">Path</span>, <span class="ident">PathBuf</span>};
 
-<span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">anyhow</span>, <span class="prelude-ty">Result</span>};
-<span class="kw">use</span> <span class="ident">itertools::Itertools</span>;
+<span class="kw">use</span> <span class="ident">anyhow::Result</span>;
 
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::serde</span>::{<span class="self">self</span>, <span class="ident">KeyValueIterator</span>, <span class="ident">OptDatum</span>, <span class="ident">Serializable</span>};
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::utils</span>;
 <span class="kw">use</span> <span class="ident">sstable::SSTable</span>;
 
-<span class="kw">static</span> <span class="ident">COMMIT_LOGS_DIR_PATH</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;commit_logs&quot;</span>;
-<span class="kw">static</span> <span class="ident">SSTABLES_DIR_PATH</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;sstables&quot;</span>;
+<span class="kw">static</span> <span class="ident">COMMIT_LOG_FILE_NAME</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;commit_log.data&quot;</span>;
+<span class="kw">static</span> <span class="ident">SSTABLES_DIR_NAME</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;sstables&quot;</span>;
 <span class="kw">static</span> <span class="ident">MEMTABLE_FLUSH_SIZE_THRESH</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">7</span>;
 <span class="kw">static</span> <span class="ident">SSTABLE_COMPACT_COUNT_THRESH</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">4</span>;
 
@@ -355,9 +308,7 @@
 {
     <span class="ident">path</span>: <span class="ident">PathBuf</span>,
     <span class="ident">memtable</span>: <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span>,
-    <span class="ident">commit_log_path</span>: <span class="ident">PathBuf</span>,
     <span class="ident">commit_log</span>: <span class="ident">File</span>,
-    <span class="ident">memtable_in_flush</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>,
     <span class="ident">sstables</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">SSTable</span><span class="op">&lt;</span><span class="ident">K</span>, <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>,
 }
 
@@ -367,26 +318,21 @@
     <span class="ident">V</span>: <span class="ident">Serializable</span> <span class="op">+</span> <span class="ident">Clone</span>,
 {
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">open</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">AsRef</span><span class="op">&lt;</span><span class="ident">Path</span><span class="op">&gt;</span><span class="op">&gt;</span>(<span class="ident">path</span>: <span class="ident">P</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="ident">std::fs::create_dir_all</span>(<span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">join</span>(<span class="ident">COMMIT_LOGS_DIR_PATH</span>))<span class="question-mark">?</span>;
-        <span class="ident">std::fs::create_dir_all</span>(<span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">join</span>(<span class="ident">SSTABLES_DIR_PATH</span>))<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">cl_path</span> <span class="op">=</span> <span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">join</span>(<span class="ident">COMMIT_LOG_FILE_NAME</span>);
+        <span class="kw">let</span> <span class="ident">sstables_dir_path</span> <span class="op">=</span> <span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">join</span>(<span class="ident">SSTABLES_DIR_NAME</span>);
+        <span class="ident">std::fs::create_dir_all</span>(<span class="kw-2">&amp;</span><span class="ident">sstables_dir_path</span>)<span class="question-mark">?</span>;
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">memtable</span> <span class="op">=</span> <span class="ident">Default::default</span>();
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">commit_log_path</span> <span class="op">=</span> <span class="prelude-val">None</span>;
-        <span class="kw">for</span> <span class="ident">path</span> <span class="kw">in</span> <span class="ident">utils::read_dir_sorted</span>(<span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">join</span>(<span class="ident">COMMIT_LOGS_DIR_PATH</span>))<span class="question-mark">?</span> {
-            <span class="ident"><span class="self">Self</span>::read_commit_log</span>(<span class="kw-2">&amp;</span><span class="ident">path</span>, <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">memtable</span>)<span class="question-mark">?</span>;
-            <span class="ident">commit_log_path</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">path</span>);
+        <span class="kw">if</span> <span class="ident">cl_path</span>.<span class="ident">exists</span>() {
+            <span class="ident"><span class="self">Self</span>::read_commit_log</span>(<span class="kw-2">&amp;</span><span class="ident">cl_path</span>, <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">memtable</span>)<span class="question-mark">?</span>;
         }
 
-        <span class="kw">let</span> <span class="ident">commit_log_path</span> <span class="op">=</span> <span class="ident">commit_log_path</span>.<span class="ident">unwrap_or</span>(<span class="ident">utils::new_timestamped_path</span>(
-            <span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">join</span>(<span class="ident">COMMIT_LOGS_DIR_PATH</span>),
-            <span class="string">&quot;data&quot;</span>,
-        ));
         <span class="kw">let</span> <span class="ident">commit_log</span> <span class="op">=</span> <span class="ident">OpenOptions::new</span>()
             .<span class="ident">create</span>(<span class="bool-val">true</span>)
             .<span class="ident">append</span>(<span class="bool-val">true</span>)
-            .<span class="ident">open</span>(<span class="kw-2">&amp;</span><span class="ident">commit_log_path</span>)<span class="question-mark">?</span>;
+            .<span class="ident">open</span>(<span class="kw-2">&amp;</span><span class="ident">cl_path</span>)<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">sstables</span> <span class="op">=</span> <span class="ident">utils::read_dir_sorted</span>(<span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">join</span>(<span class="ident">SSTABLES_DIR_PATH</span>))<span class="question-mark">?</span>
+        <span class="kw">let</span> <span class="ident">sstables</span> <span class="op">=</span> <span class="ident">utils::read_dir_sorted</span>(<span class="ident">sstables_dir_path</span>)<span class="question-mark">?</span>
             .<span class="ident">into_iter</span>()
             .<span class="ident">map</span>(<span class="ident">SSTable::read_from_file</span>)
             .<span class="ident">collect</span>::<span class="op">&lt;</span><span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="kw">_</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>()<span class="question-mark">?</span>;
@@ -394,9 +340,7 @@
         <span class="kw">let</span> <span class="ident">ret</span> <span class="op">=</span> <span class="self">Self</span> {
             <span class="ident">path</span>: <span class="ident">path</span>.<span class="ident">as_ref</span>().<span class="ident">into</span>(),
             <span class="ident">memtable</span>,
-            <span class="ident">commit_log_path</span>,
             <span class="ident">commit_log</span>,
-            <span class="ident">memtable_in_flush</span>: <span class="prelude-val">None</span>,
             <span class="ident">sstables</span>,
         };
         <span class="prelude-val">Ok</span>(<span class="ident">ret</span>)
@@ -413,46 +357,23 @@
     }
 
     <span class="kw">fn</span> <span class="ident">flush_memtable</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">new_cl_path</span> <span class="op">=</span> <span class="ident">utils::new_timestamped_path</span>(<span class="self">self</span>.<span class="ident">path</span>.<span class="ident">join</span>(<span class="ident">COMMIT_LOGS_DIR_PATH</span>), <span class="string">&quot;data&quot;</span>);
-        <span class="kw">let</span> <span class="ident">new_cl</span> <span class="op">=</span> <span class="ident">OpenOptions::new</span>()
-            .<span class="ident">create_new</span>(<span class="bool-val">true</span>)
-            .<span class="ident">write</span>(<span class="bool-val">true</span>)
-            .<span class="ident">open</span>(<span class="kw-2">&amp;</span><span class="ident">new_cl_path</span>)<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">old_cl_path</span>: <span class="ident">PathBuf</span>;
-        {
-            <span class="comment">// TODO MutexGuard here</span>
-            <span class="kw">let</span> <span class="ident">old_mt</span> <span class="op">=</span> <span class="ident">mem::replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">memtable</span>, <span class="ident">Default::default</span>());
-            <span class="self">self</span>.<span class="ident">memtable_in_flush</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">old_mt</span>);
-
-            <span class="self">self</span>.<span class="ident">commit_log</span> <span class="op">=</span> <span class="ident">new_cl</span>;
-            <span class="ident">old_cl_path</span> <span class="op">=</span> <span class="ident">mem::replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">commit_log_path</span>, <span class="ident">new_cl_path</span>);
-        }
-
-        <span class="kw">let</span> <span class="ident">mtf</span> <span class="op">=</span> <span class="self">self</span>
-            .<span class="ident">memtable_in_flush</span>
-            .<span class="ident">as_ref</span>()
-            .<span class="ident">ok_or</span>(<span class="macro">anyhow!</span>(<span class="string">&quot;Unexpected error: no memtable being flushed&quot;</span>))<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">new_sst</span> <span class="op">=</span> <span class="ident">SSTable::write_from_mem</span>(
-            <span class="ident">mtf</span>,
-            <span class="ident">utils::new_timestamped_path</span>(<span class="self">self</span>.<span class="ident">path</span>.<span class="ident">join</span>(<span class="ident">SSTABLES_DIR_PATH</span>), <span class="string">&quot;data&quot;</span>),
+            <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">memtable</span>,
+            <span class="ident">utils::new_timestamped_path</span>(<span class="self">self</span>.<span class="ident">path</span>.<span class="ident">join</span>(<span class="ident">SSTABLES_DIR_NAME</span>), <span class="string">&quot;data&quot;</span>),
         )<span class="question-mark">?</span>;
+        <span class="self">self</span>.<span class="ident">sstables</span>.<span class="ident">push</span>(<span class="ident">new_sst</span>);
 
-        {
-            <span class="comment">// TODO MutexGuard here</span>
-            <span class="self">self</span>.<span class="ident">sstables</span>.<span class="ident">push</span>(<span class="ident">new_sst</span>);
-            <span class="self">self</span>.<span class="ident">memtable_in_flush</span>.<span class="ident">take</span>();
-        }
-        <span class="ident">fs::remove_file</span>(<span class="ident">old_cl_path</span>)<span class="question-mark">?</span>;
+        <span class="self">self</span>.<span class="ident">memtable</span>.<span class="ident">clear</span>();
+        <span class="self">self</span>.<span class="ident">commit_log</span>.<span class="ident">set_len</span>(<span class="number">0</span>)<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="kw">fn</span> <span class="ident">compact_sstables</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">new_table_path</span> <span class="op">=</span> <span class="ident">utils::new_timestamped_path</span>(<span class="self">self</span>.<span class="ident">path</span>.<span class="ident">join</span>(<span class="ident">SSTABLES_DIR_PATH</span>), <span class="string">&quot;data&quot;</span>);
+        <span class="kw">let</span> <span class="ident">new_table_path</span> <span class="op">=</span> <span class="ident">utils::new_timestamped_path</span>(<span class="self">self</span>.<span class="ident">path</span>.<span class="ident">join</span>(<span class="ident">SSTABLES_DIR_NAME</span>), <span class="string">&quot;data&quot;</span>);
         <span class="kw">let</span> <span class="ident">new_table</span> <span class="op">=</span> <span class="ident">SSTable::compact</span>(<span class="ident">new_table_path</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">sstables</span>)<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">new_tables</span> <span class="op">=</span> <span class="macro">vec!</span>[<span class="ident">new_table</span>];
 
-        <span class="comment">// TODO MutexGuard here</span>
         <span class="comment">// In async version, we will have to assume that new sstables may have been created while we were compacting, so we won&#39;t be able to just swap.</span>
         <span class="kw">let</span> <span class="ident">old_tables</span> <span class="op">=</span> <span class="ident">mem::replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>.<span class="ident">sstables</span>, <span class="ident">new_tables</span>);
         <span class="kw">for</span> <span class="ident">table</span> <span class="kw">in</span> <span class="ident">old_tables</span> {
@@ -494,11 +415,6 @@
         <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">v</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">memtable</span>.<span class="ident">get</span>(<span class="ident">k</span>) {
             <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(<span class="ident">v</span>.<span class="ident">clone</span>()));
         }
-        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">mtf</span>) <span class="op">=</span> <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">memtable_in_flush</span> {
-            <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">v</span>) <span class="op">=</span> <span class="ident">mtf</span>.<span class="ident">get</span>(<span class="ident">k</span>) {
-                <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(<span class="ident">v</span>.<span class="ident">clone</span>()));
-            }
-        }
         <span class="comment">// TODO bloom filter here</span>
         <span class="kw">for</span> <span class="ident">ss</span> <span class="kw">in</span> <span class="self">self</span>.<span class="ident">sstables</span>.<span class="ident">iter</span>().<span class="ident">rev</span>() {
             <span class="kw">let</span> <span class="ident">v</span> <span class="op">=</span> <span class="ident">ss</span>.<span class="ident">get</span>(<span class="ident">k</span>)<span class="question-mark">?</span>;
@@ -526,40 +442,32 @@
     {
         <span class="kw">let</span> <span class="ident">ssts_iter</span> <span class="op">=</span> <span class="ident">SSTable::merge_range</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">sstables</span>, <span class="ident">k_lo_cmp</span>, <span class="ident">k_hi_cmp</span>)<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">mts_iter</span> <span class="op">=</span> [<span class="self">self</span>.<span class="ident">memtable_in_flush</span>.<span class="ident">as_ref</span>(), <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">memtable</span>)]
-            .<span class="ident">iter</span>()
-            .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">mt</span><span class="op">|</span> <span class="kw-2">*</span><span class="ident">mt</span>)
-            .<span class="ident">enumerate</span>()
-            .<span class="ident">map</span>(<span class="op">|</span>(<span class="ident">mt_i</span>, <span class="ident">mt</span>)<span class="op">|</span> {
-                <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">iter</span> <span class="op">=</span> <span class="ident">mt</span>.<span class="ident">iter</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mt_iter</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">memtable</span>.<span class="ident">iter</span>();
 
-                <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">k_lo_cmp</span>) <span class="op">=</span> <span class="ident">k_lo_cmp</span> {
-                    <span class="comment">// Find the max key less than the desired key. Not equal to it, b/c</span>
-                    <span class="comment">// `.nth()` takes the item at the provided position.</span>
-                    <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">iter_pos</span>) <span class="op">=</span> <span class="ident">mt</span>.<span class="ident">iter</span>().<span class="ident">rposition</span>(<span class="op">|</span>(<span class="ident">k</span>, <span class="ident">_v</span>)<span class="op">|</span> <span class="ident">k_lo_cmp</span>(<span class="ident">k</span>).<span class="ident">is_lt</span>()) {
-                        <span class="ident">iter</span>.<span class="ident">nth</span>(<span class="ident">iter_pos</span>);
-                    }
-                }
+        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">k_lo_cmp</span>) <span class="op">=</span> <span class="ident">k_lo_cmp</span> {
+            <span class="comment">// Find the max key less than the desired key. Not equal to it, b/c</span>
+            <span class="comment">// `.nth()` takes the item at the provided position.</span>
+            <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">iter_pos</span>) <span class="op">=</span> <span class="self">self</span>
+                .<span class="ident">memtable</span>
+                .<span class="ident">iter</span>()
+                .<span class="ident">rposition</span>(<span class="op">|</span>(<span class="ident">k</span>, <span class="ident">_v</span>)<span class="op">|</span> <span class="ident">k_lo_cmp</span>(<span class="ident">k</span>).<span class="ident">is_lt</span>())
+            {
+                <span class="ident">mt_iter</span>.<span class="ident">nth</span>(<span class="ident">iter_pos</span>);
+            }
+        }
 
-                <span class="kw">let</span> <span class="ident">k_hi_cmp</span> <span class="op">=</span> <span class="ident">k_hi_cmp</span>.<span class="ident">clone</span>();
-                <span class="ident">iter</span>.<span class="ident">take_while</span>(<span class="kw">move</span> <span class="op">|</span>(<span class="ident">k</span>, <span class="ident">_v</span>)<span class="op">|</span> {
-                    <span class="comment">// This closure moves k_hi_cmp.</span>
-                    <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">k_hi_cmp</span>) <span class="op">=</span> <span class="ident">k_hi_cmp</span> {
-                        <span class="ident">k_hi_cmp</span>(<span class="ident">k</span>).<span class="ident">is_le</span>()
-                    } <span class="kw">else</span> {
-                        <span class="bool-val">true</span>
-                    }
-                })
-                .<span class="ident">zip</span>(<span class="ident">std::iter::repeat</span>(<span class="ident">mt_i</span>))
-            })
-            .<span class="ident">kmerge_by</span>(<span class="op">|</span>((<span class="ident">a_k</span>, <span class="ident">_a_v</span>), <span class="ident">a_i</span>), ((<span class="ident">b_k</span>, <span class="ident">_b_v</span>), <span class="ident">b_i</span>)<span class="op">|</span> {
-                <span class="ident">a_k</span> <span class="op">&lt;</span> <span class="ident">b_k</span> <span class="op">|</span><span class="op">|</span> (<span class="ident">a_k</span> <span class="op">==</span> <span class="ident">b_k</span> <span class="op">&amp;&amp;</span> <span class="ident">a_i</span> <span class="op">&gt;</span> <span class="ident">b_i</span>)
-            })
-            .<span class="ident">unique_by</span>(<span class="op">|</span>((<span class="ident">k</span>, <span class="ident">_v</span>), <span class="ident">_mt_i</span>)<span class="op">|</span> <span class="ident">k</span>.<span class="ident">clone</span>())
-            .<span class="ident">map</span>(<span class="op">|</span>(<span class="ident">kv</span>, <span class="ident">_mt_i</span>)<span class="op">|</span> <span class="ident">kv</span>);
+        <span class="kw">let</span> <span class="ident">k_hi_cmp</span> <span class="op">=</span> <span class="ident">k_hi_cmp</span>.<span class="ident">clone</span>();
+        <span class="kw">let</span> <span class="ident">mt_iter</span> <span class="op">=</span> <span class="ident">mt_iter</span>.<span class="ident">take_while</span>(<span class="kw">move</span> <span class="op">|</span>(<span class="ident">k</span>, <span class="ident">_v</span>)<span class="op">|</span> {
+            <span class="comment">// This closure moves k_hi_cmp.</span>
+            <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">k_hi_cmp</span>) <span class="op">=</span> <span class="ident">k_hi_cmp</span> {
+                <span class="ident">k_hi_cmp</span>(<span class="ident">k</span>).<span class="ident">is_le</span>()
+            } <span class="kw">else</span> {
+                <span class="bool-val">true</span>
+            }
+        });
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">ssts_iter</span> <span class="op">=</span> <span class="ident">ssts_iter</span>.<span class="ident">peekable</span>();
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mts_iter</span> <span class="op">=</span> <span class="ident">mts_iter</span>.<span class="ident">peekable</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mt_iter</span> <span class="op">=</span> <span class="ident">mt_iter</span>.<span class="ident">peekable</span>();
 
         <span class="comment">/*
         Here we&#39;re doing k-merge between (the iterator of all sstables) and (the iterator of all memtables).
@@ -568,7 +476,7 @@
         A memtable iterator yields Item = (&amp;K, &amp;V).
         */</span>
         <span class="kw">let</span> <span class="ident">out_iter_fn</span> <span class="op">=</span> <span class="kw">move</span> <span class="op">|</span><span class="op">|</span> -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="prelude-ty">Result</span><span class="op">&lt;</span>(<span class="ident">K</span>, <span class="ident">OptDatum</span><span class="op">&lt;</span><span class="ident">V</span><span class="op">&gt;</span>)<span class="op">&gt;</span><span class="op">&gt;</span> {
-            <span class="kw">let</span> <span class="ident">next_is_sst</span> <span class="op">=</span> <span class="kw">match</span> (<span class="ident">ssts_iter</span>.<span class="ident">peek</span>(), <span class="ident">mts_iter</span>.<span class="ident">peek</span>()) {
+            <span class="kw">let</span> <span class="ident">next_is_sst</span> <span class="op">=</span> <span class="kw">match</span> (<span class="ident">ssts_iter</span>.<span class="ident">peek</span>(), <span class="ident">mt_iter</span>.<span class="ident">peek</span>()) {
                 (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) =&gt; <span class="kw">return</span> <span class="prelude-val">None</span>,
                 (<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="kw">_</span>)) =&gt; <span class="bool-val">false</span>,
                 (<span class="prelude-val">Some</span>(<span class="kw">_</span>), <span class="prelude-val">None</span>) =&gt; <span class="bool-val">true</span>,
@@ -588,7 +496,7 @@
             <span class="kw">if</span> <span class="ident">next_is_sst</span> {
                 <span class="kw">return</span> <span class="ident">ssts_iter</span>.<span class="ident">next</span>();
             } <span class="kw">else</span> {
-                <span class="kw">let</span> (<span class="ident">k</span>, <span class="ident">v</span>) <span class="op">=</span> <span class="ident">mts_iter</span>.<span class="ident">next</span>().<span class="ident">unwrap</span>();
+                <span class="kw">let</span> (<span class="ident">k</span>, <span class="ident">v</span>) <span class="op">=</span> <span class="ident">mt_iter</span>.<span class="ident">next</span>().<span class="ident">unwrap</span>();
                 <span class="kw">let</span> <span class="ident">kv</span> <span class="op">=</span> (<span class="ident">k</span>.<span class="ident">clone</span>(), <span class="ident">v</span>.<span class="ident">clone</span>());
                 <span class="kw">return</span> <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(<span class="ident">kv</span>));
             }

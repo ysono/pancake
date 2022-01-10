@@ -133,10 +133,6 @@
 <span id="133">133</span>
 <span id="134">134</span>
 <span id="135">135</span>
-<span id="136">136</span>
-<span id="137">137</span>
-<span id="138">138</span>
-<span id="139">139</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::lsm::LSMTree</span>;
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::sec_idx::SecondaryIndex</span>;
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::types</span>::{<span class="ident">PrimaryKey</span>, <span class="ident">SubValue</span>, <span class="ident">SubValueSpec</span>, <span class="ident">Value</span>};
@@ -245,8 +241,6 @@
             }
         }
 
-        <span class="comment">// TODO RAII lock object in this scope</span>
-
         <span class="kw">let</span> <span class="ident">secidx</span> <span class="op">=</span> <span class="ident">SecondaryIndex::new</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">all_secidxs_dir</span>, <span class="ident">spec</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">primary_index</span>)<span class="question-mark">?</span>;
 
         <span class="self">self</span>.<span class="ident">secondary_indexes</span>.<span class="ident">push</span>(<span class="ident">secidx</span>);
@@ -265,8 +259,6 @@
 
         <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">del_idx</span>) <span class="op">=</span> <span class="ident">del_idx</span> {
             <span class="kw">let</span> <span class="ident">secidx</span> <span class="op">=</span> {
-                <span class="comment">// TODO RAII lock object in this scope</span>
-
                 <span class="comment">// This is O(n). We could use a HashMap instead.</span>
                 <span class="self">self</span>.<span class="ident">secondary_indexes</span>.<span class="ident">remove</span>(<span class="ident">del_idx</span>)
             };
