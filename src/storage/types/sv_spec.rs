@@ -15,9 +15,9 @@ use std::sync::Arc;
 /// #### Specification
 ///
 /// The [`DatumType`] of the target sub-portion must be specified.
-/// The target could be a [`DatumType::Tuple`].
+/// If the target is a [`DatumType::Tuple`], we specify the undivided tuple.
 ///
-/// If the sub-portion is actually the entire [`Value`], `member_idxs` is empty.
+/// If the sub-portion is actually the entire [`Value`], then `member_idxs` is empty.
 /// If the sub-portion is nested with a [`Datum::Tuple`], then `member_idxs` specifies the member idx at each depth.
 ///
 /// For example in pseudocode, given a tuple-typed [`Value`]

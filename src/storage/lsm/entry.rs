@@ -2,6 +2,11 @@ use crate::storage::serde::OptDatum;
 use anyhow::{anyhow, Result};
 use std::borrow::Borrow;
 
+/// [`Entry`] is the API for the content of the DB.
+///
+/// It is an enum that contains either
+/// a reference to an in-memory entry or
+/// an owned (non-shrared) entry that was read from file.
 pub enum Entry<'a, K, V> {
     Ref((&'a K, &'a V)),
     Own(Result<(K, V)>),

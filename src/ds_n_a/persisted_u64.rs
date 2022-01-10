@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 use std::ops::DerefMut;
 use std::path::PathBuf;
 
+/// U64 that is backed by a file.
 pub struct PersistedU64<Id> {
     file_path: PathBuf,
     curr_val: Id,
@@ -29,8 +30,7 @@ where
         })
     }
 
-    // Intentionally requiring mutual borrow of self, for free compiler checks of
-    // mutual exclusion.
+    /// Increment the u64. The modified u64 is written to file. Requires exclusive access to self.
     pub fn get_and_inc(&mut self) -> Result<Id> {
         let ret = self.curr_val;
 

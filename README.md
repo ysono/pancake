@@ -1,10 +1,17 @@
 # 🥞
 
-Pancake is an experimental database.
+Pancake is an experimental database with the following features:
+
+- Data model = Document store. Documents are dynamically typed.
+- Secondary indexes work on key definitions that are one contiguous sub-portion of values.
+- Storage engine = LSM Tree.
+- Operations are executed serially.
 
 ## Architecture
 
-See [doc for LSM-Tree](https://ysono.github.io/pancake/pancake/storage/lsm/index.html).
+See [doc diagrams](./doc).
+
+Rustdoc is [here](https://ysono.github.io/pancake/pancake/index.html).
 
 ## Usage
 
@@ -24,4 +31,4 @@ curl -i -X POST "${DB}/query" -d 'get where int int(1000)'
 curl -i -X POST "${DB}/query" -d 'get where tup( 1 tup( 0 int ) ) between int(60) int(61)'
 ```
 
-For the full list of supported queries, see [doc for query](https://ysono.github.io/pancake/pancake/frontend/query/basic/index.html).
+For the full documentation on the query language, see [the rustdoc for query](https://ysono.github.io/pancake/pancake/frontend/query/basic/index.html).

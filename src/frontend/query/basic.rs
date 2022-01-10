@@ -22,6 +22,8 @@
 //! - `SELECT * FROM table WHERE pk BETWEEN ${pk_lo} AND ${pk_hi};`
 //! - `SELECT * FROM table WHERE pk <= ${pk_hi};`
 //!
+//! Only inclusive boundaries are supported.
+//!
 //! - `get between int(50) str(foobar)`
 //! - `get between int(50) _`
 //! - `get between _ str(foobar)`
@@ -39,7 +41,7 @@
 //! a selection of one or more columns, we support a selection of any of:
 //!
 //! - The whole value
-//! - One sub-portion of value at a specific nested location and having a specific type
+//! - One contiguous sub-portion of value at a specific nested location and having a specific type
 //!
 //! Index all entries by value type.
 //!

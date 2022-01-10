@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::marker::PhantomData;
 
+/// An iterator that deserializes `K` and `V` alternately from a file.
 pub struct KeyValueIterator<K, V> {
     r: DatumReader<File>,
     _phant: PhantomData<(K, V)>,

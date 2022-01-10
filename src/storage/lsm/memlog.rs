@@ -7,8 +7,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-/// A MemLog is a sorted dictionary (called Memtable),
-/// backed up by a log file.
+/// A MemLog is a sorted dictionary (called Memtable), backed up by a log file.
 pub struct MemLog<K, V> {
     memtable: BTreeMap<K, OptDatum<V>>,
     log_path: PathBuf,

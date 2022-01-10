@@ -12,8 +12,11 @@ enum State {
     Terminated,
 }
 
-/// An iterator that reads a file that stores serialized `K` and `V` sorted by `K`.
+/// An iterator that reads a file that stores serialized `K` and `V` alternately, sorted by `K`.
 /// I.e. it works on SSTable files only.
+///
+/// The iterator deserializes every `K`; and if this `K` is out of the desired range,
+/// it skips deserialization of `V`.
 pub struct KeyValueRangeIterator<'a, K, V, Q> {
     r: DatumReader<File>,
     k_lo: Option<&'a Q>,

@@ -10,7 +10,7 @@ use std::sync::Arc;
 /// `(sub-portion of value , primary key)` : `value`.
 ///
 /// Clients may query for `(primary key, value)` entries based on bounds
-/// over `sub-portion of value` and optionally over `primary key`.
+/// over `sub-portion of value`.
 ///
 /// Each instance of [`SecondaryIndex`] is defined by a [`SubValueSpec`],
 /// which specifies what kind of `sub-portion of value` this [`SecondaryIndex`]

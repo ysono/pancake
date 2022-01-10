@@ -6,8 +6,9 @@ use std::cmp::{Ord, Ordering, PartialOrd};
 use std::io::Write;
 use std::sync::Arc;
 
-/// A tuple containing [`SubValue`] and [`PrimaryKey`].
-/// Orderable by sub-value first, then by primary-key.
+/// A tuple containing [`SVShared`] and [`PKShared`].
+///
+/// Orderable by sub-value first, then by primary-key. See doc for `partial_cmp()`.
 #[derive(PartialEq, Eq, Clone)]
 pub struct SVPKShared {
     pub sv: SVShared,
@@ -74,6 +75,7 @@ impl PartialOrd<SubValue> for SVPKShared {
     /// In case `self SV == param SV`, the partial ordering is undefined and depends on the context:
     /// - When seeking the lower bound, self is greater than param.
     /// - When seeking the upper bound, self is greater than param.
+    ///
     /// Caller must call `.unwrap_or(Ordering::Greater)` or `.unwrap_or(Ordering::Less)`, accordingly.
     fn partial_cmp(&self, other: &SubValue) -> Option<Ordering> {
         match (&self.sv as &SubValue).cmp(other) {

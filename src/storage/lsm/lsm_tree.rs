@@ -20,7 +20,7 @@ const UNIQUE_ID_FILE_NAME: &str = "unique_id.u64";
 ///
 /// ### Internals:
 ///
-/// One [`MemLog`] holds the most recently inserted `{key: value}` mapping in an in-memory table.
+/// One [`MemLog`] holds the most recently inserted `{key: value}` in a sorted in-memory table.
 ///
 /// The [`MemLog`] is occasionally flushed into an [`SSTable`].
 ///
