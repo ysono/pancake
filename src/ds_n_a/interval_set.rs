@@ -2,7 +2,6 @@ use crate::ds_n_a::cmp::TryPartialOrd;
 use anyhow::{anyhow, Result};
 use std::cmp::Ordering;
 use std::fmt::Debug;
-use std::mem;
 
 #[derive(Debug)]
 pub struct Interval<T> {
@@ -47,23 +46,16 @@ where
     T: Ord,
 {
     pub fn merge(&mut self) {
-        if self.itvs.is_empty() || self.is_merged {
-            return;
-        }
+        self.itvs
+            .sort_by(|a, b| match (a.lo_incl.as_ref(), b.lo_incl.as_ref()) {
+                (None, _) => Ordering::Less,
+                (_, None) => Ordering::Greater,
+                (Some(a_lo), Some(b_lo)) => a_lo.cmp(b_lo),
+            });
 
-        let mut old_itvs = mem::replace(&mut self.itvs, vec![]);
-        old_itvs.sort_by(|a, b| match (a.lo_incl.as_ref(), b.lo_incl.as_ref()) {
-            (None, _) => Ordering::Less,
-            (_, None) => Ordering::Greater,
-            (Some(a_lo), Some(b_lo)) => a_lo.cmp(b_lo),
-        });
-
-        let mut old_itvs = old_itvs.into_iter();
-
-        let mut prev_itv = old_itvs.next().unwrap();
-
-        for curr_itv in old_itvs {
-            match (&prev_itv.hi_incl, &curr_itv.lo_incl) {
+        let mut ib = 0;
+        for ia in 1..self.itvs.len() {
+            match (&self.itvs[ib].hi_incl, &self.itvs[ia].lo_incl) {
                 (None, _) => break,
                 (Some(prev_hi), opt_curr_lo) => {
                     let is_overlapping = match opt_curr_lo {
@@ -71,22 +63,23 @@ where
                         Some(curr_lo) => curr_lo <= prev_hi,
                     };
                     if is_overlapping {
-                        let curr_hi_is_greater = match curr_itv.hi_incl.as_ref() {
+                        let curr_hi_is_greater = match &self.itvs[ia].hi_incl {
                             None => true,
                             Some(curr_hi) => prev_hi < curr_hi,
                         };
                         if curr_hi_is_greater {
-                            prev_itv.hi_incl = curr_itv.hi_incl;
+                            self.itvs[ib].hi_incl = self.itvs[ia].hi_incl.take();
                         }
                     } else {
-                        let prev = mem::replace(&mut prev_itv, curr_itv);
-                        self.itvs.push(prev);
+                        ib += 1;
+                        self.itvs[ib].lo_incl = self.itvs[ia].lo_incl.take();
+                        self.itvs[ib].hi_incl = self.itvs[ia].hi_incl.take();
                     }
                 }
             }
         }
 
-        self.itvs.push(prev_itv);
+        self.itvs.truncate(ib + 1);
 
         self.is_merged = true;
     }
