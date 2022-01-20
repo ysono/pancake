@@ -14,11 +14,11 @@ static OWNERS_PK_STR: &'static str = "owners::merch_x";
 static INVOICES_PK_STR: &'static str = "invoices::merch_x";
 
 pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
-    let w_txns_ct = 50;
+    let w_txns_ct = 20;
     let mut tasks = vec![];
 
     /*
-    Each writing txn puts two PKs, assigning both the same Value that is unique to the txn.
+    Each writing txn puts two PKs, assigning both the same PV that is unique to the txn.
     */
     for uniq_i in 0..w_txns_ct {
         let txn_fut = Txn::run(db, move |mut txn| {
@@ -26,22 +26,53 @@ pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
                 sleep(1).await;
 
                 let res: Result<()> = async {
+                    let owners_pk = Arc::new(gen::gen_str_pk(OWNERS_PK_STR));
+                    let owners_pv = Arc::new(gen::gen_str_pv(format!("cust_{}", uniq_i)));
+                    txn.put(owners_pk, Some(owners_pv)).await?;
+
+                    let invoices_pk = Arc::new(gen::gen_str_pk(INVOICES_PK_STR));
+                    let invoices_pv = Arc::new(gen::gen_str_pv(format!("cust_{}", uniq_i)));
+                    txn.put(invoices_pk, Some(invoices_pv)).await?;
+
                     loop {
-                        let owners_pk = Arc::new(gen::gen_str_pk(OWNERS_PK_STR));
-                        let owners_pv = Arc::new(gen::gen_str_pv(format!("cust_{}", uniq_i)));
-                        txn.put(owners_pk, Some(owners_pv)).await?;
-
-                        let invoices_pk = Arc::new(gen::gen_str_pk(INVOICES_PK_STR));
-                        let invoices_pv = Arc::new(gen::gen_str_pv(format!("cust_{}", uniq_i)));
-                        txn.put(invoices_pk, Some(invoices_pv)).await?;
-
                         sleep(1).await;
 
                         match txn.try_commit().await? {
-                            CommitResult::Conflict => txn.clear().await?,
+                            CommitResult::Conflict => (),
                             CommitResult::Success => break,
                         }
                     }
+                    Ok(())
+                }
+                .await;
+
+                txn.close(res).await
+            })
+        });
+        let task: JoinHandle<CloseResult<()>> = tokio::spawn(txn_fut);
+        tasks.push(task);
+    }
+
+    /*
+    Each writing txn puts two PKs, then aborts.
+    */
+    static CUST_ABORTED: &str = "cust_aborted";
+    for _ in 0..w_txns_ct {
+        let txn_fut = Txn::run(db, move |mut txn| {
+            Box::pin(async move {
+                sleep(1).await;
+
+                let res: Result<()> = async {
+                    let pv = Arc::new(gen::gen_str_pv(CUST_ABORTED));
+
+                    let owners_pk = Arc::new(gen::gen_str_pk(OWNERS_PK_STR));
+                    txn.put(owners_pk, Some(Arc::clone(&pv))).await?;
+
+                    let invoices_pk = Arc::new(gen::gen_str_pk(INVOICES_PK_STR));
+                    txn.put(invoices_pk, Some(pv)).await?;
+
+                    /* Do not commit here. Do nothing. */
+
                     Ok(())
                 }
                 .await;
@@ -59,7 +90,7 @@ pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
         res?;
     }
 
-    /* Assert that the two PKs map to the same Value. */
+    /* Assert that the two PKs map to the same PV. */
     let db_adap = OneStmtSsiDbAdaptor { db: &db };
     let owner: Option<PVShared> = db_adap
         .get_pk_one(&gen::gen_str_pk(OWNERS_PK_STR))
@@ -70,6 +101,9 @@ pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
         .await?
         .map(|(_pk, pv)| pv);
     assert_eq!(owner, invoice);
+
+    /* Assert that aborting txns did not leave any durable change. */
+    assert_ne!(Arc::new(gen::gen_str_pv(CUST_ABORTED)), owner.unwrap());
 
     Ok(())
 }
@@ -83,7 +117,7 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
     /*
     Launch all writing txns now.
     Each writing txn starts after a staggered delay,
-        then puts two PKs, assigning them the same Value that is unique to the txn.
+        then puts two PKs, assigning them the same PV that is unique to the txn.
     */
     for uniq_i in 0..w_txns_ct {
         let txn_fut = Txn::run(db, move |mut txn| {
@@ -94,17 +128,17 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
                 let invoices_pk = Arc::new(gen::gen_str_pk(INVOICES_PK_STR));
 
                 let res: Result<()> = async {
+                    let owners_pk = Arc::clone(&owners_pk);
+                    let owners_pv = Arc::new(gen::gen_str_pv(format!("cust_{}", uniq_i)));
+                    txn.put(owners_pk, Some(owners_pv)).await?;
+
+                    let invoices_pk = Arc::clone(&invoices_pk);
+                    let invoices_pv = Arc::new(gen::gen_str_pv(format!("cust_{}", uniq_i)));
+                    txn.put(invoices_pk, Some(invoices_pv)).await?;
+
                     loop {
-                        let owners_pk = Arc::clone(&owners_pk);
-                        let owners_pv = Arc::new(gen::gen_str_pv(format!("cust_{}", uniq_i)));
-                        txn.put(owners_pk, Some(owners_pv)).await?;
-
-                        let invoices_pk = Arc::clone(&invoices_pk);
-                        let invoices_pv = Arc::new(gen::gen_str_pv(format!("cust_{}", uniq_i)));
-                        txn.put(invoices_pk, Some(invoices_pv)).await?;
-
                         match txn.try_commit().await? {
-                            CommitResult::Conflict => txn.clear().await?,
+                            CommitResult::Conflict => (),
                             CommitResult::Success => break,
                         }
                     }
@@ -123,7 +157,7 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
     Launch reading txns by staggered delays.
     Each reading txn reads the two PKs,
         with a delay s.t. there is a `put` event in between,
-        and verifies that the two Values are equal.
+        and verifies that the two PVs are equal.
     */
     let owners_pk = gen::gen_str_pk(OWNERS_PK_STR);
     let invoices_pk = gen::gen_str_pk(INVOICES_PK_STR);

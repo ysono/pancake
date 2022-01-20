@@ -91,7 +91,6 @@ pub async fn no_phantom_write(db: &'static DB) -> Result<()> {
                         if tot_price <= tot_price_thresh {
                             sleep(1).await;
                             match txn.try_commit().await? {
-                                /* In case of conflict, no need to `txn.clear()`. */
                                 CommitResult::Conflict => (),
                                 CommitResult::Success => break,
                             }

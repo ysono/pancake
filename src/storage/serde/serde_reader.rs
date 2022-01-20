@@ -43,7 +43,7 @@ impl<R: Read + Seek> DatumReader<R> {
         self.deser_single(true)
     }
 
-    pub fn deser_single(&mut self, is_root: bool) -> Result<ReadResult<OptDatum<Datum>>> {
+    fn deser_single(&mut self, is_root: bool) -> Result<ReadResult<OptDatum<Datum>>> {
         match DatumTypeInt::read(&mut self.r) {
             Err(e) if e.kind() == ErrorKind::UnexpectedEof => return Ok(ReadResult::EOF),
             Err(e) => return Err(anyhow!(e)),

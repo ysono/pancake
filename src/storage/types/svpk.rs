@@ -1,6 +1,7 @@
 use crate::storage::serde::{Datum, DatumWriter, Ser, Serializable, WriteLen};
 use crate::storage::types::{PKShared, PrimaryKey, SVShared, SubValue};
 use anyhow::{anyhow, Result};
+use std::any;
 use std::borrow::Borrow;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::io::Write;
@@ -35,7 +36,11 @@ impl TryFrom<Datum> for SVPKShared {
                 Err(mbrs) => dat = Datum::Tuple(mbrs),
             }
         }
-        Err(anyhow!("SVPK could not be deserialized from {:?}", dat))
+        Err(anyhow!(
+            "{} could not be deserialized from {:?}",
+            any::type_name::<Self>(),
+            dat
+        ))
     }
 }
 impl Serializable for SVPKShared {}

@@ -3,7 +3,7 @@ use derive_more::{Deref, DerefMut, From};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(From, Deref, DerefMut, PartialEq, Eq, Clone, Copy)]
+#[derive(From, Deref, DerefMut, Clone, Copy)]
 pub struct UniqueId(u64);
 impl UniqueId {
     pub fn to_alphanum_orderable_string(&self) -> String {

@@ -95,7 +95,6 @@ pub async fn no_write_skew(db: &'static DB) -> Result<()> {
                         if oncall_ct >= oncall_doctors_thresh {
                             sleep(1).await;
                             match txn.try_commit().await? {
-                                /* In case of conflict, no need to `txn.clear()`. */
                                 CommitResult::Conflict => (),
                                 CommitResult::Success => break,
                             }

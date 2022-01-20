@@ -11,7 +11,7 @@ use storage::helpers::one_stmt::{OneStmtSerialDbAdaptor, OneStmtSsiDbAdaptor};
 use storage::individual_stmts::test_stmts_serially;
 
 #[tokio::test]
-async fn test_main() -> Result<()> {
+async fn integr_test_main() -> Result<()> {
     let parent_dir = env::temp_dir().join("pancake");
     let serial_db_dir = parent_dir.join("serial");
     let ssi_db_dir = parent_dir.join("ssi");

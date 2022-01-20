@@ -48,6 +48,7 @@ pub async fn no_lost_update(db: &'static DB) -> Result<()> {
                         sleep(1).await;
 
                         match txn.try_commit().await? {
+                            /* Clear, so that `txn.get_pk_one()` doesn't read the txn-local written entry. */
                             CommitResult::Conflict => txn.clear().await?,
                             CommitResult::Success => break,
                         }

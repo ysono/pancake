@@ -8,7 +8,7 @@ pub async fn sleep(millis: u64) {
 /// Use case:
 /// Launching async task(s) that capture a reference,
 ///     then joining such task(s) in a local scope,
-///     s.t. we know that the reference is safe, althought rust compiler doesn't.
+///     s.t. we know that the reference is safe, although rust compiler doesn't.
 ///
 /// Specific use case:
 /// Arguments to "get_by" apis require `&'txn PrimaryKey` or `&'txn SubValue`.

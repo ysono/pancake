@@ -94,10 +94,10 @@ impl<'a> OneStmtSsiDbAdaptor<'a> {
         let fut = Txn::run(self.db, |mut txn| {
             Box::pin(async {
                 let res: Result<()> = async {
+                    txn.put(pk.clone(), pv.clone()).await?;
                     loop {
-                        txn.put(pk.clone(), pv.clone()).await?;
                         match txn.try_commit().await? {
-                            CommitResult::Conflict => txn.clear().await?,
+                            CommitResult::Conflict => (),
                             CommitResult::Success => break,
                         }
                     }
