@@ -90,9 +90,15 @@
 <span id="90">90</span>
 <span id="91">91</span>
 <span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::serde</span>::{<span class="ident">Datum</span>, <span class="ident">DatumWriter</span>, <span class="ident">Ser</span>, <span class="ident">Serializable</span>, <span class="ident">WriteLen</span>};
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::types</span>::{<span class="ident">PKShared</span>, <span class="ident">PrimaryKey</span>, <span class="ident">SVShared</span>, <span class="ident">SubValue</span>};
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">anyhow</span>, <span class="prelude-ty">Result</span>};
+<span class="kw">use</span> <span class="ident">std::any</span>;
 <span class="kw">use</span> <span class="ident">std::borrow::Borrow</span>;
 <span class="kw">use</span> <span class="ident">std::cmp</span>::{<span class="ident">Ord</span>, <span class="ident">Ordering</span>, <span class="ident">PartialOrd</span>};
 <span class="kw">use</span> <span class="ident">std::io::Write</span>;
@@ -127,7 +133,11 @@
                 <span class="prelude-val">Err</span>(<span class="ident">mbrs</span>) =&gt; <span class="ident">dat</span> <span class="op">=</span> <span class="ident">Datum::Tuple</span>(<span class="ident">mbrs</span>),
             }
         }
-        <span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">&quot;SVPK could not be deserialized from {:?}&quot;</span>, <span class="ident">dat</span>))
+        <span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(
+            <span class="string">&quot;{} could not be deserialized from {:?}&quot;</span>,
+            <span class="ident">any::type_name</span>::<span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>(),
+            <span class="ident">dat</span>
+        ))
     }
 }
 <span class="kw">impl</span> <span class="ident">Serializable</span> <span class="kw">for</span> <span class="ident">SVPKShared</span> {}
