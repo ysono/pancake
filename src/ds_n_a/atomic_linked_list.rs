@@ -46,7 +46,6 @@ impl<T> AtomicLinkedList<T> {
         });
 
         let mut_ref_moi = unsafe { moi.as_mut().get_unchecked_mut() };
-        mut_ref_moi.dummy_newest.older = AtomicPtr::new(&mut mut_ref_moi.dummy_oldest);
 
         let mut curr_node = &mut mut_ref_moi.dummy_newest;
         for t in iter {
