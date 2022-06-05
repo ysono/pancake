@@ -42,7 +42,7 @@ pub async fn create_scnd_idx(db: &DB, spec: Arc<SubValueSpec>) -> Result<CreateS
             )));
         }
 
-        let scnd_idx_dir = db.format_new_scnd_idx_dir_path().await?;
+        let scnd_idx_dir = db.format_new_scnd_idx_dir_path();
         let scnd_idx = SecondaryIndex::new(scnd_idx_dir, Arc::clone(&spec))?;
 
         /* Push a terminus dummy in order to prevent the GC job from traversing older than there. */
@@ -66,7 +66,7 @@ pub async fn create_scnd_idx(db: &DB, spec: Arc<SubValueSpec>) -> Result<CreateS
             anyhow!("Secondary index creation was interrupted. Try again."),
         )?;
 
-        let entryset_dir = scnd_idx.lsm().format_new_entryset_dir_path().await?;
+        let entryset_dir = scnd_idx.lsm().format_new_entryset_dir_path();
         let entryset_info = CommittedEntrySetInfo {
             commit_info: CommitInfo {
                 commit_ver_hi_incl: SCND_IDX_ASYNC_BUILT_COMMIT_VER,

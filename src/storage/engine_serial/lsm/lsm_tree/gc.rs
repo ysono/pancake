@@ -4,7 +4,6 @@ use crate::storage::engines_common::Entry;
 use crate::storage::serde::{OptDatum, Serializable};
 use anyhow::Result;
 use std::mem;
-use std::path::PathBuf;
 
 static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;
 static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
@@ -62,13 +61,5 @@ where
         }
 
         Ok(())
-    }
-
-    fn format_new_sstable_file_path(&mut self) -> Result<PathBuf> {
-        let id = self.unique_id.get_and_inc()?;
-        let sst_path = self
-            .sstables_dir_path
-            .join(format!("{}.kv", id.to_alphanum_orderable_string()));
-        Ok(sst_path)
     }
 }

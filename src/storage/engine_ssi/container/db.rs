@@ -1,28 +1,27 @@
-use crate::ds_n_a::persisted_u64::PersistedU64;
 use crate::storage::engine_ssi::container::{LSMTree, SecondaryIndex, VersionState};
 use crate::storage::engine_ssi::entryset::{CommitVer, CLEAN_SLATE_NEXT_COMMIT_VER};
-use crate::storage::engines_common::fs_utils::{self, UniqueId};
+use crate::storage::engines_common::fs_utils::{self, PathNameNum};
 use crate::storage::types::{PKShared, PVShared, SubValueSpec};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use shorthand::ShortHand;
+use std::cmp;
 use std::collections::HashMap;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::{watch, Mutex, RwLock};
 
-const UNIQUE_ID_FILE_NAME: &str = "unique_id.u64";
 const PRIM_LSM_DIR_NAME: &str = "prim_lsm";
 const ALL_SCND_IDXS_DIR_NAME: &str = "scnd_idxs";
-const SCND_IDX_DIR_NAME_PFX: &str = "scnd_idx-";
 
 #[derive(ShortHand)]
 pub struct DB {
     #[shorthand(disable(get))]
     db_dir_path: PathBuf,
     #[shorthand(disable(get))]
-    unique_id: Mutex<PersistedU64<UniqueId>>,
+    next_scnd_idx_num: AtomicU64,
 
     prim_lsm: LSMTree<PKShared, PVShared>,
     scnd_idxs: RwLock<HashMap<Arc<SubValueSpec>, SecondaryIndex>>,
@@ -35,24 +34,25 @@ pub struct DB {
 
 impl DB {
     fn load_or_new<P: AsRef<Path>>(db_dir_path: P) -> Result<Self> {
-        let unique_id_path = db_dir_path.as_ref().join(UNIQUE_ID_FILE_NAME);
         let prim_lsm_dir_path = db_dir_path.as_ref().join(PRIM_LSM_DIR_NAME);
-        let all_scnd_idxs_dir = db_dir_path.as_ref().join(ALL_SCND_IDXS_DIR_NAME);
-        fs::create_dir_all(&all_scnd_idxs_dir)?;
-
-        let unique_id = PersistedU64::load_or_new(unique_id_path)?;
+        let all_scnd_idxs_dir_path = db_dir_path.as_ref().join(ALL_SCND_IDXS_DIR_NAME);
+        fs::create_dir_all(&all_scnd_idxs_dir_path)?;
 
         let prim_lsm = LSMTree::load_or_new(prim_lsm_dir_path)?;
 
-        let scnd_idxs = fs_utils::read_dir(&all_scnd_idxs_dir)?
-            .map(|res_path| {
-                res_path.and_then(|scnd_idx_dir_path| {
-                    let scnd_idx = SecondaryIndex::load(scnd_idx_dir_path)?;
-                    let spec = scnd_idx.spec().clone();
-                    Ok((spec, scnd_idx))
-                })
-            })
-            .collect::<Result<HashMap<_, _>>>()?;
+        let mut scnd_idxs = HashMap::new();
+        let mut max_scnd_idx_num = 0;
+        for res_path in fs_utils::read_dir(&all_scnd_idxs_dir_path)? {
+            let scnd_idx_dir_path = res_path?;
+
+            let num = Self::parse_scnd_idx_dir_num(&scnd_idx_dir_path)?;
+            max_scnd_idx_num = cmp::max(max_scnd_idx_num, *num);
+
+            let scnd_idx = SecondaryIndex::load(scnd_idx_dir_path)?;
+            let spec = scnd_idx.spec().clone();
+            scnd_idxs.insert(spec, scnd_idx);
+        }
+        let next_scnd_idx_num = AtomicU64::from(max_scnd_idx_num + 1);
 
         let next_commit_ver = match prim_lsm.newest_commit_ver() {
             None => CLEAN_SLATE_NEXT_COMMIT_VER,
@@ -67,7 +67,7 @@ impl DB {
 
         Ok(Self {
             db_dir_path: db_dir_path.as_ref().into(),
-            unique_id: Mutex::new(unique_id),
+            next_scnd_idx_num,
 
             prim_lsm,
             scnd_idxs: RwLock::new(scnd_idxs),
@@ -79,14 +79,18 @@ impl DB {
         })
     }
 
-    pub async fn format_new_scnd_idx_dir_path(&self) -> Result<PathBuf> {
-        let id = {
-            let mut uniq_id_gen = self.unique_id.lock().await;
-            uniq_id_gen.get_and_inc()?
-        };
-        let dirname = format!("{}{}", SCND_IDX_DIR_NAME_PFX, *id);
-        let scnd_idx_dir_path = self.db_dir_path.join(ALL_SCND_IDXS_DIR_NAME).join(dirname);
-        Ok(scnd_idx_dir_path)
+    pub fn format_new_scnd_idx_dir_path(&self) -> PathBuf {
+        let num = self.next_scnd_idx_num.fetch_add(1, Ordering::SeqCst);
+        let dir_name = PathNameNum::from(num).format_hex();
+        let dir_path = self.db_dir_path.join(ALL_SCND_IDXS_DIR_NAME).join(dir_name);
+        dir_path
+    }
+    fn parse_scnd_idx_dir_num<P: AsRef<Path>>(dir_path: P) -> Result<PathNameNum> {
+        let dir_path = dir_path.as_ref();
+        let maybe_file_name = dir_path.file_name().and_then(|os_str| os_str.to_str());
+        let res_file_name =
+            maybe_file_name.ok_or(anyhow!("Unexpected scnd_idx dir path {:?}", dir_path));
+        res_file_name.and_then(|file_name| PathNameNum::parse_hex(file_name))
     }
 
     pub fn send_job_cv(&self) {

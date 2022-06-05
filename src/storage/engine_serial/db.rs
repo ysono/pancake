@@ -1,10 +1,10 @@
-use crate::ds_n_a::persisted_u64::PersistedU64;
 use crate::storage::engine_serial::lsm::LSMTree;
 use crate::storage::engine_serial::scnd_idx::SecondaryIndex;
-use crate::storage::engines_common::fs_utils::{self, UniqueId};
+use crate::storage::engines_common::fs_utils::{self, PathNameNum};
 use crate::storage::engines_common::Entry;
 use crate::storage::types::{PKShared, PVShared, PrimaryKey, SubValue, SubValueSpec};
 use anyhow::{anyhow, Result};
+use std::cmp;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,41 +12,41 @@ use std::sync::Arc;
 
 const PRIM_LSM_DIR_NAME: &str = "prim_lsm";
 const ALL_SCND_IDXS_DIR_NAME: &str = "scnd_idxs";
-const UNIQUE_ID_FILE_NAME: &str = "unique_id.u64";
 
 pub struct DB {
     prim_lsm: LSMTree<PKShared, PVShared>,
     scnd_idxs: HashMap<Arc<SubValueSpec>, SecondaryIndex>,
-    all_scnd_idxs_dir: PathBuf,
-    unique_id: PersistedU64<UniqueId>,
+    all_scnd_idxs_dir_path: PathBuf,
+    next_scnd_idx_num: PathNameNum,
 }
 
 impl DB {
     pub fn load_or_new<P: AsRef<Path>>(db_dir_path: P) -> Result<DB> {
         let prim_lsm_dir_path = db_dir_path.as_ref().join(PRIM_LSM_DIR_NAME);
-        let all_scnd_idxs_dir = db_dir_path.as_ref().join(ALL_SCND_IDXS_DIR_NAME);
-        let unique_id_path = db_dir_path.as_ref().join(UNIQUE_ID_FILE_NAME);
-        fs::create_dir_all(&all_scnd_idxs_dir)?;
+        let all_scnd_idxs_dir_path = db_dir_path.as_ref().join(ALL_SCND_IDXS_DIR_NAME);
+        fs::create_dir_all(&all_scnd_idxs_dir_path)?;
 
         let prim_lsm = LSMTree::load_or_new(prim_lsm_dir_path)?;
 
-        let scnd_idxs = fs_utils::read_dir(&all_scnd_idxs_dir)?
-            .map(|res_path| {
-                res_path.and_then(|scnd_idx_dir_path| {
-                    let scnd_idx = SecondaryIndex::load(scnd_idx_dir_path)?;
-                    let spec = scnd_idx.spec().clone();
-                    Ok((spec, scnd_idx))
-                })
-            })
-            .collect::<Result<HashMap<_, _>>>()?;
+        let mut scnd_idxs = HashMap::new();
+        let mut max_scnd_idx_num = 0;
+        for res_path in fs_utils::read_dir(&all_scnd_idxs_dir_path)? {
+            let scnd_idx_dir_path = res_path?;
 
-        let unique_id = PersistedU64::load_or_new(unique_id_path)?;
+            let num = Self::parse_scnd_idx_dir_num(&scnd_idx_dir_path)?;
+            max_scnd_idx_num = cmp::max(max_scnd_idx_num, *num);
+
+            let scnd_idx = SecondaryIndex::load(scnd_idx_dir_path)?;
+            let spec = scnd_idx.spec().clone();
+            scnd_idxs.insert(spec, scnd_idx);
+        }
+        let next_scnd_idx_num = PathNameNum::from(max_scnd_idx_num + 1);
 
         let db = DB {
             prim_lsm,
             scnd_idxs,
-            all_scnd_idxs_dir,
-            unique_id,
+            all_scnd_idxs_dir_path,
+            next_scnd_idx_num,
         };
         Ok(db)
     }
@@ -96,11 +96,8 @@ impl DB {
             return Ok(());
         }
 
-        let id = self.unique_id.get_and_inc()?;
-        let scnd_idx_dir_path = self
-            .all_scnd_idxs_dir
-            .join(format!("scnd_idx-{}", id.to_shortform_string()));
-        let scnd_idx = SecondaryIndex::new(scnd_idx_dir_path, Arc::clone(&spec), &self.prim_lsm)?;
+        let dir_path = self.format_new_scnd_idx_dir_path();
+        let scnd_idx = SecondaryIndex::new(dir_path, Arc::clone(&spec), &self.prim_lsm)?;
         self.scnd_idxs.insert(spec, scnd_idx);
 
         Ok(())
@@ -113,5 +110,17 @@ impl DB {
         }
 
         Ok(())
+    }
+
+    fn format_new_scnd_idx_dir_path(&mut self) -> PathBuf {
+        let num = self.next_scnd_idx_num.get_and_inc();
+        self.all_scnd_idxs_dir_path.join(num.format_hex())
+    }
+    fn parse_scnd_idx_dir_num<P: AsRef<Path>>(dir_path: P) -> Result<PathNameNum> {
+        let dir_path = dir_path.as_ref();
+        let maybe_file_name = dir_path.file_name().and_then(|os_str| os_str.to_str());
+        let res_file_name =
+            maybe_file_name.ok_or(anyhow!("Unexpected scnd_idx dir path {:?}", dir_path));
+        res_file_name.and_then(|file_name| PathNameNum::parse_hex(file_name))
     }
 }

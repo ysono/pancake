@@ -190,7 +190,7 @@ where
         let commit_ver_hi_incl = slice[0].info().commit_info.commit_ver_hi_incl;
         let commit_ver_lo_incl = slice.last().unwrap().info().commit_info.commit_ver_lo_incl;
         let timestamp = Timestamp::inc_from(slice.iter().map(|es| es.info().commit_info.timestamp));
-        let entryset_dir = self.format_new_entryset_dir_path().await?;
+        let entryset_dir = self.format_new_entryset_dir_path();
         let entryset_info = CommittedEntrySetInfo {
             commit_info: CommitInfo {
                 commit_ver_hi_incl,

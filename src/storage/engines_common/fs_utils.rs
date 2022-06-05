@@ -1,16 +1,26 @@
 use anyhow::{anyhow, Result};
-use derive_more::{Deref, DerefMut, From};
+use derive_more::{Deref, From};
 use std::fs;
+use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 
-#[derive(From, Deref, DerefMut, Clone, Copy)]
-pub struct UniqueId(u64);
-impl UniqueId {
-    pub fn to_alphanum_orderable_string(&self) -> String {
-        format!("{:0>20}", self.0)
+/// A strictly increasing `u64` that is used to prevent file/dir name collisions.
+#[derive(From, Deref)]
+pub struct PathNameNum(u64);
+impl PathNameNum {
+    pub fn format_hex(&self) -> String {
+        format!("{:016x}", self.0)
     }
-    pub fn to_shortform_string(&self) -> String {
-        format!("{}", self.0)
+
+    pub fn parse_hex<S: AsRef<str>>(s: S) -> Result<Self> {
+        let i = u64::from_str_radix(&s.as_ref()[..16], 16).map_err(|e| anyhow!(e))?;
+        Ok(Self(i))
+    }
+
+    pub fn get_and_inc(&mut self) -> Self {
+        let ret = Self(self.0);
+        self.0 += 1;
+        ret
     }
 }
 
