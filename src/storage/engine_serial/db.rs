@@ -58,7 +58,7 @@ impl DB {
         let old_pv: Option<&PVShared> = opt_pair.map(|pair| pair.1);
 
         for (_spec, scnd_idx) in self.scnd_idxs.iter_mut() {
-            scnd_idx.put(pk.clone(), old_pv, pv.as_ref())?;
+            scnd_idx.put(&pk, old_pv, pv.as_ref())?;
         }
 
         self.prim_lsm.put(pk, pv)?;

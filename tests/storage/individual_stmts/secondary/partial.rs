@@ -1,11 +1,12 @@
-use super::super::super::helpers::{gen, one_stmt::OneStmtDbAdaptor};
+use super::super::super::helpers::gen;
+use super::super::OneStmtDbAdaptor;
 use super::helper_verify::verify_get;
 use anyhow::Result;
 use pancake::storage::serde::{Datum, DatumType};
 use pancake::storage::types::{PrimaryKey, SubValue, SubValueSpec, Value};
 use std::sync::Arc;
 
-/// A spec that extracts `value[1][2]: str`.
+/// A SVSpec that extracts `PV[1][2]: str`.
 fn spec_1_2_str() -> SubValueSpec {
     SubValueSpec {
         member_idxs: vec![1, 2],
@@ -13,8 +14,8 @@ fn spec_1_2_str() -> SubValueSpec {
     }
 }
 
-/// A spec that extracts `value[1]: tuple`.
-/// The type of the contents of the tuple is opaque in the view of this spec.
+/// A SVSpec that extracts `PV[1]: tuple`.
+/// The contents of the targeted tuple are opaque in the view of this SVSpec.
 fn spec_1_tup() -> SubValueSpec {
     SubValueSpec {
         member_idxs: vec![1],
@@ -22,8 +23,7 @@ fn spec_1_tup() -> SubValueSpec {
     }
 }
 
-/// Value is a type that can be captured by both [`spec_1_2_str`] and [`spec_1_tup`] specs.
-/// Specifically, its type is `(int, (int, int, str), int)`.
+/// A PV that is typed `(int, (int, int, str), int)`.
 fn gen_pv(pv_i: i64, pv_s: &str) -> Value {
     let pv = Datum::Tuple(vec![
         Datum::I64(0),
@@ -41,14 +41,12 @@ fn gen_pkv(pk: &str, pv_i: i64, pv_s: &str) -> (PrimaryKey, Value) {
     (gen::gen_str_pk(pk), gen_pv(pv_i, pv_s))
 }
 
-/// A string-typed SubValue.
-/// This SubValue is workable with any spec that extracts a string-typed SubValue, such as [`spec_1_2_str`].
+/// A SubValue that is typed `str`.
 fn gen_sv_str(sv: &str) -> SubValue {
     gen::gen_str_sv(sv)
 }
 
-/// A SubValue typed `(int, int, str)`.
-/// This is a type such that [`spec_1_tup`] can extract it from a value produced by [`kv`].
+/// A SubValue that is typed `(int, int, str)`.
 fn gen_sv_tup(sv_i: i64, sv_s: &str) -> SubValue {
     SubValue(Datum::Tuple(vec![
         Datum::I64(sv_i),
@@ -68,98 +66,248 @@ async fn del(db: &mut impl OneStmtDbAdaptor, pk: &str) -> Result<()> {
 }
 
 pub async fn delete_create_get(db: &mut impl OneStmtDbAdaptor) -> Result<()> {
-    let spec_str = Arc::new(spec_1_2_str());
-    let spec_tup = Arc::new(spec_1_tup());
+    let spec_1_2_str = Arc::new(spec_1_2_str());
+    let spec_1_tup = Arc::new(spec_1_tup());
 
-    db.delete_scnd_idx(&spec_str).await?;
-    db.delete_scnd_idx(&spec_tup).await?;
+    /* Delete scnd idxs. */
 
-    verify_get(db, &spec_str, None, None, Err(())).await?;
-    verify_get(db, &spec_tup, None, None, Err(())).await?;
+    db.delete_scnd_idx(&spec_1_2_str).await?;
+    db.delete_scnd_idx(&spec_1_tup).await?;
 
-    put(db, "complex.4", 40, "complex-subval").await?;
-    put(db, "complex.3", 30, "complex-subval").await?;
+    verify_get(db, &spec_1_2_str, None, None, Err(())).await?;
+    verify_get(db, &spec_1_tup, None, None, Err(())).await?;
 
-    db.create_scnd_idx(Arc::clone(&spec_str)).await?;
-    db.create_scnd_idx(Arc::clone(&spec_tup)).await?;
+    /* Insert ; Create scnd idxs ; Insert more. */
 
-    put(db, "complex.2", 20, "complex-subval").await?;
-    put(db, "complex.1", 10, "complex-subval").await?;
+    put(db, "complex.8", 8, "complex-subval-8").await?;
+    put(db, "complex.6", 6, "aaa-6").await?;
+    put(db, "complex.4", 4, "complex-subval-4").await?;
+    put(db, "complex.2", 2, "complex-subval-2").await?;
+
+    db.create_scnd_idx(Arc::clone(&spec_1_2_str)).await?;
+    db.create_scnd_idx(Arc::clone(&spec_1_tup)).await?;
+
+    put(db, "complex.7", 7, "complex-subval-7").await?;
+    put(db, "complex.5", 5, "aaa-5").await?;
+    put(db, "complex.3", 3, "complex-subval-3").await?;
+    put(db, "complex.1", 1, "complex-subval-1").await?;
+
+    /* Get by range of SVs @ PV[1]: tup. */
 
     verify_get(
         db,
-        &spec_str,
+        &spec_1_tup,
         None,
         None,
         Ok(vec![
-            gen_pkv("complex.1", 10, "complex-subval"),
-            gen_pkv("complex.2", 20, "complex-subval"),
-            gen_pkv("complex.3", 30, "complex-subval"),
-            gen_pkv("complex.4", 40, "complex-subval"),
+            gen_pkv("complex.1", 1, "complex-subval-1"),
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.3", 3, "complex-subval-3"),
+            gen_pkv("complex.4", 4, "complex-subval-4"),
+            gen_pkv("complex.5", 5, "aaa-5"),
+            gen_pkv("complex.6", 6, "aaa-6"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+            gen_pkv("complex.8", 8, "complex-subval-8"),
         ]),
     )
     .await?;
 
     verify_get(
         db,
-        &spec_str,
+        &spec_1_tup,
+        Some(gen_sv_tup(2, "complex-")),
+        None,
+        Ok(vec![
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.3", 3, "complex-subval-3"),
+            gen_pkv("complex.4", 4, "complex-subval-4"),
+            gen_pkv("complex.5", 5, "aaa-5"),
+            gen_pkv("complex.6", 6, "aaa-6"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+            gen_pkv("complex.8", 8, "complex-subval-8"),
+        ]),
+    )
+    .await?;
+
+    verify_get(
+        db,
+        &spec_1_tup,
+        None,
+        Some(gen_sv_tup(7, "complex-subval-999")),
+        Ok(vec![
+            gen_pkv("complex.1", 1, "complex-subval-1"),
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.3", 3, "complex-subval-3"),
+            gen_pkv("complex.4", 4, "complex-subval-4"),
+            gen_pkv("complex.5", 5, "aaa-5"),
+            gen_pkv("complex.6", 6, "aaa-6"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+        ]),
+    )
+    .await?;
+
+    verify_get(
+        db,
+        &spec_1_tup,
+        Some(gen_sv_tup(2, "complex-")),
+        Some(gen_sv_tup(8, "complex-")),
+        Ok(vec![
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.3", 3, "complex-subval-3"),
+            gen_pkv("complex.4", 4, "complex-subval-4"),
+            gen_pkv("complex.5", 5, "aaa-5"),
+            gen_pkv("complex.6", 6, "aaa-6"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+        ]),
+    )
+    .await?;
+
+    /* Get by range of SVs @ PV[1][2]: str. */
+
+    verify_get(
+        db,
+        &spec_1_2_str,
+        None,
+        None,
+        Ok(vec![
+            gen_pkv("complex.5", 5, "aaa-5"),
+            gen_pkv("complex.6", 6, "aaa-6"),
+            gen_pkv("complex.1", 1, "complex-subval-1"),
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.3", 3, "complex-subval-3"),
+            gen_pkv("complex.4", 4, "complex-subval-4"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+            gen_pkv("complex.8", 8, "complex-subval-8"),
+        ]),
+    )
+    .await?;
+
+    verify_get(
+        db,
+        &spec_1_2_str,
         Some(gen_sv_str("complex-subval")),
+        Some(gen_sv_str("complex-subval-999")),
+        Ok(vec![
+            gen_pkv("complex.1", 1, "complex-subval-1"),
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.3", 3, "complex-subval-3"),
+            gen_pkv("complex.4", 4, "complex-subval-4"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+            gen_pkv("complex.8", 8, "complex-subval-8"),
+        ]),
+    )
+    .await?;
+
+    /* Modify ; Get. */
+
+    // Bring PV[1][2] out of midrange.
+    put(db, "complex.4", 444, "aaa-444").await?;
+    // Bring PV[1][2] into midrange.
+    put(db, "complex.6", 666, "complex-subval-666").await?;
+    // Keep PV[1][2] out of midrange.
+    put(db, "complex.5", 555, "aaa-555").await?;
+    // Keep PV[1][2] inside midrange.
+    put(db, "complex.3", 333, "complex-subval-333").await?;
+
+    verify_get(
+        db,
+        &spec_1_tup,
+        None,
+        None,
+        Ok(vec![
+            gen_pkv("complex.1", 1, "complex-subval-1"),
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+            gen_pkv("complex.8", 8, "complex-subval-8"),
+            gen_pkv("complex.3", 333, "complex-subval-333"),
+            gen_pkv("complex.4", 444, "aaa-444"),
+            gen_pkv("complex.5", 555, "aaa-555"),
+            gen_pkv("complex.6", 666, "complex-subval-666"),
+        ]),
+    )
+    .await?;
+
+    verify_get(
+        db,
+        &spec_1_tup,
+        Some(gen_sv_tup(5, "")),
+        Some(gen_sv_tup(500, "")),
+        Ok(vec![
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+            gen_pkv("complex.8", 8, "complex-subval-8"),
+            gen_pkv("complex.3", 333, "complex-subval-333"),
+            gen_pkv("complex.4", 444, "aaa-444"),
+        ]),
+    )
+    .await?;
+
+    verify_get(
+        db,
+        &spec_1_2_str,
+        None,
+        None,
+        Ok(vec![
+            gen_pkv("complex.4", 444, "aaa-444"),
+            gen_pkv("complex.5", 555, "aaa-555"),
+            gen_pkv("complex.1", 1, "complex-subval-1"),
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.3", 333, "complex-subval-333"),
+            gen_pkv("complex.6", 666, "complex-subval-666"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+            gen_pkv("complex.8", 8, "complex-subval-8"),
+        ]),
+    )
+    .await?;
+
+    verify_get(
+        db,
+        &spec_1_2_str,
         Some(gen_sv_str("complex-subval")),
+        Some(gen_sv_str("complex-subval-777")),
         Ok(vec![
-            gen_pkv("complex.1", 10, "complex-subval"),
-            gen_pkv("complex.2", 20, "complex-subval"),
-            gen_pkv("complex.3", 30, "complex-subval"),
-            gen_pkv("complex.4", 40, "complex-subval"),
+            gen_pkv("complex.1", 1, "complex-subval-1"),
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.3", 333, "complex-subval-333"),
+            gen_pkv("complex.6", 666, "complex-subval-666"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
         ]),
     )
     .await?;
 
-    verify_get(
-        db,
-        &spec_tup,
-        Some(gen_sv_tup(20, "complex-")),
-        None,
-        Ok(vec![
-            gen_pkv("complex.2", 20, "complex-subval"),
-            gen_pkv("complex.3", 30, "complex-subval"),
-            gen_pkv("complex.4", 40, "complex-subval"),
-        ]),
-    )
-    .await?;
-
-    verify_get(
-        db,
-        &spec_tup,
-        None,
-        Some(gen_sv_tup(30, "complex-subval-zzzz")),
-        Ok(vec![
-            gen_pkv("complex.1", 10, "complex-subval"),
-            gen_pkv("complex.2", 20, "complex-subval"),
-            gen_pkv("complex.3", 30, "complex-subval"),
-        ]),
-    )
-    .await?;
-
-    verify_get(
-        db,
-        &spec_tup,
-        Some(gen_sv_tup(20, "complex-")),
-        Some(gen_sv_tup(30, "complex-")),
-        Ok(vec![gen_pkv("complex.2", 20, "complex-subval")]),
-    )
-    .await?;
+    /* Delete ; Get. */
 
     del(db, "complex.3").await?;
 
     verify_get(
         db,
-        &spec_str,
+        &spec_1_tup,
         None,
         None,
         Ok(vec![
-            gen_pkv("complex.1", 10, "complex-subval"),
-            gen_pkv("complex.2", 20, "complex-subval"),
-            gen_pkv("complex.4", 40, "complex-subval"),
+            gen_pkv("complex.1", 1, "complex-subval-1"),
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+            gen_pkv("complex.8", 8, "complex-subval-8"),
+            gen_pkv("complex.4", 444, "aaa-444"),
+            gen_pkv("complex.5", 555, "aaa-555"),
+            gen_pkv("complex.6", 666, "complex-subval-666"),
+        ]),
+    )
+    .await?;
+
+    verify_get(
+        db,
+        &spec_1_2_str,
+        None,
+        None,
+        Ok(vec![
+            gen_pkv("complex.4", 444, "aaa-444"),
+            gen_pkv("complex.5", 555, "aaa-555"),
+            gen_pkv("complex.1", 1, "complex-subval-1"),
+            gen_pkv("complex.2", 2, "complex-subval-2"),
+            gen_pkv("complex.6", 666, "complex-subval-666"),
+            gen_pkv("complex.7", 7, "complex-subval-7"),
+            gen_pkv("complex.8", 8, "complex-subval-8"),
         ]),
     )
     .await?;

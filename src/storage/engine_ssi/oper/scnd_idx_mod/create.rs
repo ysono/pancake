@@ -9,6 +9,7 @@ use crate::storage::engines_common::Entry;
 use crate::storage::serde::OptDatum;
 use crate::storage::types::{PKShared, PVShared, SVPKShared, SubValueSpec};
 use anyhow::{anyhow, Result};
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Arc;
 
@@ -108,21 +109,25 @@ async fn do_build(
             None::<&PKShared>,
             None::<&PKShared>,
             |prim_entries| -> Result<SSTable<SVPKShared, PVShared>> {
-                let scnd_entries =
-                    prim_entries.filter_map(|prim_entry| match prim_entry.try_borrow() {
-                        Err(e) => Some(Entry::Own(Err(e))),
-                        Ok((_, pv)) => match spec.extract(pv) {
-                            None => return None,
-                            Some(sv) => {
-                                let (pk, pv) = prim_entry.take_kv().unwrap();
-                                let opt_pv = OptDatum::Some(pv);
-                                let svpk = SVPKShared { sv, pk };
-                                let scnd_entry = Entry::Own(Ok((svpk, opt_pv)));
-                                return Some(scnd_entry);
-                            }
-                        },
-                    });
-                SSTable::new(scnd_entries, entryset_info)
+                // TODO
+                // 1) flush to a new SSTable periodically.
+                // 2) k-merge all SSTables into one SSTable.
+
+                let mut memtable = BTreeMap::<SVPKShared, PVShared>::new();
+                for prim_entry in prim_entries {
+                    let (_, pv) = prim_entry.try_borrow()?;
+                    if let Some(sv) = spec.extract(pv) {
+                        let (pk, pv) = prim_entry.take_kv()?;
+                        let svpk = SVPKShared { sv, pk };
+                        memtable.insert(svpk, pv);
+                    }
+                }
+
+                let output_entries = memtable
+                    .into_iter()
+                    .map(|(svpk, pv)| Entry::Own(Ok((svpk, OptDatum::Some(pv)))));
+
+                SSTable::new(output_entries, entryset_info)
             },
             || db.send_job_cv(),
         )

@@ -101,7 +101,7 @@ mod test {
     }
 
     #[test]
-    fn foo() -> Result<()> {
+    fn ser_then_deser() -> Result<()> {
         let gen_fns = [
             gen_tomb,
             gen_i64,

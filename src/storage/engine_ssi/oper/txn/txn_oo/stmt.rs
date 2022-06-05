@@ -131,25 +131,38 @@ impl<'txn> Txn<'txn> {
             let old_sv: Option<SVShared> = old_pv.as_ref().and_then(|pv| spec.extract(pv));
             let new_sv: Option<SVShared> = new_pv.as_ref().and_then(|pv| spec.extract(pv));
 
-            if old_sv != new_sv {
-                if let Some(old_sv) = old_sv {
-                    written.put(
-                        SVPKShared {
-                            sv: old_sv,
-                            pk: pk.clone(),
-                        },
-                        OptDatum::Tombstone,
-                    )?;
+            // Assign old_sv to be Some iff we need to tombstone the old entry.
+            // Assign new_sv to be Some iff we need to put the new entry.
+            let (old_sv, new_sv) = match (old_sv, new_sv) {
+                (Some(old_sv), Some(new_sv)) => {
+                    if old_sv != new_sv {
+                        (Some(old_sv), Some(new_sv))
+                    } else if old_pv != new_pv {
+                        (None, Some(new_sv))
+                    } else {
+                        (None, None)
+                    }
                 }
-                if let Some(new_sv) = new_sv {
-                    written.put(
-                        SVPKShared {
-                            sv: new_sv,
-                            pk: pk.clone(),
-                        },
-                        OptDatum::Some(new_pv.clone().unwrap()),
-                    )?;
-                }
+                pair => pair,
+            };
+
+            if let Some(old_sv) = old_sv {
+                written.put(
+                    SVPKShared {
+                        sv: old_sv,
+                        pk: pk.clone(),
+                    },
+                    OptDatum::Tombstone,
+                )?;
+            }
+            if let Some(new_sv) = new_sv {
+                written.put(
+                    SVPKShared {
+                        sv: new_sv,
+                        pk: pk.clone(),
+                    },
+                    OptDatum::Some(new_pv.clone().unwrap()),
+                )?;
             }
         }
 

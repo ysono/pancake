@@ -94,25 +94,41 @@ impl SecondaryIndex {
 
     pub fn put(
         &mut self,
-        pk: PKShared,
+        pk: &PKShared,
         old_pv: Option<&PVShared>,
         new_pv: Option<&PVShared>,
     ) -> Result<()> {
         let old_sv = old_pv.and_then(|old_pv| self.spec.extract(old_pv));
         let new_sv = new_pv.and_then(|new_pv| self.spec.extract(new_pv));
 
-        if old_sv != new_sv {
-            if let Some(old_sv) = old_sv {
-                let svpk = SVPKShared {
-                    sv: old_sv,
-                    pk: pk.clone(),
-                };
-                self.lsm.put(svpk, None)?;
+        // Assign old_sv to be Some iff we need to tombstone the old entry.
+        // Assign new_sv to be Some iff we need to put the new entry.
+        let (old_sv, new_sv) = match (old_sv, new_sv) {
+            (Some(old_sv), Some(new_sv)) => {
+                if old_sv != new_sv {
+                    (Some(old_sv), Some(new_sv))
+                } else if old_pv != new_pv {
+                    (None, Some(new_sv))
+                } else {
+                    (None, None)
+                }
             }
-            if let Some(new_sv) = new_sv {
-                let svpk = SVPKShared { sv: new_sv, pk };
-                self.lsm.put(svpk, new_pv.cloned())?;
-            }
+            pair => pair,
+        };
+
+        if let Some(old_sv) = old_sv {
+            let svpk = SVPKShared {
+                sv: old_sv,
+                pk: pk.clone(),
+            };
+            self.lsm.put(svpk, None)?;
+        }
+        if let Some(new_sv) = new_sv {
+            let svpk = SVPKShared {
+                sv: new_sv,
+                pk: pk.clone(),
+            };
+            self.lsm.put(svpk, new_pv.cloned())?;
         }
 
         Ok(())

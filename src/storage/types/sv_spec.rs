@@ -18,9 +18,9 @@ use std::sync::Arc;
 /// If the target is a [`DatumType::Tuple`], we specify the undivided tuple.
 ///
 /// If the sub-portion is actually the entire [`Value`], then `member_idxs` is empty.
-/// If the sub-portion is nested with a [`Datum::Tuple`], then `member_idxs` specifies the member idx at each depth.
+/// If the sub-portion is nested within a [`Datum::Tuple`], then `member_idxs` specifies the member idx at each depth.
 ///
-/// For example in pseudocode, given a tuple-typed [`Value`]
+/// For example, given a tuple-typed [`Value`]
 ///
 /// ```text
 /// Value(
@@ -98,7 +98,7 @@ impl SubValueSpec {
 /* De/Serialization. */
 impl SubValueSpec {
     pub fn ser<W: Write>(&self, w: &mut BufWriter<W>) -> Result<()> {
-        // Write datum_type first, for easy alignemnt during reading.
+        // Write datum_type first, for easy alignment during reading.
         let datum_type_int = DatumTypeInt::from(self.datum_type);
         w.write(&datum_type_int.to_ne_bytes())?;
 
