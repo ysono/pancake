@@ -6,20 +6,20 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "*"
-derive_more = "*"
-hashbag = "0.1"
-hyper = { version = "*", features = ["full"] }
-itertools = "*"
-num-derive = "0.3"
-num-traits = "0.2"
-owning_ref = "0.4"
-regex = "*"
-routerify = "*"
-shorthand = "0.1"
-tokio = { version = "1.15", features = ["full"] }
+anyhow = "1.0.57"
+derive_more = "0.99.17"
+hashbag = "0.1.5"
+hyper = { version = "0.14.19", features = ["full"] }
+itertools = "0.10.3"
+num-derive = "0.3.3"
+num-traits = "0.2.15"
+owning_ref = "0.4.1"
+regex = "1.5.6"
+routerify = "3.0.0"
+shorthand = "0.1.1"
+tokio = { version = "1.19.1", features = ["full"] }
 
 [dev-dependencies]
-async-trait = "0.1"
-rand = "*"
-rusty-hook = "^0.11.0"
+async-trait = "0.1.56"
+rand = "0.8.5"
+rusty-hook = "0.11.2"
