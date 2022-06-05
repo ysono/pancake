@@ -3,6 +3,7 @@ use pancake::storage::engine_serial::db::DB as SerialDb;
 use pancake::storage::engine_ssi::DB as SsiDb;
 use std::env;
 use std::fs;
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
 mod storage;
@@ -10,9 +11,12 @@ use storage::concurrent_txns::test_concurrent_txns;
 use storage::helpers::one_stmt::{OneStmtSerialDbAdaptor, OneStmtSsiDbAdaptor};
 use storage::individual_stmts::test_stmts_serially;
 
+const ENV_VAR_PARENT_DIR: &str = "PANCAKE_PARENT_DIR";
+
 #[tokio::test]
 async fn integr_test_main() -> Result<()> {
-    let parent_dir = env::temp_dir().join("pancake");
+    let parent_dir = env::var(ENV_VAR_PARENT_DIR)
+        .map_or_else(|_| env::temp_dir().join("pancake"), |s| PathBuf::from(s));
     let serial_db_dir = parent_dir.join("serial");
     let ssi_db_dir = parent_dir.join("ssi");
     if parent_dir.exists() {
