@@ -27,7 +27,7 @@ where
         match (a_res_kv, b_res_kv) {
             (Err(_), _) => return true,
             (_, Err(_)) => return false,
-            (Ok((a_k, _a_v)), Ok((b_k, _b_v))) => {
+            (Ok((a_k, _)), Ok((b_k, _))) => {
                 let key_cmp = a_k.cmp(b_k);
                 if key_cmp.is_eq() {
                     a_cmt_ver > b_cmt_ver
@@ -38,19 +38,18 @@ where
         }
     });
 
-    // Manually implement unique_by(k).
-    let mut prev_key: Option<K> = None;
-    let deduped_entries =
-        merged_entries.filter(move |(entry, _cmt_ver)| match entry.try_borrow() {
-            Err(_) => return true,
-            Ok((k, _)) => match prev_key.as_ref() {
-                Some(prv_k) if prv_k == k => return false,
-                _ => {
-                    prev_key = Some(k.clone());
-                    return true;
-                }
-            },
-        });
+    let deduped_entries = merged_entries.dedup_by(|(a_entry, _), (b_entry, _)| {
+        let a_res_kv = a_entry.try_borrow();
+        let b_res_kv = b_entry.try_borrow();
+
+        match (a_res_kv, b_res_kv) {
+            (Err(_), _) => return false,
+            (_, Err(_)) => return false,
+            (Ok((a_k, _)), Ok((b_k, _))) => {
+                return a_k == b_k;
+            }
+        }
+    });
 
     let entries = deduped_entries.map(|(entry, _cmt_ver)| entry);
 
