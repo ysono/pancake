@@ -1,7 +1,7 @@
 //! # Serialization format
 //!
 //! Following pseudocode depicts the byte representation on disk.
-//! In-memory representations look similar but are distinct from this.
+//! In-memory representations are distinct from this.
 //!
 //! This file format is applicable for both commit logs and ss tables.
 //!
@@ -59,6 +59,7 @@
 //!         },
 //!         member_2:       Datum::Tuple {
 //!             datum_type:     DatumTypeInt(u8),
+//!             // (Notice, no datum_body_len here.)
 //!             datum_body: TupleBody {
 //!                 members_count:  MembersCount(usize),
 //!                 member_0:       Datum::*,

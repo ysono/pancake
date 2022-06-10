@@ -17,7 +17,7 @@ fn gen_pv(is_on_call: bool) -> Value {
     Value(Datum::Bytes(vec![is_on_call as u8]))
 }
 fn gen_sv_spec() -> SubValueSpec {
-    SubValueSpec::from(DatumType::Bytes)
+    SubValueSpec::whole(DatumType::Bytes)
 }
 
 fn pk_is_doctor(pk: &PrimaryKey) -> bool {

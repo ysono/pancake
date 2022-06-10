@@ -1,7 +1,7 @@
 use super::*;
 
 fn gen_spec_whole() -> SubValueSpec {
-    SubValueSpec::from(DatumType::Str)
+    SubValueSpec::whole(DatumType::Str)
 }
 fn gen_spec_partial_depth1() -> SubValueSpec {
     SubValueSpec {

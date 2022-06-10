@@ -78,10 +78,10 @@ impl FlushingAndCompactionJob {
             self.cut_non_boundary_dummies(segm_head_excl, curr_ptr_inplace)
                 .await;
 
-            if curr_ptr_inplace.as_ptr().is_null() {
+            if (*curr_ptr_inplace).as_ptr().is_null() {
                 break;
             } else {
-                let curr_ref = unsafe { curr_ptr_inplace.as_ref() };
+                let curr_ref = unsafe { (*curr_ptr_inplace).as_ref() };
                 match &curr_ref.elem.content {
                     LsmElemContent::Dummy { .. } => {
                         // The curr dummy could not be cut. Therefore it must be a boundary.
@@ -104,10 +104,10 @@ impl FlushingAndCompactionJob {
     ) {
         let mut slice = vec![];
         loop {
-            if curr_ptr_inplace.as_ptr().is_null() {
+            if (*curr_ptr_inplace).as_ptr().is_null() {
                 break;
             } else {
-                let curr_ref = unsafe { curr_ptr_inplace.as_ref() };
+                let curr_ref = unsafe { (*curr_ptr_inplace).as_ref() };
                 match &curr_ref.elem.content {
                     LsmElemContent::Dummy {
                         hold_count,

@@ -16,7 +16,7 @@ impl FlushingAndCompactionJob {
     /// - The slice contains 1+ MemLogs.
     /// - The slice contains 2+ SSTables.
     fn should_slice_be_compacted<'a>(units: impl Iterator<Item = &'a CommittedUnit>) -> bool {
-        let mut len = 0usize;
+        let mut len = 0u8;
         for unit in units {
             if unit.commit_info.data_type() == &CommitDataType::MemLog {
                 return true;
@@ -29,11 +29,9 @@ impl FlushingAndCompactionJob {
         return false;
     }
 
-    /// Returns:
-    /// - Some iff
-    ///     - It was decided to go ahead with compaction
-    ///     - and
-    ///     - The compaction resulted in a non-empty CommittedUnit, ie non-empty SSTable for at least one index.
+    /// Returns `Some(_)` iff all of:
+    /// - It was decided to go ahead with compaction
+    /// - The compaction resulted in a non-empty CommittedUnit, ie non-empty SSTable for at least one index.
     ///
     /// If the returned value is None, it does not mean the given units contained no data.
     /// Therefore, do _not_ assume that the give units can be cut!

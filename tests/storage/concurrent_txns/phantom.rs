@@ -6,7 +6,6 @@ use anyhow::Result;
 use pancake::storage::engine_ssi::{ClientCommitDecision, Txn, DB};
 use pancake::storage::serde::{Datum, DatumType};
 use pancake::storage::types::{PrimaryKey, SubValueSpec, Value};
-use rand::Rng;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 
@@ -17,7 +16,7 @@ fn gen_pv(price: i64) -> Value {
     Value(Datum::I64(price))
 }
 fn gen_sv_spec() -> SubValueSpec {
-    SubValueSpec::from(DatumType::I64)
+    SubValueSpec::whole(DatumType::I64)
 }
 
 fn pk_is_cart_item(pk: &PrimaryKey) -> bool {
@@ -50,19 +49,18 @@ pub async fn no_phantom(db: &'static DB) -> Result<()> {
     assert_eq!(0, beginning_cart_contents);
 
     /* test params */
-    let tot_price_thresh = 100;
-    let items_ct = 200;
-    let item_price_range = 5..10;
+    let tot_price_thresh = 80;
+    let items_ct = 20;
+    let item_price = 8;
 
     /* In each txn, attempt to insert a content to the cart. */
     let mut tasks = vec![];
     for item_i in 0..items_ct {
         let sv_spec = Arc::clone(&sv_spec);
-        let local_price = rand::thread_rng().gen_range(item_price_range.clone());
 
         let task_fut = async move {
             let pk = Arc::new(gen_pk(item_i));
-            let pv = Arc::new(gen_pv(local_price));
+            let pv = Arc::new(gen_pv(item_price));
 
             let txn_fut = Txn::run(db, |txn| {
                 let entries = txn.get_sv_range(&sv_spec, None, None)?;
@@ -75,7 +73,7 @@ pub async fn no_phantom(db: &'static DB) -> Result<()> {
                         }
                     }
                 }
-                if tot_price + local_price > tot_price_thresh {
+                if tot_price + item_price > tot_price_thresh {
                     return Ok(ClientCommitDecision::Abort(()));
                 }
 
@@ -101,7 +99,8 @@ pub async fn no_phantom(db: &'static DB) -> Result<()> {
             }
         }
     }
-    assert!(0 < final_tot_price && final_tot_price <= tot_price_thresh);
+    let exp_final_tot_price = (tot_price_thresh / item_price) * item_price;
+    assert_eq!(final_tot_price, exp_final_tot_price);
 
     Ok(())
 }

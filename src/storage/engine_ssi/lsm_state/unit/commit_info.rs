@@ -51,7 +51,6 @@ impl CommitInfo {
                 "Incorrect format for {}.",
                 any::type_name::<Self>()
             )),
-
             Ok([hi, lo, ts, typ]) => {
                 let hi = hi
                     .parse::<u64>()

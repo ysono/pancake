@@ -62,8 +62,8 @@ pub struct SubValueSpec {
 }
 
 /* Shorthand helper for a non-nested spec. */
-impl From<DatumType> for SubValueSpec {
-    fn from(datum_type: DatumType) -> Self {
+impl SubValueSpec {
+    pub fn whole(datum_type: DatumType) -> Self {
         Self {
             member_idxs: vec![],
             datum_type,

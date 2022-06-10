@@ -279,8 +279,8 @@ fn datum<'a, I: Iterator<Item = &'a str>>(iter: &mut Peekable<I>) -> Result<Datu
 
 fn subvalspec<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<SubValueSpec> {
     match iter.next() {
-        Some("str") => return Ok(SubValueSpec::from(DatumType::Str)),
-        Some("int") => return Ok(SubValueSpec::from(DatumType::I64)),
+        Some("str") => return Ok(SubValueSpec::whole(DatumType::Str)),
+        Some("int") => return Ok(SubValueSpec::whole(DatumType::I64)),
         Some("nested") => match iter.next() {
             Some("(") => {
                 let mut member_idxs = vec![];
@@ -447,14 +447,14 @@ mod test {
     fn get_where() -> Result<()> {
         let q_str = "get where int _";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::from(DatumType::I64),
+            SubValueSpec::whole(DatumType::I64),
             SearchRange::all(),
         ));
         assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "get where int int(123)";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::from(DatumType::I64),
+            SubValueSpec::whole(DatumType::I64),
             SearchRange::One(SubValue(Datum::I64(123))),
         ));
         assert!(parse(q_str)? == exp_q_obj);
@@ -476,7 +476,7 @@ mod test {
     fn get_where_between() -> Result<()> {
         let q_str = "get where int between int(123) int(234)";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::from(DatumType::I64),
+            SubValueSpec::whole(DatumType::I64),
             SearchRange::Range {
                 lo: Some(SubValue(Datum::I64(123))),
                 hi: Some(SubValue(Datum::I64(234))),
@@ -486,7 +486,7 @@ mod test {
 
         let q_str = "get where int between int(123) _";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::from(DatumType::I64),
+            SubValueSpec::whole(DatumType::I64),
             SearchRange::Range {
                 lo: Some(SubValue(Datum::I64(123))),
                 hi: None,
@@ -496,7 +496,7 @@ mod test {
 
         let q_str = "get where int between _ int(234)";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::from(DatumType::I64),
+            SubValueSpec::whole(DatumType::I64),
             SearchRange::Range {
                 lo: None,
                 hi: Some(SubValue(Datum::I64(234))),
@@ -506,7 +506,7 @@ mod test {
 
         let q_str = "get where int between _ _";
         let exp_q_obj = Operation::from(Statement::GetSV(
-            SubValueSpec::from(DatumType::I64),
+            SubValueSpec::whole(DatumType::I64),
             SearchRange::all(),
         ));
         assert!(parse(q_str)? == exp_q_obj);
@@ -517,7 +517,7 @@ mod test {
     #[test]
     fn create_scnd_idx() -> Result<()> {
         let q_str = "create index int";
-        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec::from(DatumType::I64));
+        let exp_q_obj = Operation::CreateScndIdx(SubValueSpec::whole(DatumType::I64));
         assert!(parse(q_str)? == exp_q_obj);
 
         let q_str = "create index nested( 2 int )";

@@ -75,7 +75,7 @@ pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
     }
 
     /* Collect entries. */
-    let db_adap = OneStmtSsiDbAdaptor { db: &db };
+    let db_adap = OneStmtSsiDbAdaptor { db };
     let mut gotten_entries = BTreeMap::new();
     for obj_i in 0..objs_ct {
         let pk = gen::gen_str_pk(gen_pk_str(obj_i));

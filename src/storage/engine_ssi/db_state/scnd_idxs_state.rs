@@ -12,10 +12,8 @@ use std::sync::Arc;
 fn read_line_trimmed<R: Read>(r: &mut BufReader<R>) -> Result<Vec<u8>> {
     let mut buf = vec![];
     r.read_until('\n' as u8, &mut buf)?;
-    if let Some(byte) = buf.last() {
-        if byte == &('\n' as u8) {
-            buf.pop();
-        }
+    if buf.last() == Some(&('\n' as u8)) {
+        buf.pop();
     }
     Ok(buf)
 }

@@ -1,5 +1,4 @@
 use crate::ds_n_a::send_ptr::SendPtr;
-use std::marker::{PhantomData, PhantomPinned};
 use std::ptr::{self, NonNull};
 use std::sync::atomic::{AtomicPtr, Ordering};
 
@@ -10,7 +9,6 @@ pub struct ListNode<T> {
 
 pub struct AtomicLinkedList<T> {
     head_ptr: AtomicPtr<ListNode<T>>,
-    _pin: PhantomPinned,
 }
 
 impl<T> AtomicLinkedList<T> {
@@ -41,7 +39,6 @@ impl<T> AtomicLinkedList<T> {
 
         Self {
             head_ptr: AtomicPtr::new(head_ptr),
-            _pin: PhantomPinned,
         }
     }
 
@@ -88,7 +85,6 @@ impl<T> AtomicLinkedList<T> {
     pub fn iter(&self) -> AtomicLinkedListIterator<T> {
         AtomicLinkedListIterator {
             next_ptr: &self.head_ptr,
-            _phant: PhantomData,
         }
     }
 }
@@ -105,7 +101,6 @@ impl<T> Drop for AtomicLinkedList<T> {
 
 pub struct AtomicLinkedListIterator<'a, T> {
     next_ptr: &'a AtomicPtr<ListNode<T>>,
-    _phant: PhantomData<&'a T>,
 }
 impl<'a, T> Iterator for AtomicLinkedListIterator<'a, T> {
     type Item = &'a T;

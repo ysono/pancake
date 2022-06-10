@@ -25,6 +25,7 @@ const GC_CHANNEL_CAPACITY: usize = 4096;
 const SIREQ_CHANNEL_CAPACITY: usize = 4;
 
 #[derive(ShortHand)]
+#[shorthand(visibility("pub(in crate::storage::engine_ssi)"))]
 pub struct DB {
     db_state: RwLock<DbState>,
 

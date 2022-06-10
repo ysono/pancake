@@ -17,7 +17,7 @@ async fn del(db: &mut impl OneStmtDbAdaptor, pk: &str) -> Result<()> {
 }
 
 pub async fn delete_create_get(db: &mut impl OneStmtDbAdaptor) -> Result<()> {
-    let spec = Arc::new(SubValueSpec::from(DatumType::Str));
+    let spec = Arc::new(SubValueSpec::whole(DatumType::Str));
 
     /* Delete scnd idx. */
 
