@@ -35,8 +35,8 @@ async fn put_handler(req: Request<Body>) -> Result<Response<Body>> {
     let key: &String = parts.param("key").unwrap();
     let key = PrimaryKey(Datum::Str(key.clone()));
 
-    let val: Vec<u8> = hyper::body::to_bytes(body).await?.to_vec();
-    let val = String::from_utf8(val.into_iter().collect())?;
+    let val = hyper::body::to_bytes(body).await?;
+    let val = String::from_utf8(val.to_vec())?;
     let val = Value(Datum::Str(val));
 
     let stmt = Statement::Put(key, Some(val));
@@ -61,7 +61,7 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
     let (parts, body) = req.into_parts();
 
     let body = hyper::body::to_bytes(body).await?;
-    let body = String::from_utf8(body.into_iter().collect())?;
+    let body = String::from_utf8(body.to_vec())?;
 
     let db = parts.data::<Arc<RwLock<DB>>>().unwrap();
 

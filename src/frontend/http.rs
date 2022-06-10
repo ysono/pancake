@@ -10,6 +10,7 @@ use routerify::prelude::*;
 use routerify::{Middleware, RequestInfo, Router, RouterService};
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
+use tokio::sync::oneshot;
 
 async fn logger(req: Request<Body>) -> Result<Request<Body>> {
     println!(
@@ -40,7 +41,11 @@ fn router(serial_db: Arc<RwLock<SerialDb>>, ssi_db: Arc<SsiDb>) -> Router<Body, 
     rb.build().unwrap()
 }
 
-pub async fn main(serial_db: Arc<RwLock<SerialDb>>, ssi_db: Arc<SsiDb>) {
+pub async fn main(
+    serial_db: Arc<RwLock<SerialDb>>,
+    ssi_db: Arc<SsiDb>,
+    terminate_rx: oneshot::Receiver<()>,
+) {
     let router = router(serial_db, ssi_db);
 
     let service = RouterService::new(router).unwrap();
@@ -48,9 +53,14 @@ pub async fn main(serial_db: Arc<RwLock<SerialDb>>, ssi_db: Arc<SsiDb>) {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
     let server = Server::bind(&addr).serve(service);
+    println!("Frontend is running on: {}", addr);
 
-    println!("App is running on: {}", addr);
-    if let Err(err) = server.await {
-        eprintln!("Server error: {}", err);
+    let server = server.with_graceful_shutdown(async move {
+        terminate_rx.await.ok();
+    });
+    let server_res = server.await;
+    println!("Frontend is exiting.");
+    if let Err(err) = server_res {
+        eprintln!("Frontend error: {}", err);
     }
 }

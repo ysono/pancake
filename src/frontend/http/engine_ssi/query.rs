@@ -95,7 +95,7 @@ pub async fn query(db: &Arc<DB>, stmt: Statement) -> Result<Response<Body>> {
 }
 
 fn entries_to_str<'a>(
-    entries: &mut dyn Iterator<Item = Entry<'a, PKShared, PVShared>>,
+    entries: impl Iterator<Item = Entry<'a, PKShared, PVShared>>,
 ) -> Result<Response<Body>> {
     let mut body = String::new();
     for entry in entries {
