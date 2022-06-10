@@ -1,6 +1,6 @@
 use super::LSMTree;
-use crate::storage::engine_serial::lsm::{merging, SSTable};
-use crate::storage::engines_common::Entry;
+use crate::storage::engine_serial::lsm::merging;
+use crate::storage::engines_common::{Entry, SSTable};
 use crate::storage::serde::{OptDatum, Serializable};
 use anyhow::Result;
 use std::mem;
@@ -14,7 +14,7 @@ where
     OptDatum<V>: Serializable,
 {
     pub fn maybe_run_gc(&mut self) -> Result<()> {
-        if self.memlog.mem_len() >= MEMTABLE_FLUSH_SIZE_THRESH {
+        if self.memlog.r_memlog().mem_len() >= MEMTABLE_FLUSH_SIZE_THRESH {
             self.flush_memtable()?;
         }
         if self.sstables.len() >= SSTABLE_COMPACT_COUNT_THRESH {
@@ -24,9 +24,9 @@ where
     }
 
     fn flush_memtable(&mut self) -> Result<()> {
-        let sst_path = self.format_new_sstable_file_path()?;
+        let sst_path = self.format_new_sstable_file_path();
 
-        let entries = self.memlog.get_whole_range().map(Entry::Ref);
+        let entries = self.memlog.r_memlog().get_whole_range().map(Entry::Ref);
 
         let new_sst = SSTable::new(entries, sst_path)?;
 
@@ -39,7 +39,7 @@ where
 
     /// For now, always compact all SSTables into one SSTable.
     fn compact_sstables(&mut self) -> Result<()> {
-        let sst_path = self.format_new_sstable_file_path()?;
+        let sst_path = self.format_new_sstable_file_path();
 
         let entries = merging::merge_sstables(&self.sstables[..], None, None)
             // skip tombstones

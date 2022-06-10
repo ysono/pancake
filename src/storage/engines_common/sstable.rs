@@ -1,14 +1,13 @@
 use crate::ds_n_a::bisect;
 use crate::storage::engines_common::Entry;
 use crate::storage::serde::{
-    DatumReader, DatumWriter, KeyValueRangeIterator, OptDatum, ReadResult, Ser, Serializable,
+    DatumWriter, Deser, KeyIterator, KeyValueRangeIterator, OptDatum, ReadResult, Ser,
 };
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut, From};
-use std::any;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::iter;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -34,8 +33,8 @@ pub struct SSTable<K, V> {
 
 impl<K, V> SSTable<K, V>
 where
-    K: Serializable + Ord + Clone,
-    OptDatum<V>: Serializable,
+    K: Ser + Ord + Clone,
+    OptDatum<V>: Ser,
 {
     pub fn new<'a>(
         entries: impl Iterator<Item = Entry<'a, K, OptDatum<V>>>,
@@ -77,18 +76,22 @@ where
             _phant: PhantomData,
         })
     }
-
+}
+impl<K, V> SSTable<K, V>
+where
+    K: Deser + Ord,
+    OptDatum<V>: Deser,
+{
     pub fn load(kv_file_path: PathBuf) -> Result<Self> {
         let kv_file = File::open(&kv_file_path)?;
-        let mut datum_reader = DatumReader::from(BufReader::new(kv_file));
+        let mut key_iter = KeyIterator::new(kv_file);
 
         let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
         let mut file_offset = FileOffset(0);
 
         for entry_i in 0usize.. {
-            // Key
             if is_kv_sparsely_captured(entry_i) {
-                match K::deser(&mut datum_reader)? {
+                match key_iter.read_k_skip_v()? {
                     ReadResult::EOF => break,
                     ReadResult::Some(delta_r_len, k) => {
                         sparse_file_offsets.push((k, file_offset));
@@ -96,25 +99,9 @@ where
                     }
                 }
             } else {
-                match datum_reader.skip()? {
+                match key_iter.skip_kv()? {
                     ReadResult::EOF => break,
-                    ReadResult::Some(delta_r_len, ()) => {
-                        file_offset.0 += delta_r_len as u64;
-                    }
-                }
-            }
-
-            // Value
-            match datum_reader.skip()? {
-                ReadResult::EOF => {
-                    return Err(anyhow!(
-                        "EOF while skipping a {} from {:?}.",
-                        any::type_name::<V>(),
-                        kv_file_path
-                    ));
-                }
-                ReadResult::Some(delta_r_len, ()) => {
-                    file_offset.0 += delta_r_len as u64;
+                    ReadResult::Some(delta_r_len, ()) => file_offset.0 += delta_r_len as u64,
                 }
             }
         }
@@ -157,6 +144,29 @@ where
             .map(|file| KeyValueRangeIterator::new(file, k_lo, k_hi));
 
         let ret_iter_fn = move || -> Option<Result<(K, OptDatum<V>)>> {
+            match res_file_iter.as_mut() {
+                Err(e) => {
+                    // This error occurred during the construction of the iterator.
+                    // Return the err as an iterator item.
+                    Some(Err(anyhow!(e.to_string())))
+                }
+                Ok(file_iter) => file_iter.next(),
+            }
+        };
+        iter::from_fn(ret_iter_fn)
+    }
+}
+
+impl<K, V> SSTable<K, V>
+where
+    K: Deser + Ord,
+{
+    pub fn get_all_keys(&self) -> impl Iterator<Item = Result<K>> {
+        let mut res_file_iter = File::open(&self.kv_file_path)
+            .map_err(|e| anyhow!(e))
+            .map(|file| KeyIterator::new(file).map(|res| res.map(|(_delta_r_len, k)| k)));
+
+        let ret_iter_fn = move || -> Option<Result<K>> {
             match res_file_iter.as_mut() {
                 Err(e) => {
                     // This error occurred during the construction of the iterator.

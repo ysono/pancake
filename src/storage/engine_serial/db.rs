@@ -17,7 +17,7 @@ pub struct DB {
     prim_lsm: LSMTree<PKShared, PVShared>,
     scnd_idxs: HashMap<Arc<SubValueSpec>, SecondaryIndex>,
     all_scnd_idxs_dir_path: PathBuf,
-    next_scnd_idx_num: PathNameNum,
+    next_scnd_idx_dir_num: PathNameNum,
 }
 
 impl DB {
@@ -29,24 +29,24 @@ impl DB {
         let prim_lsm = LSMTree::load_or_new(prim_lsm_dir_path)?;
 
         let mut scnd_idxs = HashMap::new();
-        let mut max_scnd_idx_num = 0;
+        let mut max_scnd_idx_dir_num = PathNameNum::from(0);
         for res_path in fs_utils::read_dir(&all_scnd_idxs_dir_path)? {
             let scnd_idx_dir_path = res_path?;
 
             let num = Self::parse_scnd_idx_dir_num(&scnd_idx_dir_path)?;
-            max_scnd_idx_num = cmp::max(max_scnd_idx_num, *num);
+            max_scnd_idx_dir_num = cmp::max(max_scnd_idx_dir_num, num);
 
             let scnd_idx = SecondaryIndex::load(scnd_idx_dir_path)?;
             let spec = scnd_idx.spec().clone();
             scnd_idxs.insert(spec, scnd_idx);
         }
-        let next_scnd_idx_num = PathNameNum::from(max_scnd_idx_num + 1);
+        let next_scnd_idx_dir_num = PathNameNum::from(*max_scnd_idx_dir_num + 1);
 
         let db = DB {
             prim_lsm,
             scnd_idxs,
             all_scnd_idxs_dir_path,
-            next_scnd_idx_num,
+            next_scnd_idx_dir_num,
         };
         Ok(db)
     }
@@ -113,7 +113,7 @@ impl DB {
     }
 
     fn format_new_scnd_idx_dir_path(&mut self) -> PathBuf {
-        let num = self.next_scnd_idx_num.get_and_inc();
+        let num = self.next_scnd_idx_dir_num.get_and_inc();
         self.all_scnd_idxs_dir_path.join(num.format_hex())
     }
     fn parse_scnd_idx_dir_num<P: AsRef<Path>>(dir_path: P) -> Result<PathNameNum> {

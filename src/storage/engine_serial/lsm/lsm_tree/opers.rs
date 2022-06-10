@@ -24,7 +24,7 @@ where
         K: Borrow<Q> + PartialOrd<Q>,
         Q: Ord,
     {
-        if let Some(kv) = self.memlog.get_one(k) {
+        if let Some(kv) = self.memlog.r_memlog().get_one(k) {
             return Entry::Ref(kv).to_option_entry();
         }
         // TODO bloom filter here

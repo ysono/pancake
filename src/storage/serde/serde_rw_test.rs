@@ -102,6 +102,8 @@ mod test {
 
     #[test]
     fn ser_then_deser() -> Result<()> {
+        let mut rand_rng = rand::thread_rng();
+
         let gen_fns = [
             gen_tomb,
             gen_i64,
@@ -115,7 +117,7 @@ mod test {
             let datums = gen_fns.iter().map(|gen| gen()).collect::<Vec<_>>();
             verify(&datums)?;
 
-            gen_fns.shuffle(&mut rand::thread_rng());
+            gen_fns.shuffle(&mut rand_rng);
             let datums = gen_fns.iter().map(|gen| gen()).collect::<Vec<_>>();
             verify(&datums)?;
         }

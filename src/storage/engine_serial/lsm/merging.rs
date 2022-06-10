@@ -1,6 +1,5 @@
-use crate::storage::engine_serial::lsm::{MemLog, SSTable};
-use crate::storage::engines_common::Entry;
-use crate::storage::serde::{OptDatum, Serializable};
+use crate::storage::engines_common::{Entry, SSTable, WritableMemLog};
+use crate::storage::serde::{Deser, OptDatum};
 use anyhow::Result;
 use itertools::Itertools;
 use std::cmp::{Ord, Ordering, PartialOrd};
@@ -13,8 +12,8 @@ pub fn merge_sstables<'a, K, V, Q>(
     k_hi: Option<&'a Q>,
 ) -> impl 'a + Iterator<Item = Result<(K, OptDatum<V>)>>
 where
-    K: Serializable + Ord + PartialOrd<Q> + Clone,
-    OptDatum<V>: Serializable,
+    K: Deser + Ord + PartialOrd<Q>,
+    OptDatum<V>: Deser,
 {
     let iter_of_iters = sstables.iter().enumerate().map(|(sst_i, sst)| {
         // NB: the index/position of the sstable is included for the purpose of breaking ties
@@ -42,6 +41,7 @@ where
             (Ok((a_k, _)), Ok((b_k, _))) => {
                 let key_cmp = a_k.cmp(b_k);
                 if key_cmp.is_eq() {
+                    // Larger `i` means newer.
                     return a_i > b_i;
                 } else {
                     return key_cmp.is_lt();
@@ -63,16 +63,16 @@ where
 }
 
 pub fn merge_memlog_and_sstables<'a, K, V, Q>(
-    memlog: &'a MemLog<K, V>,
+    memlog: &'a WritableMemLog<K, V>,
     sstables: &'a [SSTable<K, V>],
     k_lo: Option<&'a Q>,
     k_hi: Option<&'a Q>,
 ) -> impl 'a + Iterator<Item = Entry<'a, K, OptDatum<V>>>
 where
-    K: Serializable + Ord + PartialOrd<Q> + Clone,
-    OptDatum<V>: Serializable,
+    K: Deser + Ord + PartialOrd<Q>,
+    OptDatum<V>: Deser,
 {
-    let mut mt_iter = memlog.get_range(k_lo, k_hi).peekable();
+    let mut mt_iter = memlog.r_memlog().get_range(k_lo, k_hi).peekable();
     let mut ssts_iter = merge_sstables(sstables, k_lo, k_hi).peekable();
 
     /*

@@ -74,8 +74,9 @@
 //! A `Datum` can be skipped over without being deserialized.
 //! The amount of bytes to skip is derived dynamically according to `datum_type`.
 
-mod iter;
-mod iter_skipping;
+mod iter_k;
+mod iter_kv;
+mod iter_range;
 mod lengths;
 
 mod datum_type;
@@ -87,8 +88,9 @@ mod serializable;
 #[cfg(test)]
 mod serde_rw_test;
 
-pub(in crate::storage) use iter::*;
-pub(in crate::storage) use iter_skipping::*;
+pub(in crate::storage) use iter_k::*;
+pub(in crate::storage) use iter_kv::*;
+pub(in crate::storage) use iter_range::*;
 pub(in crate::storage) use lengths::*;
 
 pub use datum_type::*;

@@ -24,7 +24,7 @@ pub struct SecondaryIndex {
 
 impl SecondaryIndex {
     fn spec_file_path<P: AsRef<Path>>(scnd_idx_dir_path: P) -> PathBuf {
-        scnd_idx_dir_path.as_ref().join("spec.datum")
+        scnd_idx_dir_path.as_ref().join("sv_spec.datum")
     }
 
     fn lsm_dir_path<P: AsRef<Path>>(scnd_idx_dir_path: P) -> PathBuf {

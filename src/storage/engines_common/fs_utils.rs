@@ -5,7 +5,7 @@ use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 
 /// A strictly increasing `u64` that is used to prevent file/dir name collisions.
-#[derive(From, Deref)]
+#[derive(From, Deref, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PathNameNum(u64);
 impl PathNameNum {
     pub fn format_hex(&self) -> String {

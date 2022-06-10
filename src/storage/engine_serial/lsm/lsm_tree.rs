@@ -1,5 +1,5 @@
-use crate::storage::engine_serial::lsm::{MemLog, SSTable};
 use crate::storage::engines_common::fs_utils::{self, PathNameNum};
+use crate::storage::engines_common::{SSTable, WritableMemLog};
 use crate::storage::serde::{OptDatum, Serializable};
 use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
@@ -18,24 +18,24 @@ const SSTABLES_DIR_NAME: &str = "sstables";
 ///
 /// ### Internals:
 ///
-/// One [`MemLog`] holds the most recently inserted `{key: value}` in a sorted in-memory table.
+/// One [`WritableMemLog`] holds the most recently inserted `{key: value}` in a sorted in-memory table.
 ///
-/// The [`MemLog`] is occasionally flushed into an [`SSTable`].
+/// The [`WritableMemLog`] is occasionally flushed into an [`SSTable`].
 ///
 /// Multiple [`SSTable`]s are occasionally compacted into one [`SSTable`].
 ///
 /// ### Querying:
 ///
-/// A `put` operation accesses the Memtable of the [`MemLog`] only.
+/// A `put` operation accesses the Memtable of the [`WritableMemLog`] only.
 ///
-/// A `get` operation generally accesses the [`MemLog`] and all [`SSTable`]s.
+/// A `get` operation generally accesses the [`WritableMemLog`] and all [`SSTable`]s.
 ///
 /// When the same key exists in multiple internal tables, only the result from the newest table is retrieved.
 pub struct LSMTree<K, V> {
-    memlog: MemLog<K, V>,
+    memlog: WritableMemLog<K, V>,
     sstables: Vec<SSTable<K, V>>,
     sstables_dir_path: PathBuf,
-    next_sstable_num: PathNameNum,
+    next_sstable_file_num: PathNameNum,
 }
 
 impl<K, V> LSMTree<K, V>
@@ -48,15 +48,14 @@ where
         let sstables_dir_path = lsm_dir_path.as_ref().join(SSTABLES_DIR_NAME);
         std::fs::create_dir_all(&sstables_dir_path)?;
 
-        let memlog = MemLog::load_or_new(&log_file_path)?;
+        let memlog = WritableMemLog::load_or_new(&log_file_path)?;
 
         let sstables_file_paths = fs_utils::read_dir_sorted(&sstables_dir_path)?;
-        let next_sstable_num = match sstables_file_paths.last() {
+        let next_sstable_file_num = match sstables_file_paths.last() {
             None => PathNameNum::from(0),
             Some(file_path) => {
-                let mut num = Self::parse_sstable_file_num(file_path)?;
-                num.get_and_inc();
-                num
+                let num = Self::parse_sstable_file_num(file_path)?;
+                PathNameNum::from(*num + 1)
             }
         };
         let sstables = sstables_file_paths
@@ -68,16 +67,14 @@ where
             memlog,
             sstables,
             sstables_dir_path,
-            next_sstable_num,
+            next_sstable_file_num,
         })
     }
 
-    pub fn format_new_sstable_file_path(&mut self) -> Result<PathBuf> {
-        let num = self.next_sstable_num.get_and_inc();
-        let sst_path = self
-            .sstables_dir_path
-            .join(format!("{}.kv", num.format_hex()));
-        Ok(sst_path)
+    fn format_new_sstable_file_path(&mut self) -> PathBuf {
+        let num = self.next_sstable_file_num.get_and_inc();
+        self.sstables_dir_path
+            .join(format!("{}.kv", num.format_hex()))
     }
     fn parse_sstable_file_num<P: AsRef<Path>>(file_path: P) -> Result<PathNameNum> {
         let file_path = file_path.as_ref();
