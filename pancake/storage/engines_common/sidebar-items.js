@@ -1,1 +1,1 @@
-initSidebarItems({"enum":[["Entry","[`Entry`] is the API for the content of the DB."]],"mod":[["fs_utils",""]]});
+initSidebarItems({"enum":[["Entry","[`Entry`] is the API for the content of the DB."]],"mod":[["fs_utils",""]],"struct":[["ReadonlyMemLog","A MemLog is a sorted dictionary (called Memtable), backed up by a write-ahead log file."],["SSTable","An SSTable is an abstraction of a sorted dictionary. An SSTable has these components:"],["WritableMemLog","A MemLog is a sorted dictionary (called Memtable), backed up by a write-ahead log file."]]});

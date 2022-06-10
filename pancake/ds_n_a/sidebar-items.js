@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["atomic_linked_list",""],["atomic_queue",""],["bisect",""],["cmp",""],["interval_set",""],["persisted_u64",""],["send_ptr",""]]});
+initSidebarItems({"mod":[["atomic_linked_list",""],["bisect",""],["cmp",""],["interval_set",""],["send_ptr",""]]});

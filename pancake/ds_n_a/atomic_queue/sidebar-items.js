@@ -1,1 +1,0 @@
-initSidebarItems({"struct":[["AtomicQueue","NOT thread-safe! At most one thread/task may modify and/or read this queue."],["QueueNode",""]]});

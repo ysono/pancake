@@ -1,1 +1,1 @@
-initSidebarItems({"fn":[["read_dir",""],["read_dir_sorted",""]],"struct":[["UniqueId",""]]});
+initSidebarItems({"fn":[["read_dir",""],["read_dir_sorted",""]],"struct":[["PathNameNum","A strictly increasing `u64` that is used to prevent file/dir name collisions."]]});

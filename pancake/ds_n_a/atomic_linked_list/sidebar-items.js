@@ -1,1 +1,1 @@
-initSidebarItems({"enum":[["ListElem",""]],"struct":[["AtomicLinkedList",""],["AtomicLinkedListIterator",""],["ListNode",""]]});
+initSidebarItems({"struct":[["AtomicLinkedList",""],["AtomicLinkedListIterator",""],["AtomicLinkedListSnapshot","In both head and tail, SendPtr is assumed to contain a non-nullptr."],["AtomicLinkedListSnapshotIterator",""],["ListNode",""]]});

@@ -1,1 +1,0 @@
-initSidebarItems({"struct":[["PersistedU64","U64 that is backed by a file."]]});

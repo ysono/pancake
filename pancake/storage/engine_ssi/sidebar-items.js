@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["oper",""]],"struct":[["DB",""]]});
+initSidebarItems({"enum":[["ClientCommitDecision",""]],"struct":[["DB",""],["Txn",""]]});
