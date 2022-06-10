@@ -1,7 +1,10 @@
 use std::borrow::Borrow;
 use std::time::Duration;
 
-pub async fn sleep(millis: u64) {
+pub fn sleep_sync(millis: u64) {
+    std::thread::sleep(Duration::from_millis(millis))
+}
+pub async fn sleep_async(millis: u64) {
     tokio::time::sleep(Duration::from_millis(millis)).await;
 }
 

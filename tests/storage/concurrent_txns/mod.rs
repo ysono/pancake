@@ -20,7 +20,7 @@ pub async fn test_concurrent_txns(db: &DB) -> Result<()> {
 
     lost_update::no_lost_update(db_ref).await?;
     write_skew::no_write_skew(db_ref).await?;
-    phantom::no_phantom_write(db_ref).await?;
+    phantom::no_phantom(db_ref).await?;
 
     Ok(())
 }

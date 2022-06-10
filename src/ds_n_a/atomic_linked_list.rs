@@ -1,78 +1,73 @@
-use std::fmt::Debug;
-use std::marker::PhantomPinned;
-use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
-
-#[derive(Debug)]
-pub enum ListElem<T> {
-    Elem(T),
-    Dummy { is_terminus: AtomicBool },
-}
-
-impl<T> ListElem<T> {
-    pub fn new_dummy(is_terminus: bool) -> Self {
-        Self::Dummy {
-            is_terminus: AtomicBool::new(is_terminus),
-        }
-    }
-}
+use crate::ds_n_a::send_ptr::SendPtr;
+use std::marker::{PhantomData, PhantomPinned};
+use std::ptr::{self, NonNull};
+use std::sync::atomic::{AtomicPtr, Ordering};
 
 pub struct ListNode<T> {
-    pub(in crate) elem: ListElem<T>,
-    pub(in crate) older: AtomicPtr<ListNode<T>>,
-}
-
-impl<T> ListNode<T> {
-    pub fn new_dummy(is_terminus: bool) -> Self {
-        Self {
-            elem: ListElem::new_dummy(is_terminus),
-            older: AtomicPtr::default(),
-        }
-    }
+    pub elem: T,
+    pub next: AtomicPtr<ListNode<T>>,
 }
 
 pub struct AtomicLinkedList<T> {
-    dummy_newest: ListNode<T>,
-    dummy_oldest: ListNode<T>,
+    head_ptr: AtomicPtr<ListNode<T>>,
     _pin: PhantomPinned,
 }
 
 impl<T> AtomicLinkedList<T> {
-    pub fn new<I: Iterator<Item = T>>(iter: I) -> Pin<Box<Self>> {
-        let mut moi = Box::pin(Self {
-            dummy_newest: ListNode::new_dummy(true),
-            dummy_oldest: ListNode::new_dummy(true),
-            _pin: PhantomPinned,
-        });
+    pub fn from_elems(mut iter: impl Iterator<Item = T>) -> Self {
+        let mut head_ptr: *mut ListNode<T> = ptr::null_mut();
+        let mut tail_ptr = head_ptr;
 
-        let mut_ref_moi = unsafe { moi.as_mut().get_unchecked_mut() };
-
-        let mut curr_node = &mut mut_ref_moi.dummy_newest;
-        for t in iter {
-            let next_node_own = Box::new(ListNode {
-                elem: ListElem::Elem(t),
-                older: AtomicPtr::default(),
+        if let Some(elem) = iter.next() {
+            let head_own = Box::new(ListNode {
+                elem,
+                next: AtomicPtr::default(),
             });
-            let next_node_ptr = Box::into_raw(next_node_own);
-            curr_node.older = AtomicPtr::new(next_node_ptr);
-            curr_node = unsafe { &mut *next_node_ptr };
+            head_ptr = Box::into_raw(head_own);
+            tail_ptr = head_ptr;
         }
-        curr_node.older = AtomicPtr::new(&mut mut_ref_moi.dummy_oldest);
+        for elem in iter {
+            let curr_own = Box::new(ListNode {
+                elem,
+                next: AtomicPtr::default(),
+            });
+            let curr_ptr = Box::into_raw(curr_own);
 
-        moi
+            let tail_ref = unsafe { &mut *tail_ptr };
+            tail_ref.next = AtomicPtr::new(curr_ptr);
+
+            tail_ptr = curr_ptr;
+        }
+
+        Self {
+            head_ptr: AtomicPtr::new(head_ptr),
+            _pin: PhantomPinned,
+        }
     }
 
-    pub fn push_newest(&self, elem: ListElem<T>) -> &ListNode<T> {
-        let mut y_own = Box::new(ListNode {
-            elem,
-            older: AtomicPtr::default(),
-        });
+    pub fn head(&self) -> Option<&ListNode<T>> {
+        let head_ptr = self.head_ptr.load(Ordering::Acquire);
+        if head_ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { &*head_ptr })
+        }
+    }
 
-        let mut x_ptr = self.dummy_newest.older.load(Ordering::Acquire);
-        y_own.older = AtomicPtr::new(x_ptr);
+    pub fn push_elem(&self, elem: T) -> *const ListNode<T> {
+        let y_own = Box::new(ListNode {
+            elem,
+            next: AtomicPtr::default(),
+        });
+        self.push_node(y_own)
+    }
+
+    pub fn push_node(&self, mut y_own: Box<ListNode<T>>) -> *const ListNode<T> {
+        let mut x_ptr = self.head_ptr.load(Ordering::Acquire);
+        y_own.next = AtomicPtr::new(x_ptr);
         let y_ptr = Box::into_raw(y_own);
         loop {
-            let cae_res = self.dummy_newest.older.compare_exchange_weak(
+            let cae_res = self.head_ptr.compare_exchange_weak(
                 x_ptr,
                 y_ptr,
                 Ordering::SeqCst,
@@ -82,52 +77,95 @@ impl<T> AtomicLinkedList<T> {
                 Err(r_ptr) => {
                     x_ptr = r_ptr;
                     let y_ref = unsafe { &mut *y_ptr };
-                    y_ref.older = AtomicPtr::new(x_ptr);
+                    y_ref.next = AtomicPtr::new(x_ptr);
                 }
                 Ok(_) => break,
             }
         }
-        unsafe { &*y_ptr }
+        y_ptr
     }
 
     pub fn iter(&self) -> AtomicLinkedListIterator<T> {
         AtomicLinkedListIterator {
-            lst: &self,
-            nxt: unsafe { &*self.dummy_newest.older.load(Ordering::SeqCst) },
+            next_ptr: &self.head_ptr,
+            _phant: PhantomData,
         }
-    }
-
-    pub fn dummy_oldest(&self) -> &ListNode<T> {
-        &self.dummy_oldest
     }
 }
 
 impl<T> Drop for AtomicLinkedList<T> {
     fn drop(&mut self) {
-        let last_ptr = &self.dummy_oldest as *const _ as *mut _;
-        let mut curr_ptr = self.dummy_newest.older.load(Ordering::SeqCst);
-        while curr_ptr != last_ptr {
+        let mut curr_ptr = self.head_ptr.load(Ordering::SeqCst);
+        while !curr_ptr.is_null() {
             let curr_own = unsafe { Box::from_raw(curr_ptr) };
-            curr_ptr = curr_own.older.load(Ordering::SeqCst);
+            curr_ptr = curr_own.next.load(Ordering::SeqCst);
         }
     }
 }
 
 pub struct AtomicLinkedListIterator<'a, T> {
-    lst: &'a AtomicLinkedList<T>,
-    nxt: &'a ListNode<T>,
+    next_ptr: &'a AtomicPtr<ListNode<T>>,
+    _phant: PhantomData<&'a T>,
+}
+impl<'a, T> Iterator for AtomicLinkedListIterator<'a, T> {
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        let curr_ptr = self.next_ptr.load(Ordering::SeqCst);
+        if curr_ptr.is_null() {
+            return None;
+        }
+        let curr_ref = unsafe { &*curr_ptr };
+        self.next_ptr = &curr_ref.next;
+        Some(&curr_ref.elem)
+    }
 }
 
-impl<'a, T> Iterator for AtomicLinkedListIterator<'a, T> {
-    type Item = &'a ListElem<T>;
+/// In both head and tail, SendPtr is assumed to contain a non-nullptr.
+pub struct AtomicLinkedListSnapshot<T> {
+    pub head_excl_ptr: SendPtr<ListNode<T>>,
+    pub tail_excl_ptr: Option<SendPtr<ListNode<T>>>,
+}
+impl<T> AtomicLinkedListSnapshot<T> {
+    pub fn iter(&self) -> AtomicLinkedListSnapshotIterator<T> {
+        let prev_ptr =
+            if self.tail_excl_ptr.is_some() && self.tail_excl_ptr.unwrap() == self.head_excl_ptr {
+                ptr::null()
+            } else {
+                self.head_excl_ptr.as_ptr()
+            };
 
+        AtomicLinkedListSnapshotIterator {
+            prev_ptr,
+            tail_excl_ptr: self
+                .tail_excl_ptr
+                .map(|send_ptr| unsafe { NonNull::new_unchecked(send_ptr.as_ptr_mut()) }),
+        }
+    }
+}
+
+pub struct AtomicLinkedListSnapshotIterator<T> {
+    prev_ptr: *const ListNode<T>,
+    tail_excl_ptr: Option<NonNull<ListNode<T>>>,
+}
+impl<T: 'static> Iterator for AtomicLinkedListSnapshotIterator<T> {
+    type Item = &'static T;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.nxt as *const _ == &self.lst.dummy_oldest as *const _ {
-            None
+        if self.prev_ptr.is_null() {
+            return None;
         } else {
-            let node = self.nxt;
-            self.nxt = unsafe { &*self.nxt.older.load(Ordering::SeqCst) };
-            Some(&node.elem)
+            let prev_ref = unsafe { &*self.prev_ptr };
+            let curr_ptr = prev_ref.next.load(Ordering::SeqCst);
+            if curr_ptr.is_null()
+                || (self.tail_excl_ptr.is_some()
+                    && self.tail_excl_ptr.unwrap().as_ptr() == curr_ptr)
+            {
+                self.prev_ptr = ptr::null();
+                return None;
+            } else {
+                self.prev_ptr = curr_ptr;
+                let curr_ref = unsafe { &*curr_ptr };
+                return Some(&curr_ref.elem);
+            }
         }
     }
 }

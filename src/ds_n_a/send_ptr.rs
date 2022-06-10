@@ -1,11 +1,14 @@
 #[derive(Eq)]
 pub struct SendPtr<T>(*const T);
 impl<T> SendPtr<T> {
-    pub fn from(raw: *const T) -> Self {
-        Self(raw)
+    pub fn from(ptr: *const T) -> Self {
+        Self(ptr)
     }
-    pub fn raw(&self) -> *const T {
+    pub fn as_ptr(&self) -> *const T {
         self.0
+    }
+    pub fn as_ptr_mut(&self) -> *mut T {
+        self.0 as *mut T
     }
     pub unsafe fn as_ref<'a, 'b>(&'a self) -> &'b T {
         &*(self.0)

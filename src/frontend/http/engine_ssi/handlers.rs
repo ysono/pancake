@@ -2,9 +2,6 @@ use super::query;
 use crate::frontend::api::{Operation, SearchRange, Statement};
 use crate::frontend::http::resp;
 use crate::frontend::query::basic::{self as query_basic};
-use crate::storage::engine_ssi::oper::scnd_idx_mod::{
-    self, CreateScndIdxResult, DeleteScndIdxResult,
-};
 use crate::storage::engine_ssi::DB;
 use crate::storage::serde::Datum;
 use crate::storage::types::{PrimaryKey, Value};
@@ -72,17 +69,16 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
         Operation::Query(stmt) => {
             return query::query(db, stmt).await;
         }
-        Operation::CreateScndIdx(spec) => {
-            match scnd_idx_mod::create_scnd_idx(&db, Arc::new(spec)).await {
+        Operation::CreateScndIdx(sv_spec) => {
+            let sv_spec = Arc::new(sv_spec);
+            match db.create_scnd_idx(&sv_spec).await {
                 Err(e) => return resp::err(e),
-                Ok(CreateScndIdxResult::NoOp(msg)) => return resp::ok(msg),
-                Ok(CreateScndIdxResult::Success) => return resp::no_content(),
+                Ok(()) => return resp::no_content(),
             }
         }
-        Operation::DelScndIdx(spec) => match scnd_idx_mod::delete_scnd_idx(&db, &spec).await {
+        Operation::DelScndIdx(sv_spec) => match db.delete_scnd_idx(&sv_spec).await {
             Err(e) => return resp::err(e),
-            Ok(DeleteScndIdxResult::NoOp(msg)) => return resp::ok(msg),
-            Ok(DeleteScndIdxResult::Success) => return resp::no_content(),
+            Ok(()) => return resp::no_content(),
         },
     }
 }

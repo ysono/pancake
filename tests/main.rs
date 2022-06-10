@@ -4,7 +4,6 @@ use pancake::storage::engine_ssi::DB as SsiDb;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 
 mod storage;
 use storage::concurrent_txns::test_concurrent_txns;
@@ -14,7 +13,7 @@ use storage::individual_stmts::test_stmts_serially;
 const ENV_VAR_PARENT_DIR: &str = "PANCAKE_PARENT_DIR";
 
 #[tokio::test]
-async fn integr_test_main() -> Result<()> {
+async fn integration_test_main() -> Result<()> {
     let parent_dir = env::var(ENV_VAR_PARENT_DIR)
         .map_or_else(|_| env::temp_dir().join("pancake"), |s| PathBuf::from(s));
     let serial_db_dir = parent_dir.join("serial");
@@ -36,8 +35,9 @@ async fn integr_test_main() -> Result<()> {
     let mut serial_db = SerialDb::load_or_new(serial_db_dir)?;
     let mut serial_db_adap = OneStmtSerialDbAdaptor { db: &mut serial_db };
 
-    let (ssi_db, ssi_gc_job_fut) = SsiDb::load_db_and_gc_job(ssi_db_dir)?;
-    let ssi_gc_task = tokio::spawn(ssi_gc_job_fut);
+    let (ssi_db, ssi_fc_job, ssi_sicr_job) = SsiDb::load_or_new(ssi_db_dir).unwrap();
+    let ssi_fc_task = tokio::spawn(ssi_fc_job.run());
+    let ssi_sicr_task = tokio::spawn(ssi_sicr_job.run());
     let mut ssi_db_adap = OneStmtSsiDbAdaptor { db: &ssi_db };
 
     test_stmts_serially(&mut serial_db_adap).await?;
@@ -45,9 +45,9 @@ async fn integr_test_main() -> Result<()> {
 
     test_concurrent_txns(&ssi_db).await?;
 
-    ssi_db.is_terminating().store(true, Ordering::SeqCst);
-    ssi_db.send_job_cv();
-    ssi_gc_task.await??;
+    ssi_db.terminate().await;
+    ssi_fc_task.await??;
+    ssi_sicr_task.await??;
 
     Ok(())
 }
