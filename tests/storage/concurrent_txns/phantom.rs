@@ -40,13 +40,13 @@ pub async fn no_phantom(db: &'static DB) -> Result<()> {
     db_adap.nonmut_create_scnd_idx(sv_spec.clone()).await?;
 
     /* Check the initial condition: cart is empty. */
-    let beginning_cart_contents = db_adap
+    let beginning_cart_items_ct = db_adap
         .get_sv_range(&sv_spec, None, None)
         .await?
         .into_iter()
         .filter(|(pk, _pv)| pk_is_cart_item(&pk))
         .count();
-    assert_eq!(0, beginning_cart_contents);
+    assert_eq!(0, beginning_cart_items_ct);
 
     /* test params */
     let tot_price_thresh = 80;
@@ -58,11 +58,13 @@ pub async fn no_phantom(db: &'static DB) -> Result<()> {
     for item_i in 0..items_ct {
         let sv_spec = Arc::clone(&sv_spec);
 
+        let retry_limit = items_ct - 1;
+
         let task_fut = async move {
             let pk = Arc::new(gen_pk(item_i));
             let pv = Arc::new(gen_pv(item_price));
 
-            let txn_fut = Txn::run(db, |txn| {
+            let txn_fut = Txn::run(db, retry_limit, |txn| {
                 let entries = txn.get_sv_range(&sv_spec, None, None)?;
                 let mut tot_price = 0;
                 for entry in entries {

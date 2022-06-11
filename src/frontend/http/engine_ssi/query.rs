@@ -10,7 +10,7 @@ use std::sync::Arc;
 pub async fn query(db: &Arc<DB>, stmt: Statement) -> Result<Response<Body>> {
     match stmt {
         Statement::GetPK(SearchRange::One(pk)) => {
-            let fut = Txn::run(db, |txn| {
+            let fut = Txn::run(db, 0, |txn| {
                 let opt_pkpv = txn.get_pk_one(&pk)?;
                 Ok(ClientCommitDecision::Commit(opt_pkpv))
             });
@@ -27,7 +27,7 @@ pub async fn query(db: &Arc<DB>, stmt: Statement) -> Result<Response<Body>> {
             }
         }
         Statement::GetPK(SearchRange::Range { lo, hi }) => {
-            let fut = Txn::run(db, |txn| {
+            let fut = Txn::run(db, 0, |txn| {
                 let entries = txn.get_pk_range(lo.as_ref(), hi.as_ref());
                 let body = entries_to_str(entries)?;
                 Ok(ClientCommitDecision::Commit(body))
@@ -37,7 +37,7 @@ pub async fn query(db: &Arc<DB>, stmt: Statement) -> Result<Response<Body>> {
         }
         Statement::GetSV(sv_spec, sv_range) => {
             let (sv_lo, sv_hi) = sv_range.as_ref();
-            let fut = Txn::run(db, |txn| {
+            let fut = Txn::run(db, 0, |txn| {
                 let entries = txn.get_sv_range(&sv_spec, sv_lo, sv_hi)?;
                 let pkpv_entries = entries.map(|entry| entry.convert::<PKShared, PVShared>());
                 let body = entries_to_str(pkpv_entries)?;
@@ -50,7 +50,9 @@ pub async fn query(db: &Arc<DB>, stmt: Statement) -> Result<Response<Body>> {
             let pk = Arc::new(pk);
             let opt_pv = opt_pv.map(Arc::new);
 
-            let fut = Txn::run(db, |txn| {
+            const RETRY_LIMIT: usize = 5;
+
+            let fut = Txn::run(db, RETRY_LIMIT, |txn| {
                 txn.put(&pk, &opt_pv)?;
                 Ok(ClientCommitDecision::Commit(()))
             });

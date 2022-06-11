@@ -1,7 +1,6 @@
 use super::super::helpers::{
-    etc::{sleep_async, sleep_sync},
+    etc::{join_tasks, sleep_async, sleep_sync},
     gen,
-    one_stmt::OneStmtSsiDbAdaptor,
 };
 use anyhow::{anyhow, Result};
 use pancake::storage::engine_ssi::{ClientCommitDecision, Txn, DB};
@@ -10,9 +9,7 @@ use std::sync::Arc;
 use tokio::task::JoinHandle;
 
 pub async fn repeatable_read(db: &'static DB) -> Result<()> {
-    let db_adap = Arc::new(OneStmtSsiDbAdaptor { db });
-
-    let w_txns_ct = 50;
+    let w_txns_ct = 20;
     let r_txns_ct = 5;
     let stagger_ms = 10;
     let mut w_tasks = vec![];
@@ -22,19 +19,23 @@ pub async fn repeatable_read(db: &'static DB) -> Result<()> {
     let gen_pv_str = |txn_i: u64| format!("from txn {}", txn_i);
 
     /*
-    Launch all writing txns now.
-    Each writing txn starts after a staggered delay, then overwrites the same PK.
+    Launch writing txns by staggered delays.
+    Each writing txn puts the same PK.
     */
     for txn_i in 0..w_txns_ct {
-        let db_adap = Arc::clone(&db_adap);
         let pk = Arc::clone(&pk);
+        let pv = Arc::new(gen::gen_str_pv(gen_pv_str(txn_i)));
+
         let task_fut = async move {
             sleep_async(stagger_ms * txn_i).await;
 
-            let pv = Arc::new(gen::gen_str_pv(gen_pv_str(txn_i)));
-            db_adap.nonmut_put(pk.clone(), Some(pv)).await?;
+            let retry_limit = (w_txns_ct - 1) as usize;
 
-            Ok(())
+            let txn_fut = Txn::run(db, retry_limit, |txn| {
+                txn.put(&pk, &Some(pv.clone()))?;
+                Ok(ClientCommitDecision::Commit(()))
+            });
+            txn_fut.await
         };
         let task: JoinHandle<Result<()>> = tokio::spawn(task_fut);
         w_tasks.push(task);
@@ -46,10 +47,11 @@ pub async fn repeatable_read(db: &'static DB) -> Result<()> {
     */
     for txn_i in 0..r_txns_ct {
         let pk = Arc::clone(&pk);
+
         let task_fut = async move {
             sleep_async(stagger_ms * txn_i).await;
 
-            let txn_fut = Txn::run(db, |txn| {
+            let txn_fut = Txn::run(db, 0, |txn| {
                 let first_opt_pv = txn.get_pk_one(&pk)?.map(|(_, pv)| pv);
 
                 for _ in 0..w_txns_ct {
@@ -73,17 +75,12 @@ pub async fn repeatable_read(db: &'static DB) -> Result<()> {
         r_tasks.push(task);
     }
 
-    for task in w_tasks.into_iter() {
-        let res: Result<Result<()>, _> = task.await;
-        res??;
-    }
+    let w_res = join_tasks(w_tasks).await;
+    let r_res = join_tasks(r_tasks).await;
 
-    let mut read_opt_pvs = vec![];
-    for task in r_tasks.into_iter() {
-        let res: Result<Result<Option<Arc<Value>>>, _> = task.await;
-        let opt_pv = res??;
-        read_opt_pvs.push(opt_pv);
-    }
+    w_res?;
+    let read_opt_pvs = r_res?;
+
     /* A sanitizing validation of the test setup.
     Assert that different reading txns saw different snapshots.
     This assertion technically succeeds non-deterministically. If failing, try again. */

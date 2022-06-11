@@ -84,7 +84,7 @@ pub struct OneStmtSsiDbAdaptor<'a> {
 
 impl<'a> OneStmtSsiDbAdaptor<'a> {
     pub async fn nonmut_put(&self, pk: PKShared, pv: Option<PVShared>) -> Result<()> {
-        let fut = Txn::run(self.db, |txn| {
+        let fut = Txn::run(self.db, 0, |txn| {
             txn.put(&pk, &pv)?;
             Ok(ClientCommitDecision::Commit(()))
         });
@@ -104,7 +104,7 @@ impl<'a> OneStmtSsiDbAdaptor<'a> {
 #[async_trait]
 impl<'a> OneStmtDbAdaptor for OneStmtSsiDbAdaptor<'a> {
     async fn get_pk_one(&self, pk: &PrimaryKey) -> Result<Option<(PKShared, PVShared)>> {
-        let fut = Txn::run(self.db, |txn| {
+        let fut = Txn::run(self.db, 0, |txn| {
             let opt_pkpv = txn.get_pk_one(pk)?;
             Ok(ClientCommitDecision::Commit(opt_pkpv))
         });
@@ -117,7 +117,7 @@ impl<'a> OneStmtDbAdaptor for OneStmtSsiDbAdaptor<'a> {
         pk_lo: Option<&PrimaryKey>,
         pk_hi: Option<&PrimaryKey>,
     ) -> Result<Vec<(PKShared, PVShared)>> {
-        let fut = Txn::run(self.db, |txn| {
+        let fut = Txn::run(self.db, 0, |txn| {
             let entries = txn.get_pk_range(pk_lo, pk_hi);
             let entries = entries
                 .map(|entry| entry.take_kv())
@@ -134,7 +134,7 @@ impl<'a> OneStmtDbAdaptor for OneStmtSsiDbAdaptor<'a> {
         sv_lo: Option<&SubValue>,
         sv_hi: Option<&SubValue>,
     ) -> Result<Vec<(PKShared, PVShared)>> {
-        let fut = Txn::run(self.db, |txn| {
+        let fut = Txn::run(self.db, 0, |txn| {
             let entries = txn.get_sv_range(sv_spec, sv_lo, sv_hi)?;
             let entries = entries
                 .map(|entry| entry.convert::<PKShared, PVShared>().take_kv())

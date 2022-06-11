@@ -1,5 +1,5 @@
 use super::super::helpers::{
-    etc::{sleep_async, sleep_sync},
+    etc::{join_tasks, sleep_async, sleep_sync},
     gen,
     one_stmt::{OneStmtDbAdaptor, OneStmtSsiDbAdaptor},
 };
@@ -21,10 +21,12 @@ pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
     let gen_pv_str = |txn_i: u64| format!("from txn {}", txn_i);
     let parse_pv_str = |s: &str| s["from txn ".len()..].parse::<u64>();
 
-    /* Each writing txn puts multiple objs. */
+    /* Each writing txn puts multiple objs, then commits. */
     for txn_i in 0..w_txns_ct {
         let task_fut = async move {
             sleep_async(1).await;
+
+            let retry_limit = (w_txns_ct - 1) as usize;
 
             let mut entries = BTreeMap::new();
             let pv = Arc::new(gen::gen_str_pv(gen_pv_str(txn_i)));
@@ -33,7 +35,7 @@ pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
                 entries.insert(pk, pv.clone());
             }
 
-            let txn_fut = Txn::run(db, |txn| {
+            let txn_fut = Txn::run(db, retry_limit, |txn| {
                 for (pk, pv) in entries.iter() {
                     txn.put(&pk, &Some(pv.clone()))?;
                 }
@@ -45,7 +47,7 @@ pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
         tasks.push(task);
     }
 
-    /* Each writing txn puts two PKs, then aborts. */
+    /* Each writing txn puts multiple objs, then aborts. */
     for txn_i in w_txns_ct..(w_txns_ct + w_abort_txns_ct) {
         let task_fut = async move {
             sleep_async(1).await;
@@ -57,7 +59,7 @@ pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
                 entries.insert(pk, pv.clone());
             }
 
-            let txn_fut = Txn::run(db, |txn| {
+            let txn_fut = Txn::run(db, 0, |txn| {
                 for (pk, pv) in entries.iter() {
                     txn.put(&pk, &Some(pv.clone()))?;
                 }
@@ -69,10 +71,7 @@ pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
         tasks.push(task);
     }
 
-    for task in tasks.into_iter() {
-        let res: Result<Result<()>, _> = task.await;
-        res??;
-    }
+    join_tasks(tasks).await?;
 
     /* Collect entries. */
     let db_adap = OneStmtSsiDbAdaptor { db };
@@ -117,11 +116,13 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
 
     /*
     Launch writing txns by staggered delays.
-    Each writing txn puts multiple objs.
+    Each writing txn puts multiple objs, then commits.
     */
     for txn_i in 0..w_txns_ct {
         let task_fut = async move {
             sleep_async(stagger_ms * txn_i).await;
+
+            let retry_limit = (w_txns_ct - 1) as usize;
 
             let mut entries = BTreeMap::new();
             let pv = Arc::new(gen::gen_str_pv(gen_pv_str(txn_i)));
@@ -130,7 +131,7 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
                 entries.insert(pk, pv.clone());
             }
 
-            let txn_fut = Txn::run(db, |txn| {
+            let txn_fut = Txn::run(db, retry_limit, |txn| {
                 for (pk, pv) in entries.iter() {
                     txn.put(&pk, &Some(pv.clone()))?;
                 }
@@ -144,7 +145,7 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
 
     /*
     Launch aborting txns by staggered delays.
-    Each writing txn puts multiple objs, then aborst.
+    Each writing txn puts multiple objs, then aborts.
     */
     for txn_i in w_txns_ct..(w_txns_ct + w_abort_txns_ct) {
         let task_fut = async move {
@@ -157,7 +158,7 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
                 entries.insert(pk, pv.clone());
             }
 
-            let txn_fut = Txn::run(db, |txn| {
+            let txn_fut = Txn::run(db, 0, |txn| {
                 for (pk, pv) in entries.iter() {
                     txn.put(&pk, &Some(pv.clone()))?;
                 }
@@ -177,11 +178,15 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
         let task_fut = async move {
             sleep_async(stagger_ms * txn_i).await;
 
+            /* Sleep to ensure that the whole reading txn is concurrent with at least one writing txn. */
+            let txn_dur = stagger_ms * 2;
+            let sleep_dur = txn_dur / objs_ct;
+
             let pks = (0..objs_ct)
                 .map(|obj_i| Arc::new(gen::gen_str_pk(gen_pk_str(obj_i))))
                 .collect::<Vec<_>>();
 
-            let txn_fut = Txn::run(db, |txn| {
+            let txn_fut = Txn::run(db, 0, |txn| {
                 let mut res_opt_pvs = pks.iter().map(|pk| txn.get_pk_one(pk));
 
                 let first_opt_pkpv = res_opt_pvs.next().unwrap()?;
@@ -189,7 +194,8 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
 
                 for res_opt_pv in res_opt_pvs {
                     let curr_opt_pv = res_opt_pv?.map(|(_, pv)| pv);
-                    /* Assert that reading is from a snapshot. (We're testing beyond dirty read.) */
+                    /* Assert that all PVs are equal.
+                    (We're asserting beyond Read Committed. Are we asserting MAV or Snapshot?) */
                     if first_opt_pv != curr_opt_pv {
                         return Err(anyhow!(
                             "Read unequal Opt<PV>s: {:?} {:?}",
@@ -198,8 +204,7 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
                         ));
                     }
 
-                    /* Sleep to ensure that the whole reading txn is concurrent with at least one writing txn. */
-                    sleep_sync(stagger_ms * 2 / objs_ct);
+                    sleep_sync(sleep_dur);
                 }
 
                 Ok(ClientCommitDecision::Commit(first_opt_pv))
@@ -210,17 +215,12 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
         r_tasks.push(task);
     }
 
-    for task in w_tasks.into_iter() {
-        let res: Result<Result<()>, _> = task.await;
-        res??;
-    }
+    let w_res = join_tasks(w_tasks).await;
+    let r_res = join_tasks(r_tasks).await;
 
-    let mut read_opt_pvs = vec![];
-    for task in r_tasks.into_iter() {
-        let res: Result<Result<Option<Arc<Value>>>, _> = task.await;
-        let opt_pv = res??;
-        read_opt_pvs.push(opt_pv);
-    }
+    w_res?;
+    let read_opt_pvs = r_res?;
+
     /* A sanitizing validation of the test setup.
     Assert that different reading txns saw different snapshots.
     This assertion technically succeeds non-deterministically. If failing, try again. */

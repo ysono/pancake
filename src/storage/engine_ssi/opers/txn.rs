@@ -20,8 +20,6 @@ use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tokio::sync::RwLockReadGuard;
 
-const RETRY_LIMIT: usize = 5;
-
 pub enum ClientCommitDecision<T> {
     Commit(T),
     Abort(T),
@@ -45,7 +43,11 @@ pub struct Txn<'txn> {
 }
 
 impl<'txn> Txn<'txn> {
-    pub async fn run<RunTxn, ClientOk>(db: &'txn DB, run_txn: RunTxn) -> Result<ClientOk>
+    pub async fn run<RunTxn, ClientOk>(
+        db: &'txn DB,
+        retry_limit: usize,
+        run_txn: RunTxn,
+    ) -> Result<ClientOk>
     where
         RunTxn: Fn(&mut Self) -> Result<ClientCommitDecision<ClientOk>>,
     {
@@ -56,11 +58,12 @@ impl<'txn> Txn<'txn> {
 
         let mut txn = Self::new(db, db_state_guard).await;
 
-        let mut retry_i = 0;
+        let mut try_i = 0;
         loop {
-            retry_i += 1;
+            try_i += 1;
 
-            let client_ok = match run_txn(&mut txn) {
+            let run_txn_res = run_txn(&mut txn);
+            match run_txn_res {
                 Err(client_err) => {
                     txn.close().await?;
                     return Err(client_err);
@@ -69,22 +72,23 @@ impl<'txn> Txn<'txn> {
                     txn.close().await?;
                     return Ok(client_ok);
                 }
-                Ok(ClientCommitDecision::Commit(client_ok_)) => client_ok_,
-            };
-
-            match txn.try_commit().await? {
-                TryCommitResult::Conflict(txn_) => {
-                    txn = txn_;
-                    if retry_i <= RETRY_LIMIT {
-                        txn.reset().await?;
-                        continue;
-                    } else {
-                        txn.close().await?;
-                        return Err(anyhow!("Retry limit exceeded"));
+                Ok(ClientCommitDecision::Commit(client_ok)) => {
+                    let try_commit_res = txn.try_commit().await?;
+                    match try_commit_res {
+                        TryCommitResult::Conflict(txn_) => {
+                            txn = txn_;
+                            if try_i <= retry_limit {
+                                txn.reset().await?;
+                                continue;
+                            } else {
+                                txn.close().await?;
+                                return Err(anyhow!("Retry limit exceeded"));
+                            }
+                        }
+                        TryCommitResult::DidCommit => {
+                            return Ok(client_ok);
+                        }
                     }
-                }
-                TryCommitResult::DidCommit => {
-                    return Ok(client_ok);
                 }
             }
         }

@@ -131,9 +131,7 @@ impl<'txn> Txn<'txn> {
             self.db.gc_avail_tx().try_send(gc_itv).ok();
         }
 
-        if let Some(snap_vec) = self.snap_vec.as_mut() {
-            snap_vec.clear();
-        }
+        self.snap_vec = None;
         self.dependent_itvs_prim.clear();
         self.dependent_itvs_scnds.clear();
         if let Some(stg) = self.staging.as_mut() {

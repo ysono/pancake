@@ -1,5 +1,5 @@
 use super::super::helpers::{
-    etc::sleep_async,
+    etc::{join_tasks, sleep_async},
     gen,
     one_stmt::{OneStmtDbAdaptor, OneStmtSsiDbAdaptor},
 };
@@ -28,9 +28,7 @@ fn pk_is_doctor(pk: &PrimaryKey) -> bool {
 }
 fn pv_is_on_call(pv: &Value) -> bool {
     if let Value(Datum::Bytes(bytes)) = pv {
-        if bytes.len() == 1 {
-            return bytes[0] != 0;
-        }
+        return bytes.len() == 1 && bytes[0] != 0;
     }
     false
 }
@@ -65,6 +63,7 @@ pub async fn no_write_skew(db: &'static DB) -> Result<()> {
     let mut tasks = vec![];
     for doctor_id in 0..tot_doctors_ct {
         let sv_spec = Arc::clone(&sv_spec);
+        let retry_limit = tot_doctors_ct - oncall_doctors_thresh;
 
         let task_fut = async move {
             sleep_async(1).await;
@@ -72,15 +71,16 @@ pub async fn no_write_skew(db: &'static DB) -> Result<()> {
             let pk = Arc::new(gen_pk(doctor_id));
             let pv = Arc::new(gen_pv(false));
 
-            let txn_fut = Txn::run(db, |txn| {
-                let entries = txn.get_sv_range(&sv_spec, None, None)?;
+            let txn_fut = Txn::run(db, retry_limit, |txn| {
                 let mut on_call_count = 0;
+                let entries = txn.get_sv_range(&sv_spec, None, None)?;
                 for entry in entries {
                     let (svpk, pv) = entry.try_borrow()?;
                     if pk_is_doctor(&svpk.pk) && pv_is_on_call(&pv) {
                         on_call_count += 1;
                     }
                 }
+
                 if on_call_count <= oncall_doctors_thresh {
                     return Ok(ClientCommitDecision::Abort(()));
                 }
@@ -93,10 +93,7 @@ pub async fn no_write_skew(db: &'static DB) -> Result<()> {
         let task: JoinHandle<Result<()>> = tokio::spawn(task_fut);
         tasks.push(task);
     }
-    for task in tasks.into_iter() {
-        let res: Result<Result<()>, _> = task.await;
-        res??;
-    }
+    join_tasks(tasks).await?;
 
     /*
     Check the ending condition: Since each doctor greedily tries to

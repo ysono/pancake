@@ -51,7 +51,8 @@ impl FlushingAndCompactionJob {
                 LsmElemContent::Dummy { .. } => None,
             });
             let skip_tombstones = curr_ptr.as_ptr().is_null();
-            if let Some(unit) = self.do_flush_and_compact(units, skip_tombstones).await? {
+            let compacted_unit = self.do_flush_and_compact(units, skip_tombstones).await?;
+            if let Some(unit) = compacted_unit {
                 let node = unit_utils::new_unit_node(unit, LIST_VER_PLACEHOLDER);
                 self.replace(segm_head_excl, curr_ptr, Some(node), slice)
                     .await;
@@ -74,9 +75,9 @@ impl FlushingAndCompactionJob {
         curr_ptr_inplace: &mut SendPtr<ListNode<LsmElem>>,
     ) -> Vec<&'static ListNode<LsmElem>> {
         let mut slice = vec![];
+        let mut prev = segm_head_excl;
         loop {
-            self.cut_non_boundary_dummies(segm_head_excl, curr_ptr_inplace)
-                .await;
+            self.cut_non_boundary_dummies(prev, curr_ptr_inplace).await;
 
             if (*curr_ptr_inplace).as_ptr().is_null() {
                 break;
@@ -89,6 +90,7 @@ impl FlushingAndCompactionJob {
                     }
                     LsmElemContent::Unit(_) => {
                         slice.push(curr_ref);
+                        prev = curr_ref;
                         *curr_ptr_inplace = SendPtr::from(curr_ref.next.load(Ordering::SeqCst));
                     }
                 }
@@ -99,7 +101,7 @@ impl FlushingAndCompactionJob {
 
     async fn cut_non_boundary_dummies(
         &mut self,
-        segm_head_excl: &ListNode<LsmElem>,
+        prev_excl: &ListNode<LsmElem>,
         curr_ptr_inplace: &mut SendPtr<ListNode<LsmElem>>,
     ) {
         let mut slice = vec![];
@@ -127,7 +129,7 @@ impl FlushingAndCompactionJob {
             }
         }
         if !slice.is_empty() {
-            self.replace(segm_head_excl, *curr_ptr_inplace, None, slice)
+            self.replace(prev_excl, *curr_ptr_inplace, None, slice)
                 .await;
         }
     }

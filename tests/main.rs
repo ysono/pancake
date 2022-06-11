@@ -12,7 +12,7 @@ use storage::individual_stmts::test_stmts_serially;
 
 const ENV_VAR_PARENT_DIR: &str = "PANCAKE_PARENT_DIR";
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn integration_test_main() -> Result<()> {
     let parent_dir = env::var(ENV_VAR_PARENT_DIR)
         .map_or_else(|_| env::temp_dir().join("pancake"), |s| PathBuf::from(s));
@@ -35,7 +35,7 @@ async fn integration_test_main() -> Result<()> {
     let mut serial_db = SerialDb::load_or_new(serial_db_dir)?;
     let mut serial_db_adap = OneStmtSerialDbAdaptor { db: &mut serial_db };
 
-    let (ssi_db, ssi_fc_job, ssi_sicr_job) = SsiDb::load_or_new(ssi_db_dir).unwrap();
+    let (ssi_db, ssi_fc_job, ssi_sicr_job) = SsiDb::load_or_new(ssi_db_dir)?;
     let ssi_fc_task = tokio::spawn(ssi_fc_job.run());
     let ssi_sicr_task = tokio::spawn(ssi_sicr_job.run());
     let mut ssi_db_adap = OneStmtSsiDbAdaptor { db: &ssi_db };
