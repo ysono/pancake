@@ -103,10 +103,11 @@
 <span id="98">98</span>
 <span id="99">99</span>
 <span id="100">100</span>
+<span id="101">101</span>
 </pre><pre class="rust"><code><span class="doccomment">//! # Serialization format</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! Following pseudocode depicts the byte representation on disk.</span>
-<span class="doccomment">//! In-memory representations look similar but are distinct from this.</span>
+<span class="doccomment">//! In-memory representations are distinct from this.</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! This file format is applicable for both commit logs and ss tables.</span>
 <span class="doccomment">//!</span>
@@ -164,6 +165,7 @@
 <span class="doccomment">//!         },</span>
 <span class="doccomment">//!         member_2:       Datum::Tuple {</span>
 <span class="doccomment">//!             datum_type:     DatumTypeInt(u8),</span>
+<span class="doccomment">//!             // (Notice, no datum_body_len here.)</span>
 <span class="doccomment">//!             datum_body: TupleBody {</span>
 <span class="doccomment">//!                 members_count:  MembersCount(usize),</span>
 <span class="doccomment">//!                 member_0:       Datum::*,</span>

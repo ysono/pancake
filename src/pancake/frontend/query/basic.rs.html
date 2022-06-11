@@ -823,8 +823,8 @@
 
 <span class="kw">fn</span> <span class="ident">subvalspec</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, <span class="ident">I</span>: <span class="ident">Iterator</span><span class="op">&lt;</span><span class="ident">Item</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">str</span><span class="op">&gt;</span><span class="op">&gt;</span>(<span class="ident">iter</span>: <span class="kw-2">&amp;mut</span> <span class="ident">I</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">SubValueSpec</span><span class="op">&gt;</span> {
     <span class="kw">match</span> <span class="ident">iter</span>.<span class="ident">next</span>() {
-        <span class="prelude-val">Some</span>(<span class="string">&quot;str&quot;</span>) =&gt; <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="ident">SubValueSpec::from</span>(<span class="ident">DatumType::Str</span>)),
-        <span class="prelude-val">Some</span>(<span class="string">&quot;int&quot;</span>) =&gt; <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="ident">SubValueSpec::from</span>(<span class="ident">DatumType::I64</span>)),
+        <span class="prelude-val">Some</span>(<span class="string">&quot;str&quot;</span>) =&gt; <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="ident">SubValueSpec::whole</span>(<span class="ident">DatumType::Str</span>)),
+        <span class="prelude-val">Some</span>(<span class="string">&quot;int&quot;</span>) =&gt; <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="ident">SubValueSpec::whole</span>(<span class="ident">DatumType::I64</span>)),
         <span class="prelude-val">Some</span>(<span class="string">&quot;nested&quot;</span>) =&gt; <span class="kw">match</span> <span class="ident">iter</span>.<span class="ident">next</span>() {
             <span class="prelude-val">Some</span>(<span class="string">&quot;(&quot;</span>) =&gt; {
                 <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">member_idxs</span> <span class="op">=</span> <span class="macro">vec!</span>[];
@@ -991,14 +991,14 @@
     <span class="kw">fn</span> <span class="ident">get_where</span>() -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get where int _&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Operation::from</span>(<span class="ident">Statement::GetSV</span>(
-            <span class="ident">SubValueSpec::from</span>(<span class="ident">DatumType::I64</span>),
+            <span class="ident">SubValueSpec::whole</span>(<span class="ident">DatumType::I64</span>),
             <span class="ident">SearchRange::all</span>(),
         ));
         <span class="macro">assert!</span>(<span class="ident">parse</span>(<span class="ident">q_str</span>)<span class="question-mark">?</span> <span class="op">==</span> <span class="ident">exp_q_obj</span>);
 
         <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get where int int(123)&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Operation::from</span>(<span class="ident">Statement::GetSV</span>(
-            <span class="ident">SubValueSpec::from</span>(<span class="ident">DatumType::I64</span>),
+            <span class="ident">SubValueSpec::whole</span>(<span class="ident">DatumType::I64</span>),
             <span class="ident">SearchRange::One</span>(<span class="ident">SubValue</span>(<span class="ident">Datum::I64</span>(<span class="number">123</span>))),
         ));
         <span class="macro">assert!</span>(<span class="ident">parse</span>(<span class="ident">q_str</span>)<span class="question-mark">?</span> <span class="op">==</span> <span class="ident">exp_q_obj</span>);
@@ -1020,7 +1020,7 @@
     <span class="kw">fn</span> <span class="ident">get_where_between</span>() -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get where int between int(123) int(234)&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Operation::from</span>(<span class="ident">Statement::GetSV</span>(
-            <span class="ident">SubValueSpec::from</span>(<span class="ident">DatumType::I64</span>),
+            <span class="ident">SubValueSpec::whole</span>(<span class="ident">DatumType::I64</span>),
             <span class="ident">SearchRange::Range</span> {
                 <span class="ident">lo</span>: <span class="prelude-val">Some</span>(<span class="ident">SubValue</span>(<span class="ident">Datum::I64</span>(<span class="number">123</span>))),
                 <span class="ident">hi</span>: <span class="prelude-val">Some</span>(<span class="ident">SubValue</span>(<span class="ident">Datum::I64</span>(<span class="number">234</span>))),
@@ -1030,7 +1030,7 @@
 
         <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get where int between int(123) _&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Operation::from</span>(<span class="ident">Statement::GetSV</span>(
-            <span class="ident">SubValueSpec::from</span>(<span class="ident">DatumType::I64</span>),
+            <span class="ident">SubValueSpec::whole</span>(<span class="ident">DatumType::I64</span>),
             <span class="ident">SearchRange::Range</span> {
                 <span class="ident">lo</span>: <span class="prelude-val">Some</span>(<span class="ident">SubValue</span>(<span class="ident">Datum::I64</span>(<span class="number">123</span>))),
                 <span class="ident">hi</span>: <span class="prelude-val">None</span>,
@@ -1040,7 +1040,7 @@
 
         <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get where int between _ int(234)&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Operation::from</span>(<span class="ident">Statement::GetSV</span>(
-            <span class="ident">SubValueSpec::from</span>(<span class="ident">DatumType::I64</span>),
+            <span class="ident">SubValueSpec::whole</span>(<span class="ident">DatumType::I64</span>),
             <span class="ident">SearchRange::Range</span> {
                 <span class="ident">lo</span>: <span class="prelude-val">None</span>,
                 <span class="ident">hi</span>: <span class="prelude-val">Some</span>(<span class="ident">SubValue</span>(<span class="ident">Datum::I64</span>(<span class="number">234</span>))),
@@ -1050,7 +1050,7 @@
 
         <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;get where int between _ _&quot;</span>;
         <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Operation::from</span>(<span class="ident">Statement::GetSV</span>(
-            <span class="ident">SubValueSpec::from</span>(<span class="ident">DatumType::I64</span>),
+            <span class="ident">SubValueSpec::whole</span>(<span class="ident">DatumType::I64</span>),
             <span class="ident">SearchRange::all</span>(),
         ));
         <span class="macro">assert!</span>(<span class="ident">parse</span>(<span class="ident">q_str</span>)<span class="question-mark">?</span> <span class="op">==</span> <span class="ident">exp_q_obj</span>);
@@ -1061,7 +1061,7 @@
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">create_scnd_idx</span>() -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;create index int&quot;</span>;
-        <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Operation::CreateScndIdx</span>(<span class="ident">SubValueSpec::from</span>(<span class="ident">DatumType::I64</span>));
+        <span class="kw">let</span> <span class="ident">exp_q_obj</span> <span class="op">=</span> <span class="ident">Operation::CreateScndIdx</span>(<span class="ident">SubValueSpec::whole</span>(<span class="ident">DatumType::I64</span>));
         <span class="macro">assert!</span>(<span class="ident">parse</span>(<span class="ident">q_str</span>)<span class="question-mark">?</span> <span class="op">==</span> <span class="ident">exp_q_obj</span>);
 
         <span class="kw">let</span> <span class="ident">q_str</span> <span class="op">=</span> <span class="string">&quot;create index nested( 2 int )&quot;</span>;

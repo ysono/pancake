@@ -109,7 +109,6 @@
 <span id="104">104</span>
 <span id="105">105</span>
 <span id="106">106</span>
-<span id="107">107</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">anyhow</span>, <span class="prelude-ty">Result</span>};
 <span class="kw">use</span> <span class="ident">derive_more</span>::{<span class="ident">Deref</span>, <span class="ident">DerefMut</span>, <span class="ident">From</span>};
 <span class="kw">use</span> <span class="ident">num_derive</span>::{<span class="ident">FromPrimitive</span>, <span class="ident">ToPrimitive</span>};
@@ -163,7 +162,6 @@
                 <span class="string">&quot;Incorrect format for {}.&quot;</span>,
                 <span class="ident">any::type_name</span>::<span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>()
             )),
-
             <span class="prelude-val">Ok</span>([<span class="ident">hi</span>, <span class="ident">lo</span>, <span class="ident">ts</span>, <span class="ident">typ</span>]) =&gt; {
                 <span class="kw">let</span> <span class="ident">hi</span> <span class="op">=</span> <span class="ident">hi</span>
                     .<span class="ident">parse</span>::<span class="op">&lt;</span><span class="ident">u64</span><span class="op">&gt;</span>()

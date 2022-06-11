@@ -104,6 +104,17 @@
 <span id="99">99</span>
 <span id="100">100</span>
 <span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi::db_state</span>::{<span class="ident">ScndIdxNum</span>, <span class="ident">ScndIdxState</span>, <span class="ident">ScndIdxsState</span>};
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::types::SubValueSpec</span>;
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">anyhow</span>, <span class="prelude-ty">Result</span>};
@@ -121,9 +132,20 @@
 <span class="kw">impl</span> <span class="ident">DbState</span> {
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">load_or_new</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">AsRef</span><span class="op">&lt;</span><span class="ident">Path</span><span class="op">&gt;</span><span class="op">&gt;</span>(<span class="ident">scnd_idxs_state_file_path</span>: <span class="ident">P</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">path</span> <span class="op">=</span> <span class="ident">scnd_idxs_state_file_path</span>.<span class="ident">as_ref</span>();
-        <span class="kw">let</span> <span class="ident">scnd_idxs_state</span>;
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">scnd_idxs_state</span>;
         <span class="kw">if</span> <span class="ident">path</span>.<span class="ident">exists</span>() {
             <span class="ident">scnd_idxs_state</span> <span class="op">=</span> <span class="ident">ScndIdxsState::deser</span>(<span class="ident">path</span>)<span class="question-mark">?</span>;
+            <span class="comment">/* Ignore scnd idxs that previously failed to be created.
+            This allows a new scnd idx for the same sv_spec to be created again. */</span>
+            <span class="ident">scnd_idxs_state</span>.<span class="ident">scnd_idxs</span>.<span class="ident">retain</span>(<span class="op">|</span><span class="ident">sv_spec</span>, <span class="ident">si_state</span><span class="op">|</span> {
+                <span class="kw">if</span> <span class="op">!</span><span class="ident">si_state</span>.<span class="ident">is_readable</span> {
+                    <span class="macro">eprintln!</span>(
+                        <span class="string">&quot;Secondary index creation for {:?} never completed last time.&quot;</span>,
+                        <span class="ident">sv_spec</span>
+                    );
+                }
+                <span class="ident">si_state</span>.<span class="ident">is_readable</span>
+            });
         } <span class="kw">else</span> {
             <span class="ident">scnd_idxs_state</span> <span class="op">=</span> <span class="ident">ScndIdxsState::default</span>();
             <span class="ident">scnd_idxs_state</span>.<span class="ident">ser</span>(<span class="ident">path</span>)<span class="question-mark">?</span>;

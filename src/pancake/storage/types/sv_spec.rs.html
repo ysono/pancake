@@ -208,8 +208,8 @@
 }
 
 <span class="comment">/* Shorthand helper for a non-nested spec. */</span>
-<span class="kw">impl</span> <span class="ident">From</span><span class="op">&lt;</span><span class="ident">DatumType</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">SubValueSpec</span> {
-    <span class="kw">fn</span> <span class="ident">from</span>(<span class="ident">datum_type</span>: <span class="ident">DatumType</span>) -&gt; <span class="self">Self</span> {
+<span class="kw">impl</span> <span class="ident">SubValueSpec</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">whole</span>(<span class="ident">datum_type</span>: <span class="ident">DatumType</span>) -&gt; <span class="self">Self</span> {
         <span class="self">Self</span> {
             <span class="ident">member_idxs</span>: <span class="macro">vec!</span>[],
             <span class="ident">datum_type</span>,

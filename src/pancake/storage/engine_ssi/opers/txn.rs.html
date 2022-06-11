@@ -95,6 +95,10 @@
 <span id="90">90</span>
 <span id="91">91</span>
 <span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
 </pre><pre class="rust"><code><span class="kw">mod</span> <span class="ident">conflict</span>;
 <span class="kw">mod</span> <span class="ident">state_transition_helpers</span>;
 <span class="kw">mod</span> <span class="ident">state_transitions</span>;
@@ -116,8 +120,6 @@
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">anyhow</span>, <span class="prelude-ty">Result</span>};
 <span class="kw">use</span> <span class="ident">std::collections::HashMap</span>;
 <span class="kw">use</span> <span class="ident">tokio::sync::RwLockReadGuard</span>;
-
-<span class="kw">const</span> <span class="ident">RETRY_LIMIT</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">5</span>;
 
 <span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">ClientCommitDecision</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span> {
     <span class="ident">Commit</span>(<span class="ident">T</span>),
@@ -142,7 +144,11 @@
 }
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="lifetime">&#39;txn</span><span class="op">&gt;</span> <span class="ident">Txn</span><span class="op">&lt;</span><span class="lifetime">&#39;txn</span><span class="op">&gt;</span> {
-    <span class="kw">pub</span> <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">run</span><span class="op">&lt;</span><span class="ident">RunTxn</span>, <span class="ident">ClientOk</span><span class="op">&gt;</span>(<span class="ident">db</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;txn</span> <span class="ident">DB</span>, <span class="ident">run_txn</span>: <span class="ident">RunTxn</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">ClientOk</span><span class="op">&gt;</span>
+    <span class="kw">pub</span> <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">run</span><span class="op">&lt;</span><span class="ident">RunTxn</span>, <span class="ident">ClientOk</span><span class="op">&gt;</span>(
+        <span class="ident">db</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;txn</span> <span class="ident">DB</span>,
+        <span class="ident">retry_limit</span>: <span class="ident">usize</span>,
+        <span class="ident">run_txn</span>: <span class="ident">RunTxn</span>,
+    ) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">ClientOk</span><span class="op">&gt;</span>
     <span class="kw">where</span>
         <span class="ident">RunTxn</span>: <span class="ident">Fn</span>(<span class="kw-2">&amp;mut</span> <span class="self">Self</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">ClientCommitDecision</span><span class="op">&lt;</span><span class="ident">ClientOk</span><span class="op">&gt;</span><span class="op">&gt;</span>,
     {
@@ -153,11 +159,12 @@
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">txn</span> <span class="op">=</span> <span class="ident"><span class="self">Self</span>::new</span>(<span class="ident">db</span>, <span class="ident">db_state_guard</span>).<span class="kw">await</span>;
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">retry_i</span> <span class="op">=</span> <span class="number">0</span>;
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">try_i</span> <span class="op">=</span> <span class="number">0</span>;
         <span class="kw">loop</span> {
-            <span class="ident">retry_i</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
+            <span class="ident">try_i</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
 
-            <span class="kw">let</span> <span class="ident">client_ok</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">run_txn</span>(<span class="kw-2">&amp;mut</span> <span class="ident">txn</span>) {
+            <span class="kw">let</span> <span class="ident">run_txn_res</span> <span class="op">=</span> <span class="ident">run_txn</span>(<span class="kw-2">&amp;mut</span> <span class="ident">txn</span>);
+            <span class="kw">match</span> <span class="ident">run_txn_res</span> {
                 <span class="prelude-val">Err</span>(<span class="ident">client_err</span>) =&gt; {
                     <span class="ident">txn</span>.<span class="ident">close</span>().<span class="kw">await</span><span class="question-mark">?</span>;
                     <span class="kw">return</span> <span class="prelude-val">Err</span>(<span class="ident">client_err</span>);
@@ -166,22 +173,23 @@
                     <span class="ident">txn</span>.<span class="ident">close</span>().<span class="kw">await</span><span class="question-mark">?</span>;
                     <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="ident">client_ok</span>);
                 }
-                <span class="prelude-val">Ok</span>(<span class="ident">ClientCommitDecision::Commit</span>(<span class="ident">client_ok_</span>)) =&gt; <span class="ident">client_ok_</span>,
-            };
-
-            <span class="kw">match</span> <span class="ident">txn</span>.<span class="ident">try_commit</span>().<span class="kw">await</span><span class="question-mark">?</span> {
-                <span class="ident">TryCommitResult::Conflict</span>(<span class="ident">txn_</span>) =&gt; {
-                    <span class="ident">txn</span> <span class="op">=</span> <span class="ident">txn_</span>;
-                    <span class="kw">if</span> <span class="ident">retry_i</span> <span class="op">&lt;</span><span class="op">=</span> <span class="ident">RETRY_LIMIT</span> {
-                        <span class="ident">txn</span>.<span class="ident">reset</span>().<span class="kw">await</span><span class="question-mark">?</span>;
-                        <span class="kw">continue</span>;
-                    } <span class="kw">else</span> {
-                        <span class="ident">txn</span>.<span class="ident">close</span>().<span class="kw">await</span><span class="question-mark">?</span>;
-                        <span class="kw">return</span> <span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">&quot;Retry limit exceeded&quot;</span>));
+                <span class="prelude-val">Ok</span>(<span class="ident">ClientCommitDecision::Commit</span>(<span class="ident">client_ok</span>)) =&gt; {
+                    <span class="kw">let</span> <span class="ident">try_commit_res</span> <span class="op">=</span> <span class="ident">txn</span>.<span class="ident">try_commit</span>().<span class="kw">await</span><span class="question-mark">?</span>;
+                    <span class="kw">match</span> <span class="ident">try_commit_res</span> {
+                        <span class="ident">TryCommitResult::Conflict</span>(<span class="ident">txn_</span>) =&gt; {
+                            <span class="ident">txn</span> <span class="op">=</span> <span class="ident">txn_</span>;
+                            <span class="kw">if</span> <span class="ident">try_i</span> <span class="op">&lt;</span><span class="op">=</span> <span class="ident">retry_limit</span> {
+                                <span class="ident">txn</span>.<span class="ident">reset</span>().<span class="kw">await</span><span class="question-mark">?</span>;
+                                <span class="kw">continue</span>;
+                            } <span class="kw">else</span> {
+                                <span class="ident">txn</span>.<span class="ident">close</span>().<span class="kw">await</span><span class="question-mark">?</span>;
+                                <span class="kw">return</span> <span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">&quot;Retry limit exceeded&quot;</span>));
+                            }
+                        }
+                        <span class="ident">TryCommitResult::DidCommit</span> =&gt; {
+                            <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="ident">client_ok</span>);
+                        }
                     }
-                }
-                <span class="ident">TryCommitResult::DidCommit</span> =&gt; {
-                    <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="ident">client_ok</span>);
                 }
             }
         }

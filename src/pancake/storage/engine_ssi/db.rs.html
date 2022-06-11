@@ -106,6 +106,7 @@
 <span id="101">101</span>
 <span id="102">102</span>
 <span id="103">103</span>
+<span id="104">104</span>
 </pre><pre class="rust"><code><span class="kw">mod</span> <span class="ident">scnd_client_req</span>;
 
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi</span>::{
@@ -133,6 +134,7 @@
 <span class="kw">const</span> <span class="ident">SIREQ_CHANNEL_CAPACITY</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">4</span>;
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">ShortHand</span>)]</span>
+<span class="attribute">#[<span class="ident">shorthand</span>(<span class="ident">visibility</span>(<span class="string">&quot;pub(in crate::storage::engine_ssi)&quot;</span>))]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">DB</span> {
     <span class="ident">db_state</span>: <span class="ident">RwLock</span><span class="op">&lt;</span><span class="ident">DbState</span><span class="op">&gt;</span>,
 

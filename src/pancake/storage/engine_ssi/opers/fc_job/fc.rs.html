@@ -175,6 +175,8 @@
 <span id="170">170</span>
 <span id="171">171</span>
 <span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::ds_n_a::atomic_linked_list::ListNode</span>;
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::ds_n_a::send_ptr::SendPtr</span>;
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi</span>::{
@@ -228,7 +230,8 @@
                 <span class="ident">LsmElemContent::Dummy</span> { .. } =&gt; <span class="prelude-val">None</span>,
             });
             <span class="kw">let</span> <span class="ident">skip_tombstones</span> <span class="op">=</span> <span class="ident">curr_ptr</span>.<span class="ident">as_ptr</span>().<span class="ident">is_null</span>();
-            <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">unit</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">do_flush_and_compact</span>(<span class="ident">units</span>, <span class="ident">skip_tombstones</span>).<span class="kw">await</span><span class="question-mark">?</span> {
+            <span class="kw">let</span> <span class="ident">compacted_unit</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">do_flush_and_compact</span>(<span class="ident">units</span>, <span class="ident">skip_tombstones</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+            <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">unit</span>) <span class="op">=</span> <span class="ident">compacted_unit</span> {
                 <span class="kw">let</span> <span class="ident">node</span> <span class="op">=</span> <span class="ident">unit_utils::new_unit_node</span>(<span class="ident">unit</span>, <span class="ident">LIST_VER_PLACEHOLDER</span>);
                 <span class="self">self</span>.<span class="ident">replace</span>(<span class="ident">segm_head_excl</span>, <span class="ident">curr_ptr</span>, <span class="prelude-val">Some</span>(<span class="ident">node</span>), <span class="ident">slice</span>)
                     .<span class="kw">await</span>;
@@ -251,14 +254,14 @@
         <span class="ident">curr_ptr_inplace</span>: <span class="kw-2">&amp;mut</span> <span class="ident">SendPtr</span><span class="op">&lt;</span><span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span><span class="op">&gt;</span>,
     ) -&gt; <span class="ident">Vec</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">slice</span> <span class="op">=</span> <span class="macro">vec!</span>[];
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">prev</span> <span class="op">=</span> <span class="ident">segm_head_excl</span>;
         <span class="kw">loop</span> {
-            <span class="self">self</span>.<span class="ident">cut_non_boundary_dummies</span>(<span class="ident">segm_head_excl</span>, <span class="ident">curr_ptr_inplace</span>)
-                .<span class="kw">await</span>;
+            <span class="self">self</span>.<span class="ident">cut_non_boundary_dummies</span>(<span class="ident">prev</span>, <span class="ident">curr_ptr_inplace</span>).<span class="kw">await</span>;
 
-            <span class="kw">if</span> <span class="ident">curr_ptr_inplace</span>.<span class="ident">as_ptr</span>().<span class="ident">is_null</span>() {
+            <span class="kw">if</span> (<span class="kw-2">*</span><span class="ident">curr_ptr_inplace</span>).<span class="ident">as_ptr</span>().<span class="ident">is_null</span>() {
                 <span class="kw">break</span>;
             } <span class="kw">else</span> {
-                <span class="kw">let</span> <span class="ident">curr_ref</span> <span class="op">=</span> <span class="kw">unsafe</span> { <span class="ident">curr_ptr_inplace</span>.<span class="ident">as_ref</span>() };
+                <span class="kw">let</span> <span class="ident">curr_ref</span> <span class="op">=</span> <span class="kw">unsafe</span> { (<span class="kw-2">*</span><span class="ident">curr_ptr_inplace</span>).<span class="ident">as_ref</span>() };
                 <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="ident">curr_ref</span>.<span class="ident">elem</span>.<span class="ident">content</span> {
                     <span class="ident">LsmElemContent::Dummy</span> { .. } =&gt; {
                         <span class="comment">// The curr dummy could not be cut. Therefore it must be a boundary.</span>
@@ -266,6 +269,7 @@
                     }
                     <span class="ident">LsmElemContent::Unit</span>(<span class="kw">_</span>) =&gt; {
                         <span class="ident">slice</span>.<span class="ident">push</span>(<span class="ident">curr_ref</span>);
+                        <span class="ident">prev</span> <span class="op">=</span> <span class="ident">curr_ref</span>;
                         <span class="kw-2">*</span><span class="ident">curr_ptr_inplace</span> <span class="op">=</span> <span class="ident">SendPtr::from</span>(<span class="ident">curr_ref</span>.<span class="ident">next</span>.<span class="ident">load</span>(<span class="ident">Ordering::SeqCst</span>));
                     }
                 }
@@ -276,15 +280,15 @@
 
     <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">cut_non_boundary_dummies</span>(
         <span class="kw-2">&amp;mut</span> <span class="self">self</span>,
-        <span class="ident">segm_head_excl</span>: <span class="kw-2">&amp;</span><span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span>,
+        <span class="ident">prev_excl</span>: <span class="kw-2">&amp;</span><span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span>,
         <span class="ident">curr_ptr_inplace</span>: <span class="kw-2">&amp;mut</span> <span class="ident">SendPtr</span><span class="op">&lt;</span><span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span><span class="op">&gt;</span>,
     ) {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">slice</span> <span class="op">=</span> <span class="macro">vec!</span>[];
         <span class="kw">loop</span> {
-            <span class="kw">if</span> <span class="ident">curr_ptr_inplace</span>.<span class="ident">as_ptr</span>().<span class="ident">is_null</span>() {
+            <span class="kw">if</span> (<span class="kw-2">*</span><span class="ident">curr_ptr_inplace</span>).<span class="ident">as_ptr</span>().<span class="ident">is_null</span>() {
                 <span class="kw">break</span>;
             } <span class="kw">else</span> {
-                <span class="kw">let</span> <span class="ident">curr_ref</span> <span class="op">=</span> <span class="kw">unsafe</span> { <span class="ident">curr_ptr_inplace</span>.<span class="ident">as_ref</span>() };
+                <span class="kw">let</span> <span class="ident">curr_ref</span> <span class="op">=</span> <span class="kw">unsafe</span> { (<span class="kw-2">*</span><span class="ident">curr_ptr_inplace</span>).<span class="ident">as_ref</span>() };
                 <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="ident">curr_ref</span>.<span class="ident">elem</span>.<span class="ident">content</span> {
                     <span class="ident">LsmElemContent::Dummy</span> {
                         <span class="ident">hold_count</span>,
@@ -304,7 +308,7 @@
             }
         }
         <span class="kw">if</span> <span class="op">!</span><span class="ident">slice</span>.<span class="ident">is_empty</span>() {
-            <span class="self">self</span>.<span class="ident">replace</span>(<span class="ident">segm_head_excl</span>, <span class="kw-2">*</span><span class="ident">curr_ptr_inplace</span>, <span class="prelude-val">None</span>, <span class="ident">slice</span>)
+            <span class="self">self</span>.<span class="ident">replace</span>(<span class="ident">prev_excl</span>, <span class="kw-2">*</span><span class="ident">curr_ptr_inplace</span>, <span class="prelude-val">None</span>, <span class="ident">slice</span>)
                 .<span class="kw">await</span>;
         }
     }
