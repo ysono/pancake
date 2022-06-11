@@ -15,9 +15,20 @@ pub struct DbState {
 impl DbState {
     pub fn load_or_new<P: AsRef<Path>>(scnd_idxs_state_file_path: P) -> Result<Self> {
         let path = scnd_idxs_state_file_path.as_ref();
-        let scnd_idxs_state;
+        let mut scnd_idxs_state;
         if path.exists() {
             scnd_idxs_state = ScndIdxsState::deser(path)?;
+            /* Ignore scnd idxs that previously failed to be created.
+            This allows a new scnd idx for the same sv_spec to be created again. */
+            scnd_idxs_state.scnd_idxs.retain(|sv_spec, si_state| {
+                if !si_state.is_readable {
+                    eprintln!(
+                        "Secondary index creation for {:?} never completed last time.",
+                        sv_spec
+                    );
+                }
+                si_state.is_readable
+            });
         } else {
             scnd_idxs_state = ScndIdxsState::default();
             scnd_idxs_state.ser(path)?;
