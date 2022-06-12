@@ -15,7 +15,7 @@ impl FlushingAndCompactionJob {
     /// A given slice should be compacted iff any of:
     /// - The slice contains 1+ MemLogs.
     /// - The slice contains 2+ SSTables.
-    fn should_slice_be_compacted<'a>(units: impl Iterator<Item = &'a CommittedUnit>) -> bool {
+    fn should_slice_be_compacted<'a>(units: &Vec<&'a CommittedUnit>) -> bool {
         let mut len = 0u8;
         for unit in units {
             if unit.commit_info.data_type() == &CommitDataType::MemLog {
@@ -37,10 +37,10 @@ impl FlushingAndCompactionJob {
     /// Therefore, do _not_ assume that the give units can be cut!
     pub(super) async fn do_flush_and_compact<'a>(
         &'a self,
-        units: impl Iterator<Item = &'a CommittedUnit> + Clone,
+        units: Vec<&'a CommittedUnit>,
         skip_tombstones: bool,
     ) -> Result<Option<CommittedUnit>> {
-        if !Self::should_slice_be_compacted(units.clone()) {
+        if !Self::should_slice_be_compacted(&units) {
             return Ok(None);
         }
 
@@ -50,9 +50,7 @@ impl FlushingAndCompactionJob {
         let db_state = self.db.db_state().read().await;
 
         for (_, ScndIdxState { scnd_idx_num, .. }) in db_state.scnd_idxs().iter() {
-            let existing_entrysets = units
-                .clone()
-                .filter_map(|unit| unit.scnds.get(scnd_idx_num));
+            let existing_entrysets = units.iter().filter_map(|unit| unit.scnds.get(scnd_idx_num));
             let compacted_entries = Self::derive_kmerged_iter(existing_entrysets, skip_tombstones);
 
             let mut compacted_entries = compacted_entries.peekable();
@@ -71,7 +69,7 @@ impl FlushingAndCompactionJob {
         }
 
         {
-            let existing_entries = units.clone().filter_map(|unit| unit.prim.as_ref());
+            let existing_entries = units.iter().filter_map(|unit| unit.prim.as_ref());
             let compacted_entries = Self::derive_kmerged_iter(existing_entries, skip_tombstones);
 
             let mut compacted_entries = compacted_entries.peekable();
@@ -91,7 +89,7 @@ impl FlushingAndCompactionJob {
             return Ok(None);
         }
 
-        let commit_info = Self::derive_commit_info(units.clone());
+        let commit_info = Self::derive_commit_info(&units);
         let committed_unit = CommittedUnit::from_compacted(compacted_unit, commit_info)?;
         return Ok(Some(committed_unit));
     }
@@ -122,11 +120,9 @@ impl FlushingAndCompactionJob {
         compacted_entries
     }
 
-    fn derive_commit_info<'a>(
-        units: impl Iterator<Item = &'a CommittedUnit> + Clone,
-    ) -> CommitInfo {
+    fn derive_commit_info<'a>(units: &Vec<&'a CommittedUnit>) -> CommitInfo {
         #[rustfmt::skip]
-        let commit_ver_hi_incl = units.clone().next().unwrap().commit_info.commit_ver_hi_incl().clone();
+        let commit_ver_hi_incl = units.clone().first().unwrap().commit_info.commit_ver_hi_incl().clone();
         #[rustfmt::skip]
         let commit_ver_lo_incl = units.clone().last().unwrap().commit_info.commit_ver_lo_incl().clone();
 

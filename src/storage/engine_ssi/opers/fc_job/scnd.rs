@@ -40,7 +40,7 @@ impl FlushingAndCompactionJob {
             *lsm_state.next_commit_ver += 1;
         }
 
-        self.merge_segments(unsafe { snap_head_excl.as_ref() })
+        self.traverse_and_compact(unsafe { snap_head_excl.as_ref() })
             .await?;
 
         let work = ScndIdxCreationWork {

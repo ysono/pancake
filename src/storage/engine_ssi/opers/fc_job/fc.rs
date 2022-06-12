@@ -27,110 +27,104 @@ impl FlushingAndCompactionJob {
             snap_head_excl = SendPtr::from(lsm_state.update_or_push(update_or_provide_head));
         }
 
-        self.merge_segments(unsafe { snap_head_excl.as_ref() })
+        self.traverse_and_compact(unsafe { snap_head_excl.as_ref() })
             .await?;
 
         Ok(())
     }
 
-    pub(super) async fn merge_segments(
+    pub(super) async fn traverse_and_compact(
         &mut self,
         snap_head_excl: &ListNode<LsmElem>,
     ) -> Result<()> {
         let mut segm_head_excl = snap_head_excl;
-        let mut curr_ptr = SendPtr::from(segm_head_excl.next.load(Ordering::SeqCst));
-
         loop {
-            let slice = self
-                .collect_one_segment(segm_head_excl, &mut curr_ptr)
-                .await;
-
-            // Note, each node in slice should have a CommittedUnit.
-            let units = slice.iter().filter_map(|node| match &node.elem.content {
-                LsmElemContent::Unit(unit) => Some(unit),
-                LsmElemContent::Dummy { .. } => None,
-            });
-            let skip_tombstones = curr_ptr.as_ptr().is_null();
-            let compacted_unit = self.do_flush_and_compact(units, skip_tombstones).await?;
-            if let Some(unit) = compacted_unit {
-                let node = unit_utils::new_unit_node(unit, LIST_VER_PLACEHOLDER);
-                self.replace(segm_head_excl, curr_ptr, Some(node), slice)
-                    .await;
-            }
-
-            if curr_ptr.as_ptr().is_null() {
-                break;
-            } else {
-                segm_head_excl = unsafe { curr_ptr.as_ref() };
-                curr_ptr = SendPtr::from(segm_head_excl.next.load(Ordering::SeqCst));
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn collect_one_segment(
-        &mut self,
-        segm_head_excl: &ListNode<LsmElem>,
-        curr_ptr_inplace: &mut SendPtr<ListNode<LsmElem>>,
-    ) -> Vec<&'static ListNode<LsmElem>> {
-        let mut slice = vec![];
-        let mut prev = segm_head_excl;
-        loop {
-            self.cut_non_boundary_dummies(prev, curr_ptr_inplace).await;
-
-            if (*curr_ptr_inplace).as_ptr().is_null() {
-                break;
-            } else {
-                let curr_ref = unsafe { (*curr_ptr_inplace).as_ref() };
-                match &curr_ref.elem.content {
-                    LsmElemContent::Dummy { .. } => {
-                        // The curr dummy could not be cut. Therefore it must be a boundary.
-                        break;
-                    }
-                    LsmElemContent::Unit(_) => {
-                        slice.push(curr_ref);
-                        prev = curr_ref;
-                        *curr_ptr_inplace = SendPtr::from(curr_ref.next.load(Ordering::SeqCst));
-                    }
+            let curr_node = self.compact_one_segment(segm_head_excl).await?;
+            match curr_node.status {
+                CurrNodeStatus::Fence | CurrNodeStatus::EndOfList => break,
+                CurrNodeStatus::NonFenceBoundary | CurrNodeStatus::CommittedUnit => {
+                    segm_head_excl = unsafe { curr_node.ptr.as_ref() };
                 }
             }
         }
-        slice
+        Ok(())
     }
-
-    async fn cut_non_boundary_dummies(
+    async fn compact_one_segment(
         &mut self,
-        prev_excl: &ListNode<LsmElem>,
-        curr_ptr_inplace: &mut SendPtr<ListNode<LsmElem>>,
-    ) {
+        segm_head_excl: &ListNode<LsmElem>,
+    ) -> Result<CurrNode> {
         let mut slice = vec![];
-        loop {
-            if (*curr_ptr_inplace).as_ptr().is_null() {
-                break;
+
+        let mut prev_ref = segm_head_excl;
+
+        let curr_node = loop {
+            let curr_node = self.cut_non_boundary_dummies(prev_ref).await;
+            match curr_node.status {
+                CurrNodeStatus::CommittedUnit => {
+                    let curr_ref = unsafe { curr_node.ptr.as_ref() };
+                    slice.push(curr_ref);
+                    prev_ref = curr_ref;
+                }
+                CurrNodeStatus::NonFenceBoundary
+                | CurrNodeStatus::Fence
+                | CurrNodeStatus::EndOfList => break curr_node,
+            }
+        };
+
+        let units = slice
+            .iter()
+            .filter_map(|node| match &node.elem.content {
+                LsmElemContent::Unit(unit) => Some(unit),
+                LsmElemContent::Dummy { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        let skip_tombstones = curr_node.status == CurrNodeStatus::EndOfList;
+        let compacted_unit = self.do_flush_and_compact(units, skip_tombstones).await?;
+        if let Some(unit) = compacted_unit {
+            let node = unit_utils::new_unit_node(unit, LIST_VER_PLACEHOLDER);
+            self.replace(segm_head_excl, curr_node.ptr, Some(node), slice)
+                .await;
+        }
+
+        Ok(curr_node)
+    }
+    async fn cut_non_boundary_dummies(&mut self, prior_excl: &ListNode<LsmElem>) -> CurrNode {
+        let mut slice = vec![];
+
+        let mut curr_ptr = SendPtr::from(prior_excl.next.load(Ordering::SeqCst));
+
+        let curr_node_status = loop {
+            // let curr_ptr = prev_ref.next.load(Ordering::SeqCst);
+            if curr_ptr.as_ptr().is_null() {
+                break CurrNodeStatus::EndOfList;
             } else {
-                let curr_ref = unsafe { (*curr_ptr_inplace).as_ref() };
+                let curr_ref = unsafe { curr_ptr.as_ref() };
                 match &curr_ref.elem.content {
+                    LsmElemContent::Unit(_) => break CurrNodeStatus::CommittedUnit,
                     LsmElemContent::Dummy {
                         hold_count,
                         is_fence,
                     } => {
-                        if hold_count.load(Ordering::SeqCst) == 0
-                            && is_fence.load(Ordering::SeqCst) == false
-                        {
-                            slice.push(curr_ref);
-                            *curr_ptr_inplace = SendPtr::from(curr_ref.next.load(Ordering::SeqCst));
+                        if is_fence.load(Ordering::SeqCst) == true {
+                            break CurrNodeStatus::Fence;
+                        } else if hold_count.load(Ordering::SeqCst) != 0 {
+                            break CurrNodeStatus::NonFenceBoundary;
                         } else {
-                            break;
+                            slice.push(curr_ref);
+                            curr_ptr = SendPtr::from(curr_ref.next.load(Ordering::SeqCst));
                         }
                     }
-                    LsmElemContent::Unit(_) => break,
                 }
             }
-        }
+        };
+
         if !slice.is_empty() {
-            self.replace(prev_excl, *curr_ptr_inplace, None, slice)
-                .await;
+            self.replace(prior_excl, curr_ptr, None, slice).await;
+        }
+
+        CurrNode {
+            ptr: curr_ptr,
+            status: curr_node_status,
         }
     }
 
@@ -171,4 +165,16 @@ impl FlushingAndCompactionJob {
             dangl_nodes.push(SendPtr::from(dangl_node_ref));
         }
     }
+}
+
+struct CurrNode {
+    ptr: SendPtr<ListNode<LsmElem>>,
+    status: CurrNodeStatus,
+}
+#[derive(PartialEq, Eq)]
+enum CurrNodeStatus {
+    CommittedUnit,
+    NonFenceBoundary,
+    Fence,
+    EndOfList,
 }
