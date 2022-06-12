@@ -183,6 +183,7 @@
 <span id="178">178</span>
 <span id="179">179</span>
 <span id="180">180</span>
+<span id="181">181</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::ds_n_a::atomic_linked_list::ListNode</span>;
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::ds_n_a::send_ptr::SendPtr</span>;
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi</span>::{
@@ -279,7 +280,6 @@
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">curr_ptr</span> <span class="op">=</span> <span class="ident">SendPtr::from</span>(<span class="ident">prior_excl</span>.<span class="ident">next</span>.<span class="ident">load</span>(<span class="ident">Ordering::SeqCst</span>));
 
         <span class="kw">let</span> <span class="ident">curr_node_status</span> <span class="op">=</span> <span class="kw">loop</span> {
-            <span class="comment">// let curr_ptr = prev_ref.next.load(Ordering::SeqCst);</span>
             <span class="kw">if</span> <span class="ident">curr_ptr</span>.<span class="ident">as_ptr</span>().<span class="ident">is_null</span>() {
                 <span class="kw">break</span> <span class="ident">CurrNodeStatus::EndOfList</span>;
             } <span class="kw">else</span> {
@@ -352,6 +352,8 @@
     }
 }
 
+<span class="doccomment">/// `status` property encodes the node&#39;s last known status.</span>
+<span class="doccomment">/// This obviates the need to load a dummy&#39;s atomic properties more than once.</span>
 <span class="kw">struct</span> <span class="ident">CurrNode</span> {
     <span class="ident">ptr</span>: <span class="ident">SendPtr</span><span class="op">&lt;</span><span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span><span class="op">&gt;</span>,
     <span class="ident">status</span>: <span class="ident">CurrNodeStatus</span>,

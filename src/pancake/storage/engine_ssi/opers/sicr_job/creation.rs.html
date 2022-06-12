@@ -453,7 +453,7 @@
         <span class="ident">intermediary_sstables</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">SSTable</span><span class="op">&lt;</span><span class="ident">SVPKShared</span>, <span class="ident">PVShared</span><span class="op">&gt;</span><span class="op">&gt;</span>,
         <span class="ident">scnd_idx_num</span>: <span class="ident">ScndIdxNum</span>,
     ) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">CompactedUnit</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">new_unit_dir</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">db</span>.<span class="ident">lsm_dir_mgr</span>().<span class="ident">format_new_unit_dir_path</span>();
+        <span class="kw">let</span> <span class="ident">new_unit_dir</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">db</span>.<span class="ident">lsm_dir</span>().<span class="ident">format_new_unit_dir_path</span>();
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">compacted_unit</span> <span class="op">=</span> <span class="ident">CompactedUnit::new_empty</span>(<span class="ident">new_unit_dir</span>)<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">combined_sstable_path</span> <span class="op">=</span> <span class="ident">compacted_unit</span>.<span class="ident">dir</span>.<span class="ident">format_scnd_path</span>(<span class="ident">scnd_idx_num</span>);
         <span class="kw">let</span> <span class="ident">combined_sstable</span> <span class="op">=</span>
