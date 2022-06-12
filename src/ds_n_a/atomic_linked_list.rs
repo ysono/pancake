@@ -43,7 +43,7 @@ impl<T> AtomicLinkedList<T> {
     }
 
     pub fn head(&self) -> Option<&ListNode<T>> {
-        let head_ptr = self.head_ptr.load(Ordering::Acquire);
+        let head_ptr = self.head_ptr.load(Ordering::SeqCst);
         if head_ptr.is_null() {
             None
         } else {
@@ -60,7 +60,7 @@ impl<T> AtomicLinkedList<T> {
     }
 
     pub fn push_node(&self, mut y_own: Box<ListNode<T>>) -> *const ListNode<T> {
-        let mut x_ptr = self.head_ptr.load(Ordering::Acquire);
+        let mut x_ptr = self.head_ptr.load(Ordering::Relaxed);
         y_own.next = AtomicPtr::new(x_ptr);
         let y_ptr = Box::into_raw(y_own);
         loop {
