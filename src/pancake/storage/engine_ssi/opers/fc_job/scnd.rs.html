@@ -106,7 +106,7 @@
             <span class="kw-2">*</span><span class="ident">lsm_state</span>.<span class="ident">next_commit_ver</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
         }
 
-        <span class="self">self</span>.<span class="ident">merge_segments</span>(<span class="kw">unsafe</span> { <span class="ident">snap_head_excl</span>.<span class="ident">as_ref</span>() })
+        <span class="self">self</span>.<span class="ident">traverse_and_compact</span>(<span class="kw">unsafe</span> { <span class="ident">snap_head_excl</span>.<span class="ident">as_ref</span>() })
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="kw">let</span> <span class="ident">work</span> <span class="op">=</span> <span class="ident">ScndIdxCreationWork</span> {
