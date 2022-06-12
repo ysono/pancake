@@ -1,6 +1,6 @@
 mod db;
 pub(self) mod db_state;
-pub(self) mod lsm_dir_mgr;
+pub(self) mod lsm_dir;
 pub(self) mod lsm_state;
 pub(self) mod opers;
 

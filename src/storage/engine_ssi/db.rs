@@ -2,7 +2,7 @@ mod scnd_client_req;
 
 use crate::storage::engine_ssi::{
     db_state::DbState,
-    lsm_dir_mgr::LsmDirManager,
+    lsm_dir::LsmDir,
     lsm_state::{GcAbleInterval, LsmState},
     opers::{
         fc_job::FlushingAndCompactionJob,
@@ -29,7 +29,7 @@ const SIREQ_CHANNEL_CAPACITY: usize = 4;
 pub struct DB {
     db_state: RwLock<DbState>,
 
-    lsm_dir_mgr: LsmDirManager,
+    lsm_dir: LsmDir,
     lsm_state: Mutex<LsmState>,
 
     replace_avail_tx: watch::Sender<()>,
@@ -51,7 +51,7 @@ impl DB {
 
         let db_state = DbState::load_or_new(&si_state_file_path)?;
 
-        let (lsm_dir_mgr, lsm_state) = LsmDirManager::load_or_new_lsm_dir(lsm_dir_path)?;
+        let (lsm_dir, lsm_state) = LsmDir::load_or_new_lsm_dir(lsm_dir_path)?;
 
         let (replace_avail_tx, replace_avail_rx) = watch::channel(());
         let (gc_avail_tx, gc_avail_rx) = mpsc::channel(GC_CHANNEL_CAPACITY);
@@ -62,7 +62,7 @@ impl DB {
         let db = Self {
             db_state: RwLock::new(db_state),
 
-            lsm_dir_mgr,
+            lsm_dir,
             lsm_state: Mutex::new(lsm_state),
 
             replace_avail_tx,

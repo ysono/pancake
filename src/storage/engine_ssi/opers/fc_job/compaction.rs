@@ -16,17 +16,10 @@ impl FlushingAndCompactionJob {
     /// - The slice contains 1+ MemLogs.
     /// - The slice contains 2+ SSTables.
     fn should_slice_be_compacted<'a>(units: &Vec<&'a CommittedUnit>) -> bool {
-        let mut len = 0u8;
-        for unit in units {
-            if unit.commit_info.data_type() == &CommitDataType::MemLog {
-                return true;
-            }
-            len += 1;
-            if len >= 2 {
-                return true;
-            }
-        }
-        return false;
+        (units.len() >= 2)
+            || (units
+                .iter()
+                .any(|unit| unit.commit_info.data_type() == &CommitDataType::MemLog))
     }
 
     /// Returns `Some(_)` iff all of:
@@ -44,7 +37,7 @@ impl FlushingAndCompactionJob {
             return Ok(None);
         }
 
-        let new_unit_dir = self.db.lsm_dir_mgr().format_new_unit_dir_path();
+        let new_unit_dir = self.db.lsm_dir().format_new_unit_dir_path();
         let mut compacted_unit = CompactedUnit::new_empty(new_unit_dir)?;
 
         let db_state = self.db.db_state().read().await;

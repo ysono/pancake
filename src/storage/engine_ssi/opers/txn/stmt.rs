@@ -204,7 +204,7 @@ impl<'txn> Txn<'txn> {
 
     fn ensure_create_staging(&mut self) -> Result<()> {
         if self.staging.is_none() {
-            let unit_dir = self.db.lsm_dir_mgr().format_new_unit_dir_path();
+            let unit_dir = self.db.lsm_dir().format_new_unit_dir_path();
             let stg = StagingUnit::new(unit_dir)?;
             self.staging = Some(stg);
         }

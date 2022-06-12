@@ -191,7 +191,7 @@ impl ScndIdxCreationJob {
         intermediary_sstables: Vec<SSTable<SVPKShared, PVShared>>,
         scnd_idx_num: ScndIdxNum,
     ) -> Result<CompactedUnit> {
-        let new_unit_dir = self.db.lsm_dir_mgr().format_new_unit_dir_path();
+        let new_unit_dir = self.db.lsm_dir().format_new_unit_dir_path();
         let mut compacted_unit = CompactedUnit::new_empty(new_unit_dir)?;
         let combined_sstable_path = compacted_unit.dir.format_scnd_path(scnd_idx_num);
         let combined_sstable =

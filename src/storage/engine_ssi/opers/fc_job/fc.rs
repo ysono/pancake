@@ -94,7 +94,6 @@ impl FlushingAndCompactionJob {
         let mut curr_ptr = SendPtr::from(prior_excl.next.load(Ordering::SeqCst));
 
         let curr_node_status = loop {
-            // let curr_ptr = prev_ref.next.load(Ordering::SeqCst);
             if curr_ptr.as_ptr().is_null() {
                 break CurrNodeStatus::EndOfList;
             } else {
@@ -167,6 +166,8 @@ impl FlushingAndCompactionJob {
     }
 }
 
+/// `status` property encodes the node's last known status.
+/// This obviates the need to load a dummy's atomic properties more than once.
 struct CurrNode {
     ptr: SendPtr<ListNode<LsmElem>>,
     status: CurrNodeStatus,

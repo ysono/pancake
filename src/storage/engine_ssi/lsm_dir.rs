@@ -28,12 +28,12 @@ impl Ord for CIUD {
     }
 }
 
-pub struct LsmDirManager {
+pub struct LsmDir {
     lsm_dir_path: PathBuf,
     next_unit_dir_num: AtomicU64,
 }
 
-impl LsmDirManager {
+impl LsmDir {
     pub fn load_or_new_lsm_dir<P: AsRef<Path>>(lsm_dir_path: P) -> Result<(Self, LsmState)> {
         let lsm_dir_path = lsm_dir_path.as_ref();
         fs::create_dir_all(&lsm_dir_path)?;
@@ -135,7 +135,7 @@ impl LsmDirManager {
     }
 }
 
-impl LsmDirManager {
+impl LsmDir {
     pub fn format_new_unit_dir_path(&self) -> UnitDir {
         let num = self.next_unit_dir_num.fetch_add(1, AtmOrdering::SeqCst);
         let numstr = PathNameNum::from(num).format_hex();

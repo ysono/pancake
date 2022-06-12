@@ -20,9 +20,9 @@ use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tokio::sync::RwLockReadGuard;
 
-pub enum ClientCommitDecision<T> {
-    Commit(T),
-    Abort(T),
+pub enum ClientCommitDecision<ClientOk> {
+    Commit(ClientOk),
+    Abort(ClientOk),
 }
 
 pub struct Txn<'txn> {
@@ -43,14 +43,11 @@ pub struct Txn<'txn> {
 }
 
 impl<'txn> Txn<'txn> {
-    pub async fn run<RunTxn, ClientOk>(
+    pub async fn run<ClientOk>(
         db: &'txn DB,
         retry_limit: usize,
-        run_txn: RunTxn,
-    ) -> Result<ClientOk>
-    where
-        RunTxn: Fn(&mut Self) -> Result<ClientCommitDecision<ClientOk>>,
-    {
+        run_txn: impl Fn(&mut Self) -> Result<ClientCommitDecision<ClientOk>>,
+    ) -> Result<ClientOk> {
         let db_state_guard = db.db_state().read().await;
         if db_state_guard.is_terminating == true {
             return Err(anyhow!("DB is terminating"));
