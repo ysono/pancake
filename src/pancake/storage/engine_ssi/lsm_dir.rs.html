@@ -141,29 +141,14 @@
 <span id="136">136</span>
 <span id="137">137</span>
 <span id="138">138</span>
-<span id="139">139</span>
-<span id="140">140</span>
-<span id="141">141</span>
-<span id="142">142</span>
-<span id="143">143</span>
-<span id="144">144</span>
-<span id="145">145</span>
-<span id="146">146</span>
-<span id="147">147</span>
-<span id="148">148</span>
-<span id="149">149</span>
-<span id="150">150</span>
-<span id="151">151</span>
-<span id="152">152</span>
-</pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::ds_n_a::atomic_linked_list::AtomicLinkedList</span>;
-<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi::lsm_state</span>::{
-    <span class="ident">unit</span>::{<span class="ident">CommitInfo</span>, <span class="ident">CommitVer</span>, <span class="ident">CommittedUnit</span>, <span class="ident">UnitDir</span>},
-    <span class="ident">ListVer</span>, <span class="ident">LsmElem</span>, <span class="ident">LsmElemContent</span>, <span class="ident">LsmState</span>,
+</pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi::lsm_state</span>::{
+    <span class="ident">unit</span>::{<span class="ident">CommitInfo</span>, <span class="ident">CommitVer</span>, <span class="ident">CommittedUnit</span>, <span class="ident">UnitDir</span>, <span class="ident">COMMIT_VER_INITIAL</span>},
+    <span class="ident">LsmState</span>,
 };
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engines_common::fs_utils</span>::{<span class="self">self</span>, <span class="ident">PathNameNum</span>};
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">anyhow</span>, <span class="prelude-ty">Result</span>};
 <span class="kw">use</span> <span class="ident">std::cmp</span>::{<span class="self">self</span>, <span class="ident">Ordering</span>};
-<span class="kw">use</span> <span class="ident">std::collections</span>::{<span class="ident">BTreeMap</span>, <span class="ident">BinaryHeap</span>};
+<span class="kw">use</span> <span class="ident">std::collections::BinaryHeap</span>;
 <span class="kw">use</span> <span class="ident">std::fs</span>;
 <span class="kw">use</span> <span class="ident">std::path</span>::{<span class="ident">Path</span>, <span class="ident">PathBuf</span>};
 <span class="kw">use</span> <span class="ident">std::sync::atomic</span>::{<span class="ident">AtomicU64</span>, <span class="ident">Ordering</span> <span class="kw">as</span> <span class="ident">AtmOrdering</span>};
@@ -199,11 +184,7 @@
 
         <span class="kw">let</span> (<span class="ident">committed_units</span>, <span class="ident">next_commit_ver</span>) <span class="op">=</span> <span class="ident"><span class="self">Self</span>::load_committed_units</span>(<span class="ident">pq</span>)<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">curr_list_ver</span> <span class="op">=</span> <span class="ident">ListVer::from</span>(<span class="number">0</span>);
-
-        <span class="kw">let</span> <span class="ident">list</span> <span class="op">=</span> <span class="ident"><span class="self">Self</span>::build_list</span>(<span class="ident">committed_units</span>, <span class="ident">curr_list_ver</span>);
-
-        <span class="kw">let</span> <span class="ident">lsm_state</span> <span class="op">=</span> <span class="ident">LsmState::new</span>(<span class="ident">list</span>, <span class="ident">next_commit_ver</span>, <span class="ident">curr_list_ver</span>, <span class="ident">BTreeMap::new</span>());
+        <span class="kw">let</span> <span class="ident">lsm_state</span> <span class="op">=</span> <span class="ident">LsmState::new</span>(<span class="ident">committed_units</span>, <span class="ident">next_commit_ver</span>);
 
         <span class="kw">let</span> <span class="ident">mgr</span> <span class="op">=</span> <span class="self">Self</span> {
             <span class="ident">lsm_dir_path</span>: <span class="ident">lsm_dir_path</span>.<span class="ident">into</span>(),
@@ -252,10 +233,11 @@
     <span class="doccomment">/// - The next commit ver.</span>
     <span class="kw">fn</span> <span class="ident">load_committed_units</span>(<span class="kw-2">mut</span> <span class="ident">pq</span>: <span class="ident">BinaryHeap</span><span class="op">&lt;</span><span class="ident">CIUD</span><span class="op">&gt;</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>(<span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">CommittedUnit</span><span class="op">&gt;</span>, <span class="ident">CommitVer</span>)<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">next_commit_ver</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">pq</span>.<span class="ident">peek</span>() {
-            <span class="prelude-val">None</span> =&gt; <span class="ident">CommitVer::from</span>(<span class="number">0</span>),
+            <span class="prelude-val">None</span> =&gt; <span class="ident">COMMIT_VER_INITIAL</span>,
             <span class="prelude-val">Some</span>(<span class="ident">committed_unit</span>) =&gt; {
-                <span class="kw">let</span> <span class="ident">max</span> <span class="op">=</span> <span class="ident">committed_unit</span>.<span class="ident">commit_info</span>.<span class="ident">commit_ver_hi_incl</span>();
-                <span class="ident">CommitVer::from</span>(<span class="kw-2">*</span><span class="kw-2">*</span><span class="ident">max</span> <span class="op">+</span> <span class="number">1</span>)
+                <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">commit_ver_hi</span> <span class="op">=</span> <span class="ident">committed_unit</span>.<span class="ident">commit_info</span>.<span class="ident">commit_ver_hi_incl</span>().<span class="ident">clone</span>();
+                <span class="kw-2">*</span><span class="ident">commit_ver_hi</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
+                <span class="ident">commit_ver_hi</span>
             }
         };
 
@@ -279,16 +261,6 @@
         }
 
         <span class="prelude-val">Ok</span>((<span class="ident">committed_units</span>, <span class="ident">next_commit_ver</span>))
-    }
-    <span class="kw">fn</span> <span class="ident">build_list</span>(
-        <span class="ident">committed_units</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">CommittedUnit</span><span class="op">&gt;</span>,
-        <span class="ident">curr_list_ver</span>: <span class="ident">ListVer</span>,
-    ) -&gt; <span class="ident">AtomicLinkedList</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">list_elems</span> <span class="op">=</span> <span class="ident">committed_units</span>.<span class="ident">into_iter</span>().<span class="ident">map</span>(<span class="op">|</span><span class="ident">unit</span><span class="op">|</span> <span class="ident">LsmElem</span> {
-            <span class="ident">content</span>: <span class="ident">LsmElemContent::Unit</span>(<span class="ident">unit</span>),
-            <span class="ident">traversable_list_ver_lo_incl</span>: <span class="ident">curr_list_ver</span>,
-        });
-        <span class="ident">AtomicLinkedList::from_elems</span>(<span class="ident">list_elems</span>)
     }
 }
 

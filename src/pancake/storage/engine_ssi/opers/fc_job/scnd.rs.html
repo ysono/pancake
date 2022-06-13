@@ -62,11 +62,9 @@
 <span id="57">57</span>
 <span id="58">58</span>
 <span id="59">59</span>
-<span id="60">60</span>
-<span id="61">61</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::ds_n_a::send_ptr::SendPtr</span>;
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi</span>::{
-    <span class="ident">lsm_state</span>::{<span class="ident">unit::unit_utils</span>, <span class="ident">LsmElemContent</span>, <span class="ident">LIST_VER_PLACEHOLDER</span>},
+    <span class="ident">lsm_state</span>::{<span class="ident">unit::unit_utils</span>, <span class="ident">LsmElem</span>},
     <span class="ident">opers</span>::{
         <span class="ident">fc_job::FlushingAndCompactionJob</span>,
         <span class="ident">sicr_job</span>::{<span class="ident">ScndIdxCreationRequest</span>, <span class="ident">ScndIdxCreationWork</span>},
@@ -83,22 +81,20 @@
     ) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="comment">/* Malloc for new_head outside the mutex guard.
         Free new_head outside the mutex guard, thanks to Option&lt;&gt;. */</span>
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">prepped_new_head</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">unit_utils::new_dummy_node</span>(<span class="ident">LIST_VER_PLACEHOLDER</span>, <span class="number">0</span>, <span class="bool-val">true</span>));
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">prepped_new_head</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">unit_utils::new_dummy_node</span>(<span class="number">0</span>, <span class="bool-val">true</span>));
         <span class="kw">let</span> <span class="ident">snap_head_excl</span>;
         <span class="kw">let</span> <span class="ident">output_commit_ver</span>;
         {
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">lsm_state</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">db</span>.<span class="ident">lsm_state</span>().<span class="ident">lock</span>().<span class="kw">await</span>;
 
-            <span class="kw">let</span> <span class="ident">update_or_provide_head</span> <span class="op">=</span> <span class="op">|</span><span class="ident">content</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="ident">LsmElemContent</span><span class="op">&gt;</span><span class="op">|</span> {
-                <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">LsmElemContent::Dummy</span> { <span class="ident">is_fence</span>, .. }) <span class="op">=</span> <span class="ident">content</span> {
+            <span class="kw">let</span> <span class="ident">update_or_provide_head</span> <span class="op">=</span> <span class="op">|</span><span class="ident">elem</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="ident">LsmElem</span><span class="op">&gt;</span><span class="op">|</span> {
+                <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">LsmElem::Dummy</span> { <span class="ident">is_fence</span>, .. }) <span class="op">=</span> <span class="ident">elem</span> {
                     <span class="kw">let</span> <span class="ident">prior_is_fence</span> <span class="op">=</span> <span class="ident">is_fence</span>.<span class="ident">fetch_or</span>(<span class="bool-val">true</span>, <span class="ident">Ordering::SeqCst</span>);
                     <span class="kw">if</span> <span class="ident">prior_is_fence</span> <span class="op">==</span> <span class="bool-val">false</span> {
                         <span class="kw">return</span> <span class="prelude-val">None</span>;
                     }
                 }
-                <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">new_head</span> <span class="op">=</span> <span class="ident">prepped_new_head</span>.<span class="ident">take</span>().<span class="ident">unwrap</span>();
-                <span class="ident">new_head</span>.<span class="ident">elem</span>.<span class="ident">traversable_list_ver_lo_incl</span> <span class="op">=</span> <span class="ident">lsm_state</span>.<span class="ident">curr_list_ver</span>;
-                <span class="kw">return</span> <span class="prelude-val">Some</span>(<span class="ident">new_head</span>);
+                <span class="kw">return</span> <span class="ident">prepped_new_head</span>.<span class="ident">take</span>();
             };
             <span class="ident">snap_head_excl</span> <span class="op">=</span> <span class="ident">SendPtr::from</span>(<span class="ident">lsm_state</span>.<span class="ident">update_or_push</span>(<span class="ident">update_or_provide_head</span>));
 

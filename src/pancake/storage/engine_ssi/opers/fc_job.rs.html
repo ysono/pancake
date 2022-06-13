@@ -71,22 +71,22 @@
 <span id="66">66</span>
 <span id="67">67</span>
 <span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
 </pre><pre class="rust"><code><span class="kw">mod</span> <span class="ident">compaction</span>;
 <span class="kw">mod</span> <span class="ident">fc</span>;
 <span class="kw">mod</span> <span class="ident">gc</span>;
 <span class="kw">mod</span> <span class="ident">scnd</span>;
-<span class="kw">use</span> <span class="ident">gc::NodeListVerInterval</span>;
+<span class="kw">use</span> <span class="ident">gc::DanglingNodeSet</span>;
 
-<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::ds_n_a::atomic_linked_list::ListNode</span>;
-<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::ds_n_a::send_ptr::SendPtr</span>;
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi</span>::{
-    <span class="ident">lsm_state</span>::{<span class="ident">GcAbleInterval</span>, <span class="ident">LsmElem</span>},
+    <span class="ident">lsm_state::ListVer</span>,
     <span class="ident">opers::sicr_job</span>::{<span class="ident">ScndIdxCreationRequest</span>, <span class="ident">ScndIdxCreationWork</span>},
     <span class="ident">DB</span>,
 };
 <span class="kw">use</span> <span class="ident">anyhow::Result</span>;
 <span class="kw">use</span> <span class="ident">derive_more::Constructor</span>;
-<span class="kw">use</span> <span class="ident">std::collections::HashMap</span>;
+<span class="kw">use</span> <span class="ident">std::collections::VecDeque</span>;
 <span class="kw">use</span> <span class="ident">std::sync::Arc</span>;
 <span class="kw">use</span> <span class="ident">tokio::sync</span>::{<span class="ident">mpsc</span>, <span class="ident">watch</span>};
 
@@ -94,10 +94,10 @@
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">FlushingAndCompactionJob</span> {
     <span class="ident">db</span>: <span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">DB</span><span class="op">&gt;</span>,
 
-    <span class="ident">dangling_nodes</span>: <span class="ident">HashMap</span><span class="op">&lt;</span><span class="ident">NodeListVerInterval</span>, <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">SendPtr</span><span class="op">&lt;</span><span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>,
+    <span class="ident">dangling_nodes</span>: <span class="ident">VecDeque</span><span class="op">&lt;</span><span class="ident">DanglingNodeSet</span><span class="op">&gt;</span>,
 
     <span class="comment">/* rx */</span>
-    <span class="ident">gc_avail</span>: <span class="ident">mpsc::Receiver</span><span class="op">&lt;</span><span class="ident">GcAbleInterval</span><span class="op">&gt;</span>,
+    <span class="ident">min_held_list_ver</span>: <span class="ident">watch::Receiver</span><span class="op">&lt;</span><span class="ident">ListVer</span><span class="op">&gt;</span>,
     <span class="ident">replace_avail</span>: <span class="ident">watch::Receiver</span><span class="op">&lt;</span>()<span class="op">&gt;</span>,
     <span class="ident">scnd_idx_creation_request</span>: <span class="ident">mpsc::Receiver</span><span class="op">&lt;</span><span class="ident">ScndIdxCreationRequest</span><span class="op">&gt;</span>,
     <span class="ident">is_terminating</span>: <span class="ident">watch::Receiver</span><span class="op">&lt;</span>()<span class="op">&gt;</span>,
@@ -110,8 +110,10 @@
     <span class="kw">pub</span> <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">run</span>(<span class="kw-2">mut</span> <span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">loop</span> {
             <span class="macro">tokio::select!</span> {
-                <span class="ident">opt_msg</span> <span class="op">=</span> (<span class="self">self</span>.<span class="ident">gc_avail</span>.<span class="ident">recv</span>()) =&gt; {
-                    <span class="self">self</span>.<span class="ident">gc_dangling_nodes</span>(<span class="ident">opt_msg</span>.<span class="ident">unwrap</span>())<span class="question-mark">?</span>;
+                <span class="ident">res</span> <span class="op">=</span> (<span class="self">self</span>.<span class="ident">min_held_list_ver</span>.<span class="ident">changed</span>()) =&gt; {
+                    <span class="ident">res</span>.<span class="ident">ok</span>();
+                    <span class="kw">let</span> <span class="ident">min_held_list_ver</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">min_held_list_ver</span>.<span class="ident">borrow</span>().<span class="ident">clone</span>();
+                    <span class="self">self</span>.<span class="ident">gc_dangling_nodes</span>(<span class="ident">min_held_list_ver</span>);
                 }
                 <span class="ident">res</span> <span class="op">=</span> (<span class="self">self</span>.<span class="ident">replace_avail</span>.<span class="ident">changed</span>()) =&gt; {
                     <span class="ident">res</span>.<span class="ident">ok</span>();
@@ -127,12 +129,14 @@
                     <span class="kw">break</span>
                 }
             }
+            <span class="comment">// For each of these channels, the sender is a property of DB, hence can never be dropped.</span>
         }
 
-        <span class="self">self</span>.<span class="ident">gc_avail</span>.<span class="ident">close</span>();
+        <span class="macro">println!</span>(<span class="string">&quot;F+C received termination signal.&quot;</span>);
+
         <span class="self">self</span>.<span class="ident">scnd_idx_creation_request</span>.<span class="ident">close</span>();
 
-        <span class="self">self</span>.<span class="ident">poll_held_list_vers_then_gc</span>().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="self">self</span>.<span class="ident">poll_held_list_vers_then_gc</span>().<span class="kw">await</span>;
 
         <span class="macro">println!</span>(<span class="string">&quot;F+C is exiting.&quot;</span>);
 

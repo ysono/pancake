@@ -105,14 +105,12 @@
 <span id="100">100</span>
 <span id="101">101</span>
 <span id="102">102</span>
-<span id="103">103</span>
-<span id="104">104</span>
 </pre><pre class="rust"><code><span class="kw">mod</span> <span class="ident">scnd_client_req</span>;
 
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi</span>::{
     <span class="ident">db_state::DbState</span>,
     <span class="ident">lsm_dir::LsmDir</span>,
-    <span class="ident">lsm_state</span>::{<span class="ident">GcAbleInterval</span>, <span class="ident">LsmState</span>},
+    <span class="ident">lsm_state</span>::{<span class="ident">ListVer</span>, <span class="ident">LsmState</span>, <span class="ident">LIST_VER_INITIAL</span>},
     <span class="ident">opers</span>::{
         <span class="ident">fc_job::FlushingAndCompactionJob</span>,
         <span class="ident">sicr_job</span>::{<span class="ident">ScndIdxCreationJob</span>, <span class="ident">ScndIdxCreationRequest</span>},
@@ -120,7 +118,6 @@
 };
 <span class="kw">use</span> <span class="ident">anyhow::Result</span>;
 <span class="kw">use</span> <span class="ident">shorthand::ShortHand</span>;
-<span class="kw">use</span> <span class="ident">std::collections::HashMap</span>;
 <span class="kw">use</span> <span class="ident">std::fs</span>;
 <span class="kw">use</span> <span class="ident">std::path::Path</span>;
 <span class="kw">use</span> <span class="ident">std::sync::Arc</span>;
@@ -130,7 +127,6 @@
 <span class="kw">const</span> <span class="ident">LSM_DIR_NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;lsm&quot;</span>;
 <span class="kw">const</span> <span class="ident">SCND_IDXS_CREATION_JOB_DIR_NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;si_cr_job&quot;</span>;
 
-<span class="kw">const</span> <span class="ident">GC_CHANNEL_CAPACITY</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">4096</span>;
 <span class="kw">const</span> <span class="ident">SIREQ_CHANNEL_CAPACITY</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">4</span>;
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">ShortHand</span>)]</span>
@@ -141,8 +137,8 @@
     <span class="ident">lsm_dir</span>: <span class="ident">LsmDir</span>,
     <span class="ident">lsm_state</span>: <span class="ident">Mutex</span><span class="op">&lt;</span><span class="ident">LsmState</span><span class="op">&gt;</span>,
 
+    <span class="ident">min_held_list_ver_tx</span>: <span class="ident">watch::Sender</span><span class="op">&lt;</span><span class="ident">ListVer</span><span class="op">&gt;</span>,
     <span class="ident">replace_avail_tx</span>: <span class="ident">watch::Sender</span><span class="op">&lt;</span>()<span class="op">&gt;</span>,
-    <span class="ident">gc_avail_tx</span>: <span class="ident">mpsc::Sender</span><span class="op">&lt;</span><span class="ident">GcAbleInterval</span><span class="op">&gt;</span>,
     <span class="ident">scnd_idx_request_tx</span>: <span class="ident">mpsc::Sender</span><span class="op">&lt;</span><span class="ident">ScndIdxCreationRequest</span><span class="op">&gt;</span>,
     <span class="ident">is_terminating_tx</span>: <span class="ident">watch::Sender</span><span class="op">&lt;</span>()<span class="op">&gt;</span>,
 }
@@ -162,8 +158,8 @@
 
         <span class="kw">let</span> (<span class="ident">lsm_dir</span>, <span class="ident">lsm_state</span>) <span class="op">=</span> <span class="ident">LsmDir::load_or_new_lsm_dir</span>(<span class="ident">lsm_dir_path</span>)<span class="question-mark">?</span>;
 
+        <span class="kw">let</span> (<span class="ident">min_held_list_ver_tx</span>, <span class="ident">min_held_list_ver_rx</span>) <span class="op">=</span> <span class="ident">watch::channel</span>(<span class="ident">LIST_VER_INITIAL</span>);
         <span class="kw">let</span> (<span class="ident">replace_avail_tx</span>, <span class="ident">replace_avail_rx</span>) <span class="op">=</span> <span class="ident">watch::channel</span>(());
-        <span class="kw">let</span> (<span class="ident">gc_avail_tx</span>, <span class="ident">gc_avail_rx</span>) <span class="op">=</span> <span class="ident">mpsc::channel</span>(<span class="ident">GC_CHANNEL_CAPACITY</span>);
         <span class="kw">let</span> (<span class="ident">scnd_idx_request_tx</span>, <span class="ident">scnd_idx_request_rx</span>) <span class="op">=</span> <span class="ident">mpsc::channel</span>(<span class="ident">SIREQ_CHANNEL_CAPACITY</span>);
         <span class="kw">let</span> (<span class="ident">scnd_idx_work_tx</span>, <span class="ident">scnd_idx_work_rx</span>) <span class="op">=</span> <span class="ident">mpsc::channel</span>(<span class="ident">SIREQ_CHANNEL_CAPACITY</span>);
         <span class="kw">let</span> (<span class="ident">is_terminating_tx</span>, <span class="ident">is_terminating_rx</span>) <span class="op">=</span> <span class="ident">watch::channel</span>(());
@@ -174,8 +170,8 @@
             <span class="ident">lsm_dir</span>,
             <span class="ident">lsm_state</span>: <span class="ident">Mutex::new</span>(<span class="ident">lsm_state</span>),
 
+            <span class="ident">min_held_list_ver_tx</span>,
             <span class="ident">replace_avail_tx</span>,
-            <span class="ident">gc_avail_tx</span>,
             <span class="ident">scnd_idx_request_tx</span>,
             <span class="ident">is_terminating_tx</span>,
         };
@@ -183,8 +179,8 @@
 
         <span class="kw">let</span> <span class="ident">fc_job</span> <span class="op">=</span> <span class="ident">FlushingAndCompactionJob::new</span>(
             <span class="ident">Arc::clone</span>(<span class="kw-2">&amp;</span><span class="ident">db</span>),
-            <span class="ident">HashMap::new</span>(),
-            <span class="ident">gc_avail_rx</span>,
+            <span class="ident">Default::default</span>(),
+            <span class="ident">min_held_list_ver_rx</span>,
             <span class="ident">replace_avail_rx</span>,
             <span class="ident">scnd_idx_request_rx</span>,
             <span class="ident">is_terminating_rx</span>.<span class="ident">clone</span>(),

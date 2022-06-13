@@ -27,41 +27,14 @@
 <span id="22">22</span>
 <span id="23">23</span>
 <span id="24">24</span>
-<span id="25">25</span>
-<span id="26">26</span>
-<span id="27">27</span>
-<span id="28">28</span>
-<span id="29">29</span>
-<span id="30">30</span>
-<span id="31">31</span>
-<span id="32">32</span>
-<span id="33">33</span>
-<span id="34">34</span>
-<span id="35">35</span>
-<span id="36">36</span>
-<span id="37">37</span>
-<span id="38">38</span>
-<span id="39">39</span>
-<span id="40">40</span>
-<span id="41">41</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::ds_n_a::atomic_linked_list::ListNode</span>;
-<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi::lsm_state</span>::{
-    <span class="ident">unit::CommittedUnit</span>, <span class="ident">ListVer</span>, <span class="ident">LsmElem</span>, <span class="ident">LsmElemContent</span>,
-};
+<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::storage::engine_ssi::lsm_state</span>::{<span class="ident">unit::CommittedUnit</span>, <span class="ident">LsmElem</span>};
 <span class="kw">use</span> <span class="ident">std::sync::atomic</span>::{<span class="ident">AtomicBool</span>, <span class="ident">AtomicPtr</span>, <span class="ident">AtomicUsize</span>};
 
-<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new_dummy_node</span>(
-    <span class="ident">traversable_list_ver_lo_incl</span>: <span class="ident">ListVer</span>,
-    <span class="ident">hold_count</span>: <span class="ident">usize</span>,
-    <span class="ident">is_fence</span>: <span class="ident">bool</span>,
-) -&gt; <span class="ident">Box</span><span class="op">&lt;</span><span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span><span class="op">&gt;</span> {
-    <span class="kw">let</span> <span class="ident">content</span> <span class="op">=</span> <span class="ident">LsmElemContent::Dummy</span> {
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new_dummy_node</span>(<span class="ident">hold_count</span>: <span class="ident">usize</span>, <span class="ident">is_fence</span>: <span class="ident">bool</span>) -&gt; <span class="ident">Box</span><span class="op">&lt;</span><span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span><span class="op">&gt;</span> {
+    <span class="kw">let</span> <span class="ident">elem</span> <span class="op">=</span> <span class="ident">LsmElem::Dummy</span> {
         <span class="ident">hold_count</span>: <span class="ident">AtomicUsize::from</span>(<span class="ident">hold_count</span>),
         <span class="ident">is_fence</span>: <span class="ident">AtomicBool::from</span>(<span class="ident">is_fence</span>),
-    };
-    <span class="kw">let</span> <span class="ident">elem</span> <span class="op">=</span> <span class="ident">LsmElem</span> {
-        <span class="ident">content</span>,
-        <span class="ident">traversable_list_ver_lo_incl</span>,
     };
     <span class="kw">let</span> <span class="ident">node</span> <span class="op">=</span> <span class="ident">ListNode</span> {
         <span class="ident">elem</span>,
@@ -70,15 +43,8 @@
     <span class="ident">Box::new</span>(<span class="ident">node</span>)
 }
 
-<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new_unit_node</span>(
-    <span class="ident">unit</span>: <span class="ident">CommittedUnit</span>,
-    <span class="ident">traversable_list_ver_lo_incl</span>: <span class="ident">ListVer</span>,
-) -&gt; <span class="ident">Box</span><span class="op">&lt;</span><span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span><span class="op">&gt;</span> {
-    <span class="kw">let</span> <span class="ident">content</span> <span class="op">=</span> <span class="ident">LsmElemContent::Unit</span>(<span class="ident">unit</span>);
-    <span class="kw">let</span> <span class="ident">elem</span> <span class="op">=</span> <span class="ident">LsmElem</span> {
-        <span class="ident">content</span>,
-        <span class="ident">traversable_list_ver_lo_incl</span>,
-    };
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new_unit_node</span>(<span class="ident">unit</span>: <span class="ident">CommittedUnit</span>) -&gt; <span class="ident">Box</span><span class="op">&lt;</span><span class="ident">ListNode</span><span class="op">&lt;</span><span class="ident">LsmElem</span><span class="op">&gt;</span><span class="op">&gt;</span> {
+    <span class="kw">let</span> <span class="ident">elem</span> <span class="op">=</span> <span class="ident">LsmElem::Unit</span>(<span class="ident">unit</span>);
     <span class="kw">let</span> <span class="ident">node</span> <span class="op">=</span> <span class="ident">ListNode</span> {
         <span class="ident">elem</span>,
         <span class="ident">next</span>: <span class="ident">AtomicPtr::default</span>(),

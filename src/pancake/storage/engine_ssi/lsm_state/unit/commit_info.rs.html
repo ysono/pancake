@@ -109,6 +109,8 @@
 <span id="104">104</span>
 <span id="105">105</span>
 <span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">anyhow</span>, <span class="prelude-ty">Result</span>};
 <span class="kw">use</span> <span class="ident">derive_more</span>::{<span class="ident">Deref</span>, <span class="ident">DerefMut</span>, <span class="ident">From</span>};
 <span class="kw">use</span> <span class="ident">num_derive</span>::{<span class="ident">FromPrimitive</span>, <span class="ident">ToPrimitive</span>};
@@ -120,8 +122,10 @@
 <span class="kw">use</span> <span class="ident">std::io</span>::{<span class="ident">BufReader</span>, <span class="ident">BufWriter</span>, <span class="ident">Read</span>, <span class="ident">Write</span>};
 <span class="kw">use</span> <span class="ident">std::path::Path</span>;
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">From</span>, <span class="ident">Deref</span>, <span class="ident">DerefMut</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Deref</span>, <span class="ident">DerefMut</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">CommitVer</span>(<span class="ident">u64</span>);
+
+<span class="kw">pub</span> <span class="kw">const</span> <span class="ident">COMMIT_VER_INITIAL</span>: <span class="ident">CommitVer</span> <span class="op">=</span> <span class="ident">CommitVer</span>(<span class="number">0</span>);
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">From</span>, <span class="ident">Deref</span>, <span class="ident">DerefMut</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">TimestampNum</span>(<span class="ident">u64</span>);
