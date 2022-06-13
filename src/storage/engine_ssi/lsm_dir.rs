@@ -1,12 +1,11 @@
-use crate::ds_n_a::atomic_linked_list::AtomicLinkedList;
 use crate::storage::engine_ssi::lsm_state::{
-    unit::{CommitInfo, CommitVer, CommittedUnit, UnitDir},
-    ListVer, LsmElem, LsmElemContent, LsmState,
+    unit::{CommitInfo, CommitVer, CommittedUnit, UnitDir, COMMIT_VER_INITIAL},
+    LsmState,
 };
 use crate::storage::engines_common::fs_utils::{self, PathNameNum};
 use anyhow::{anyhow, Result};
 use std::cmp::{self, Ordering};
-use std::collections::{BTreeMap, BinaryHeap};
+use std::collections::BinaryHeap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering as AtmOrdering};
@@ -42,11 +41,7 @@ impl LsmDir {
 
         let (committed_units, next_commit_ver) = Self::load_committed_units(pq)?;
 
-        let curr_list_ver = ListVer::from(0);
-
-        let list = Self::build_list(committed_units, curr_list_ver);
-
-        let lsm_state = LsmState::new(list, next_commit_ver, curr_list_ver, BTreeMap::new());
+        let lsm_state = LsmState::new(committed_units, next_commit_ver);
 
         let mgr = Self {
             lsm_dir_path: lsm_dir_path.into(),
@@ -95,10 +90,11 @@ impl LsmDir {
     /// - The next commit ver.
     fn load_committed_units(mut pq: BinaryHeap<CIUD>) -> Result<(Vec<CommittedUnit>, CommitVer)> {
         let next_commit_ver = match pq.peek() {
-            None => CommitVer::from(0),
+            None => COMMIT_VER_INITIAL,
             Some(committed_unit) => {
-                let max = committed_unit.commit_info.commit_ver_hi_incl();
-                CommitVer::from(**max + 1)
+                let mut commit_ver_hi = committed_unit.commit_info.commit_ver_hi_incl().clone();
+                *commit_ver_hi += 1;
+                commit_ver_hi
             }
         };
 
@@ -122,16 +118,6 @@ impl LsmDir {
         }
 
         Ok((committed_units, next_commit_ver))
-    }
-    fn build_list(
-        committed_units: Vec<CommittedUnit>,
-        curr_list_ver: ListVer,
-    ) -> AtomicLinkedList<LsmElem> {
-        let list_elems = committed_units.into_iter().map(|unit| LsmElem {
-            content: LsmElemContent::Unit(unit),
-            traversable_list_ver_lo_incl: curr_list_ver,
-        });
-        AtomicLinkedList::from_elems(list_elems)
     }
 }
 

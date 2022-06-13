@@ -1,7 +1,7 @@
 use crate::ds_n_a::interval_set::{Interval, IntervalSet};
 use crate::storage::engine_ssi::{
     db_state::ScndIdxState,
-    lsm_state::{entryset::merging, unit::StagingUnit, LsmElemContent},
+    lsm_state::{entryset::merging, unit::StagingUnit, LsmElem},
     opers::txn::Txn,
 };
 use crate::storage::engines_common::Entry;
@@ -33,9 +33,9 @@ impl<'txn> Txn<'txn> {
         let committed_entrysets = self
             .snap
             .iter()
-            .filter_map(|elem| match &elem.content {
-                LsmElemContent::Unit(unit) => Some(unit),
-                LsmElemContent::Dummy { .. } => None,
+            .filter_map(|elem| match &elem {
+                LsmElem::Unit(unit) => Some(unit),
+                LsmElem::Dummy { .. } => None,
             })
             .filter_map(|unit| unit.prim.as_ref());
         for entryset in committed_entrysets {
@@ -69,9 +69,9 @@ impl<'txn> Txn<'txn> {
             .as_ref()
             .unwrap()
             .iter()
-            .filter_map(|elem| match &elem.content {
-                LsmElemContent::Unit(unit) => Some(unit),
-                LsmElemContent::Dummy { .. } => None,
+            .filter_map(|elem| match &elem {
+                LsmElem::Unit(unit) => Some(unit),
+                LsmElem::Dummy { .. } => None,
             })
             .filter_map(|unit| unit.prim.as_ref());
         let kmerged_entries =
@@ -124,9 +124,9 @@ impl<'txn> Txn<'txn> {
             .as_ref()
             .unwrap()
             .iter()
-            .filter_map(|elem| match &elem.content {
-                LsmElemContent::Unit(unit) => Some(unit),
-                LsmElemContent::Dummy { .. } => None,
+            .filter_map(|elem| match &elem {
+                LsmElem::Unit(unit) => Some(unit),
+                LsmElem::Dummy { .. } => None,
             })
             .filter_map(|unit| unit.scnds.get(scnd_idx_num));
         let kmerged_entries =

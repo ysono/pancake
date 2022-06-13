@@ -1,8 +1,8 @@
 use crate::ds_n_a::atomic_linked_list::ListNode;
 use crate::ds_n_a::send_ptr::SendPtr;
 use crate::storage::engine_ssi::{
-    lsm_state::{unit::unit_utils, LsmElem, LsmElemContent, LIST_VER_PLACEHOLDER},
-    opers::fc_job::{FlushingAndCompactionJob, NodeListVerInterval},
+    lsm_state::{unit::unit_utils, LsmElem},
+    opers::fc_job::{DanglingNodeSet, FlushingAndCompactionJob},
 };
 use anyhow::Result;
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -11,17 +11,15 @@ impl FlushingAndCompactionJob {
     pub(super) async fn flush_and_compact(&mut self) -> Result<()> {
         /* Malloc for new_head outside the mutex guard.
         Free new_head outside the mutex guard, thanks to Option<>. */
-        let mut prepped_new_head = Some(unit_utils::new_dummy_node(LIST_VER_PLACEHOLDER, 0, false));
+        let mut prepped_new_head = Some(unit_utils::new_dummy_node(0, false));
         let snap_head_excl;
         {
             let lsm_state = self.db.lsm_state().lock().await;
 
-            let update_or_provide_head = |content: Option<&LsmElemContent>| match content {
-                Some(LsmElemContent::Dummy { .. }) => return None,
+            let update_or_provide_head = |elem: Option<&LsmElem>| match elem {
+                Some(LsmElem::Dummy { .. }) => return None,
                 _ => {
-                    let mut new_head = prepped_new_head.take().unwrap();
-                    new_head.elem.traversable_list_ver_lo_incl = lsm_state.curr_list_ver;
-                    Some(new_head)
+                    return prepped_new_head.take();
                 }
             };
             snap_head_excl = SendPtr::from(lsm_state.update_or_push(update_or_provide_head));
@@ -73,15 +71,15 @@ impl FlushingAndCompactionJob {
 
         let units = slice
             .iter()
-            .filter_map(|node| match &node.elem.content {
-                LsmElemContent::Unit(unit) => Some(unit),
-                LsmElemContent::Dummy { .. } => None,
+            .filter_map(|node| match &node.elem {
+                LsmElem::Unit(unit) => Some(unit),
+                LsmElem::Dummy { .. } => None,
             })
             .collect::<Vec<_>>();
         let skip_tombstones = curr_node.status == CurrNodeStatus::EndOfList;
         let compacted_unit = self.do_flush_and_compact(units, skip_tombstones).await?;
         if let Some(unit) = compacted_unit {
-            let node = unit_utils::new_unit_node(unit, LIST_VER_PLACEHOLDER);
+            let node = unit_utils::new_unit_node(unit);
             self.replace(segm_head_excl, curr_node.ptr, Some(node), slice)
                 .await;
         }
@@ -98,9 +96,9 @@ impl FlushingAndCompactionJob {
                 break CurrNodeStatus::EndOfList;
             } else {
                 let curr_ref = unsafe { curr_ptr.as_ref() };
-                match &curr_ref.elem.content {
-                    LsmElemContent::Unit(_) => break CurrNodeStatus::CommittedUnit,
-                    LsmElemContent::Dummy {
+                match &curr_ref.elem {
+                    LsmElem::Unit(_) => break CurrNodeStatus::CommittedUnit,
+                    LsmElem::Dummy {
                         hold_count,
                         is_fence,
                     } => {
@@ -134,35 +132,32 @@ impl FlushingAndCompactionJob {
         replacement_node: Option<Box<ListNode<LsmElem>>>,
         slice: Vec<&ListNode<LsmElem>>,
     ) {
+        if let Some(mut r_own) = replacement_node {
+            r_own.next = AtomicPtr::new(slice_tail_excl.as_ptr_mut());
+            let r_ptr = Box::into_raw(r_own);
+            slice_head_excl.next.store(r_ptr, Ordering::SeqCst);
+        } else {
+            slice_head_excl
+                .next
+                .store(slice_tail_excl.as_ptr_mut(), Ordering::SeqCst);
+        }
+
         let penult_list_ver;
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
-            penult_list_ver = lsm_state.curr_list_ver;
-            *lsm_state.curr_list_ver += 1;
-
-            if let Some(mut r_own) = replacement_node {
-                r_own.elem.traversable_list_ver_lo_incl = lsm_state.curr_list_ver;
-                r_own.next = AtomicPtr::new(slice_tail_excl.as_ptr_mut());
-                let r_ptr = Box::into_raw(r_own);
-                slice_head_excl.next.store(r_ptr, Ordering::SeqCst);
-            } else {
-                slice_head_excl
-                    .next
-                    .store(slice_tail_excl.as_ptr_mut(), Ordering::SeqCst);
-            }
+            penult_list_ver = lsm_state.bump_curr_list_ver();
         }
 
-        for dangl_node_ref in slice.into_iter() {
-            let node_itv = NodeListVerInterval {
-                lo_incl: dangl_node_ref.elem.traversable_list_ver_lo_incl,
-                hi_incl: penult_list_ver,
-            };
-            /* Here, we could check whether the node_itv is already deletable.
-            But doing this would hold the mutex guard longer. So, skip it. */
-            let dangl_nodes = self.dangling_nodes.entry(node_itv).or_default();
-            dangl_nodes.push(SendPtr::from(dangl_node_ref));
-        }
+        let nodes = slice
+            .into_iter()
+            .map(|node_ref| SendPtr::from(node_ref))
+            .collect::<Vec<_>>();
+        let dangling_node_set = DanglingNodeSet {
+            max_incl_traversable_list_ver: penult_list_ver,
+            nodes,
+        };
+        self.dangling_nodes.push_back(dangling_node_set);
     }
 }
 

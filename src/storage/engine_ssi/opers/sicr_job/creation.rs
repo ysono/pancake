@@ -8,7 +8,7 @@ use crate::storage::engine_ssi::{
             unit_utils, CommitDataType, CommitInfo, CommitVer, CommittedUnit, CompactedUnit,
             TimestampNum,
         },
-        LsmElem, LsmElemContent, LIST_VER_PLACEHOLDER,
+        LsmElem,
     },
     opers::sicr_job::{ScndIdxCreationJob, ScndIdxCreationRequest, ScndIdxCreationWork},
 };
@@ -58,7 +58,7 @@ impl ScndIdxCreationJob {
                 self.create_compacted_unit(intermediary_sstables, *scnd_idx_num)?;
             let committed_unit =
                 Self::convert_to_committed_unit(compacted_unit, *output_commit_ver)?;
-            let node = unit_utils::new_unit_node(committed_unit, LIST_VER_PLACEHOLDER);
+            let node = unit_utils::new_unit_node(committed_unit);
             self.insert_node(*snap_head_excl, node).await;
 
             self.reset_working_dir()?;
@@ -78,9 +78,9 @@ impl ScndIdxCreationJob {
         };
         let prim_entrysets = snap
             .iter()
-            .filter_map(|elem| match &elem.content {
-                LsmElemContent::Dummy { .. } => None,
-                LsmElemContent::Unit(unit) => Some(unit),
+            .filter_map(|elem| match &elem {
+                LsmElem::Dummy { .. } => None,
+                LsmElem::Unit(unit) => Some(unit),
             })
             .filter_map(|unit| unit.prim.as_ref());
         let merged_prim_entries = merging::merge_committed_entrysets(
@@ -224,12 +224,6 @@ impl ScndIdxCreationJob {
         snap_head_excl: SendPtr<ListNode<LsmElem>>,
         mut node_own: Box<ListNode<LsmElem>>,
     ) {
-        {
-            let lsm_state = self.db.lsm_state().lock().await;
-
-            node_own.elem.traversable_list_ver_lo_incl = lsm_state.curr_list_ver;
-        }
-
         let snap_head_excl = unsafe { snap_head_excl.as_ref() };
         let x_ptr = snap_head_excl.next.load(Ordering::SeqCst);
         node_own.next = AtomicPtr::new(x_ptr);
@@ -247,7 +241,7 @@ impl ScndIdxCreationJob {
 
     fn notify_end_of_work(&self, snap_head_excl: SendPtr<ListNode<LsmElem>>) {
         let snap_head_excl = unsafe { snap_head_excl.as_ref() };
-        if let LsmElemContent::Dummy { is_fence, .. } = &snap_head_excl.elem.content {
+        if let LsmElem::Dummy { is_fence, .. } = &snap_head_excl.elem {
             is_fence.store(false, Ordering::SeqCst);
         }
 

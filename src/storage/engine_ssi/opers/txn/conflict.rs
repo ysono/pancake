@@ -1,4 +1,4 @@
-use crate::storage::engine_ssi::{lsm_state::LsmElemContent, opers::txn::Txn};
+use crate::storage::engine_ssi::{lsm_state::LsmElem, opers::txn::Txn};
 use anyhow::Result;
 
 impl<'txn> Txn<'txn> {
@@ -8,9 +8,9 @@ impl<'txn> Txn<'txn> {
             scnd_itvset.merge();
         }
 
-        let committed_units = self.snap.iter().filter_map(|elem| match &elem.content {
-            LsmElemContent::Dummy { .. } => None,
-            LsmElemContent::Unit(unit) => Some(unit),
+        let committed_units = self.snap.iter().filter_map(|elem| match &elem {
+            LsmElem::Dummy { .. } => None,
+            LsmElem::Unit(unit) => Some(unit),
         });
         for unit in committed_units {
             if let Some(committed_prim) = unit.prim.as_ref() {

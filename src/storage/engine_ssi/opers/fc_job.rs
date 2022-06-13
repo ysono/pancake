@@ -2,18 +2,16 @@ mod compaction;
 mod fc;
 mod gc;
 mod scnd;
-use gc::NodeListVerInterval;
+use gc::DanglingNodeSet;
 
-use crate::ds_n_a::atomic_linked_list::ListNode;
-use crate::ds_n_a::send_ptr::SendPtr;
 use crate::storage::engine_ssi::{
-    lsm_state::{GcAbleInterval, LsmElem},
+    lsm_state::ListVer,
     opers::sicr_job::{ScndIdxCreationRequest, ScndIdxCreationWork},
     DB,
 };
 use anyhow::Result;
 use derive_more::Constructor;
-use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
 
@@ -21,10 +19,10 @@ use tokio::sync::{mpsc, watch};
 pub struct FlushingAndCompactionJob {
     db: Arc<DB>,
 
-    dangling_nodes: HashMap<NodeListVerInterval, Vec<SendPtr<ListNode<LsmElem>>>>,
+    dangling_nodes: VecDeque<DanglingNodeSet>,
 
     /* rx */
-    gc_avail: mpsc::Receiver<GcAbleInterval>,
+    min_held_list_ver: watch::Receiver<ListVer>,
     replace_avail: watch::Receiver<()>,
     scnd_idx_creation_request: mpsc::Receiver<ScndIdxCreationRequest>,
     is_terminating: watch::Receiver<()>,
@@ -37,8 +35,10 @@ impl FlushingAndCompactionJob {
     pub async fn run(mut self) -> Result<()> {
         loop {
             tokio::select! {
-                opt_msg = (self.gc_avail.recv()) => {
-                    self.gc_dangling_nodes(opt_msg.unwrap())?;
+                res = (self.min_held_list_ver.changed()) => {
+                    res.ok();
+                    let min_held_list_ver = self.min_held_list_ver.borrow().clone();
+                    self.gc_dangling_nodes(min_held_list_ver);
                 }
                 res = (self.replace_avail.changed()) => {
                     res.ok();
@@ -54,12 +54,14 @@ impl FlushingAndCompactionJob {
                     break
                 }
             }
+            // For each of these channels, the sender is a property of DB, hence can never be dropped.
         }
 
-        self.gc_avail.close();
+        println!("F+C received termination signal.");
+
         self.scnd_idx_creation_request.close();
 
-        self.poll_held_list_vers_then_gc().await?;
+        self.poll_held_list_vers_then_gc().await;
 
         println!("F+C is exiting.");
 

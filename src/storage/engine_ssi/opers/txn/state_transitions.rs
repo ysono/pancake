@@ -2,7 +2,7 @@ use crate::ds_n_a::atomic_linked_list::{AtomicLinkedListSnapshot, ListNode};
 use crate::ds_n_a::interval_set::IntervalSet;
 use crate::storage::engine_ssi::{
     db_state::DbState,
-    lsm_state::{unit::CommittedUnit, LsmElem, LsmElemContent, LsmState},
+    lsm_state::{unit::CommittedUnit, LsmElem, LsmState},
     opers::txn::Txn,
     DB,
 };
@@ -86,8 +86,8 @@ impl<'txn> Txn<'txn> {
 
         self.snap_next_commit_ver = lsm_state.next_commit_ver;
 
-        let maybe_gc_itv;
-        (self.snap_list_ver, maybe_gc_itv) = lsm_state.hold_and_unhold_list_ver(self.snap_list_ver);
+        let updated_mhlv;
+        (self.snap_list_ver, updated_mhlv) = lsm_state.hold_and_unhold_list_ver(self.snap_list_ver);
 
         drop(lsm_state);
 
@@ -95,18 +95,13 @@ impl<'txn> Txn<'txn> {
         self.snap.tail_excl_ptr = Some(self.snap.head_excl_ptr);
         self.snap.head_excl_ptr = snap_head_excl;
 
-        if is_replace_avail {
-            self.db.replace_avail_tx().send(()).ok();
-        }
-        if let Some(gc_itv) = maybe_gc_itv {
-            self.db.gc_avail_tx().try_send(gc_itv).ok();
-        }
+        self.notify_fc_job(updated_mhlv, is_replace_avail);
     }
 
     pub(super) async fn reset(&mut self) -> Result<()> {
         let mut prepped_boundary_node = Self::prep_boundary_node();
         let snap_head_excl;
-        let maybe_gc_itv;
+        let updated_mhlv;
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
@@ -115,7 +110,7 @@ impl<'txn> Txn<'txn> {
 
             self.snap_next_commit_ver = lsm_state.next_commit_ver;
 
-            (self.snap_list_ver, maybe_gc_itv) =
+            (self.snap_list_ver, updated_mhlv) =
                 lsm_state.hold_and_unhold_list_ver(self.snap_list_ver);
         }
 
@@ -124,12 +119,7 @@ impl<'txn> Txn<'txn> {
         self.snap.tail_excl_ptr = None;
         self.snap.head_excl_ptr = snap_head_excl;
 
-        if is_replace_avail {
-            self.db.replace_avail_tx().send(()).ok();
-        }
-        if let Some(gc_itv) = maybe_gc_itv {
-            self.db.gc_avail_tx().try_send(gc_itv).ok();
-        }
+        self.notify_fc_job(updated_mhlv, is_replace_avail);
 
         self.snap_vec = None;
         self.dependent_itvs_prim.clear();
@@ -142,22 +132,17 @@ impl<'txn> Txn<'txn> {
     }
 
     pub(super) async fn close(self) -> Result<()> {
-        let maybe_gc_itv;
+        let updated_mhlv;
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
-            maybe_gc_itv = lsm_state.unhold_list_ver(self.snap_list_ver);
+            updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver);
         }
 
         let is_replace_avail =
             Self::unhold_boundary_node(&[Some(self.snap.head_excl_ptr), self.snap.tail_excl_ptr]);
 
-        if is_replace_avail {
-            self.db.replace_avail_tx().send(()).ok();
-        }
-        if let Some(gc_itv) = maybe_gc_itv {
-            self.db.gc_avail_tx().try_send(gc_itv).ok();
-        }
+        self.notify_fc_job(updated_mhlv, is_replace_avail);
 
         if let Some(staging) = self.staging {
             staging.remove_dir()?;
@@ -172,27 +157,19 @@ impl<'txn> Txn<'txn> {
         and we're doing it under a mutex guard. */
         let committed_unit =
             CommittedUnit::from_staging(self.staging.take().unwrap(), lsm_state.next_commit_ver)?;
-        let elem = LsmElem {
-            content: LsmElemContent::Unit(committed_unit),
-            traversable_list_ver_lo_incl: lsm_state.curr_list_ver,
-        };
+        let elem = LsmElem::Unit(committed_unit);
         lsm_state.list.push_elem(elem);
 
         *lsm_state.next_commit_ver += 1;
 
-        let maybe_gc_itv = lsm_state.unhold_list_ver(self.snap_list_ver);
+        let updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver);
 
         drop(lsm_state);
 
         Self::unhold_boundary_node(&[Some(self.snap.head_excl_ptr), self.snap.tail_excl_ptr]);
 
-        /* We just pushed a MemLog. Hence the list became replaceable. */
-        self.db.replace_avail_tx().send(()).ok();
-        if let Some(gc_itv) = maybe_gc_itv {
-            /* If at capacity, we'd like to override an existing message.
-            But tokio doesn't seem offer this. So we're willing to drop our new message instead. */
-            self.db.gc_avail_tx().try_send(gc_itv).ok();
-        }
+        // We just pushed a MemLog. Hence the list became replaceable.
+        self.notify_fc_job(updated_mhlv, true);
 
         Ok(())
     }

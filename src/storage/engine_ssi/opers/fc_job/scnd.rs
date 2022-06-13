@@ -1,6 +1,6 @@
 use crate::ds_n_a::send_ptr::SendPtr;
 use crate::storage::engine_ssi::{
-    lsm_state::{unit::unit_utils, LsmElemContent, LIST_VER_PLACEHOLDER},
+    lsm_state::{unit::unit_utils, LsmElem},
     opers::{
         fc_job::FlushingAndCompactionJob,
         sicr_job::{ScndIdxCreationRequest, ScndIdxCreationWork},
@@ -17,22 +17,20 @@ impl FlushingAndCompactionJob {
     ) -> Result<()> {
         /* Malloc for new_head outside the mutex guard.
         Free new_head outside the mutex guard, thanks to Option<>. */
-        let mut prepped_new_head = Some(unit_utils::new_dummy_node(LIST_VER_PLACEHOLDER, 0, true));
+        let mut prepped_new_head = Some(unit_utils::new_dummy_node(0, true));
         let snap_head_excl;
         let output_commit_ver;
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
-            let update_or_provide_head = |content: Option<&LsmElemContent>| {
-                if let Some(LsmElemContent::Dummy { is_fence, .. }) = content {
+            let update_or_provide_head = |elem: Option<&LsmElem>| {
+                if let Some(LsmElem::Dummy { is_fence, .. }) = elem {
                     let prior_is_fence = is_fence.fetch_or(true, Ordering::SeqCst);
                     if prior_is_fence == false {
                         return None;
                     }
                 }
-                let mut new_head = prepped_new_head.take().unwrap();
-                new_head.elem.traversable_list_ver_lo_incl = lsm_state.curr_list_ver;
-                return Some(new_head);
+                return prepped_new_head.take();
             };
             snap_head_excl = SendPtr::from(lsm_state.update_or_push(update_or_provide_head));
 

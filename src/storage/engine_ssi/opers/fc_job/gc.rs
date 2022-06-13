@@ -1,61 +1,50 @@
+use crate::ds_n_a::atomic_linked_list::ListNode;
+use crate::ds_n_a::send_ptr::SendPtr;
 use crate::storage::engine_ssi::{
-    lsm_state::{GcAbleInterval, ListVer, LsmElemContent},
+    lsm_state::{ListVer, LsmElem},
     opers::fc_job::FlushingAndCompactionJob,
 };
-use anyhow::Result;
-use tokio::time::Duration;
+use std::time::Duration;
 
-#[derive(PartialEq, Eq, Hash, Clone)]
-pub struct NodeListVerInterval {
-    pub lo_incl: ListVer,
-    pub hi_incl: ListVer,
-}
-impl NodeListVerInterval {
-    fn is_subsumed_by(&self, gc_able_itv: &GcAbleInterval) -> bool {
-        let is_lo_covered = || match gc_able_itv.lo_excl {
-            None => true,
-            Some(gc_lo_excl) => gc_lo_excl < self.lo_incl,
-        };
-        let is_hi_covered = || self.hi_incl < gc_able_itv.hi_excl;
-        is_lo_covered() && is_hi_covered()
-    }
+pub struct DanglingNodeSet {
+    pub max_incl_traversable_list_ver: ListVer,
+    pub nodes: Vec<SendPtr<ListNode<LsmElem>>>,
 }
 
 impl FlushingAndCompactionJob {
-    fn do_gc<F>(&mut self, is_node_itv_droppable: F) -> Result<()>
-    where
-        F: Fn(&NodeListVerInterval) -> bool,
-    {
-        self.dangling_nodes.retain(|node_itv, nodes| {
-            let is_droppable = is_node_itv_droppable(node_itv);
-
-            if is_droppable {
-                while let Some(node_ptr) = nodes.pop() {
+    fn do_gc(&mut self, is_gc_able: impl Fn(ListVer) -> bool) {
+        while let Some(DanglingNodeSet {
+            max_incl_traversable_list_ver,
+            ..
+        }) = self.dangling_nodes.front()
+        {
+            if is_gc_able(max_incl_traversable_list_ver.clone()) {
+                let DanglingNodeSet { nodes, .. } = self.dangling_nodes.pop_front().unwrap();
+                for node_ptr in nodes.into_iter() {
                     let node_own = unsafe { Box::from_raw(node_ptr.as_ptr_mut()) };
-                    match node_own.elem.content {
-                        LsmElemContent::Unit(unit) => match unit.remove_dir() {
+                    match node_own.elem {
+                        LsmElem::Unit(unit) => match unit.remove_dir() {
                             Err(e) => {
                                 eprintln!("Unit dir could not be removed: {}", e.to_string());
                             }
                             Ok(()) => {}
                         },
-                        LsmElemContent::Dummy { .. } => {}
+                        LsmElem::Dummy { .. } => {}
                     }
                 }
+            } else {
+                break;
             }
+        }
+    }
 
-            !is_droppable
+    pub(super) fn gc_dangling_nodes(&mut self, min_held_list_ver: ListVer) {
+        self.do_gc(|max_incl_traversable_list_ver| {
+            max_incl_traversable_list_ver < min_held_list_ver
         });
-        Ok(())
     }
 
-    pub(super) fn gc_dangling_nodes(&mut self, gc_able_itv: GcAbleInterval) -> Result<()> {
-        self.do_gc(|node_itv| node_itv.is_subsumed_by(&gc_able_itv))?;
-
-        Ok(())
-    }
-
-    pub(super) async fn poll_held_list_vers_then_gc(&mut self) -> Result<()> {
+    pub(super) async fn poll_held_list_vers_then_gc(&mut self) {
         loop {
             println!("F+C is polling for all ListVers to be unheld.");
             {
@@ -65,12 +54,9 @@ impl FlushingAndCompactionJob {
                     break;
                 }
             }
-
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
-        self.do_gc(|_node_itv| true)?;
-
-        Ok(())
+        self.do_gc(|_| true);
     }
 }

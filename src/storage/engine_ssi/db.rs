@@ -3,7 +3,7 @@ mod scnd_client_req;
 use crate::storage::engine_ssi::{
     db_state::DbState,
     lsm_dir::LsmDir,
-    lsm_state::{GcAbleInterval, LsmState},
+    lsm_state::{ListVer, LsmState, LIST_VER_INITIAL},
     opers::{
         fc_job::FlushingAndCompactionJob,
         sicr_job::{ScndIdxCreationJob, ScndIdxCreationRequest},
@@ -11,7 +11,6 @@ use crate::storage::engine_ssi::{
 };
 use anyhow::Result;
 use shorthand::ShortHand;
-use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -21,7 +20,6 @@ const SCND_IDXS_STATE_FILE_NAME: &str = "scnd_idxs_state.txt";
 const LSM_DIR_NAME: &str = "lsm";
 const SCND_IDXS_CREATION_JOB_DIR_NAME: &str = "si_cr_job";
 
-const GC_CHANNEL_CAPACITY: usize = 4096;
 const SIREQ_CHANNEL_CAPACITY: usize = 4;
 
 #[derive(ShortHand)]
@@ -32,8 +30,8 @@ pub struct DB {
     lsm_dir: LsmDir,
     lsm_state: Mutex<LsmState>,
 
+    min_held_list_ver_tx: watch::Sender<ListVer>,
     replace_avail_tx: watch::Sender<()>,
-    gc_avail_tx: mpsc::Sender<GcAbleInterval>,
     scnd_idx_request_tx: mpsc::Sender<ScndIdxCreationRequest>,
     is_terminating_tx: watch::Sender<()>,
 }
@@ -53,8 +51,8 @@ impl DB {
 
         let (lsm_dir, lsm_state) = LsmDir::load_or_new_lsm_dir(lsm_dir_path)?;
 
+        let (min_held_list_ver_tx, min_held_list_ver_rx) = watch::channel(LIST_VER_INITIAL);
         let (replace_avail_tx, replace_avail_rx) = watch::channel(());
-        let (gc_avail_tx, gc_avail_rx) = mpsc::channel(GC_CHANNEL_CAPACITY);
         let (scnd_idx_request_tx, scnd_idx_request_rx) = mpsc::channel(SIREQ_CHANNEL_CAPACITY);
         let (scnd_idx_work_tx, scnd_idx_work_rx) = mpsc::channel(SIREQ_CHANNEL_CAPACITY);
         let (is_terminating_tx, is_terminating_rx) = watch::channel(());
@@ -65,8 +63,8 @@ impl DB {
             lsm_dir,
             lsm_state: Mutex::new(lsm_state),
 
+            min_held_list_ver_tx,
             replace_avail_tx,
-            gc_avail_tx,
             scnd_idx_request_tx,
             is_terminating_tx,
         };
@@ -74,8 +72,8 @@ impl DB {
 
         let fc_job = FlushingAndCompactionJob::new(
             Arc::clone(&db),
-            HashMap::new(),
-            gc_avail_rx,
+            Default::default(),
+            min_held_list_ver_rx,
             replace_avail_rx,
             scnd_idx_request_rx,
             is_terminating_rx.clone(),

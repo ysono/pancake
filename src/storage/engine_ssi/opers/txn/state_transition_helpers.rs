@@ -1,7 +1,7 @@
 use crate::ds_n_a::atomic_linked_list::ListNode;
 use crate::ds_n_a::send_ptr::SendPtr;
 use crate::storage::engine_ssi::{
-    lsm_state::{unit::unit_utils, LsmElem, LsmElemContent, LsmState, LIST_VER_PLACEHOLDER},
+    lsm_state::{unit::unit_utils, ListVer, LsmElem, LsmState},
     opers::txn::Txn,
 };
 use std::sync::atomic::Ordering;
@@ -9,7 +9,7 @@ use tokio::sync::MutexGuard;
 
 impl<'txn> Txn<'txn> {
     pub(super) fn prep_boundary_node() -> Option<Box<ListNode<LsmElem>>> {
-        Some(unit_utils::new_dummy_node(LIST_VER_PLACEHOLDER, 1, false))
+        Some(unit_utils::new_dummy_node(1, false))
     }
 
     /// This helper ensures that the head is a dummy with one additional hold_count.
@@ -23,15 +23,13 @@ impl<'txn> Txn<'txn> {
         lsm_state: &mut MutexGuard<'a, LsmState>,
         prepped_boundary_node: &mut Option<Box<ListNode<LsmElem>>>,
     ) -> SendPtr<ListNode<LsmElem>> {
-        let update_or_provide_head = |content: Option<&LsmElemContent>| match content {
-            Some(LsmElemContent::Dummy { hold_count, .. }) => {
+        let update_or_provide_head = |elem: Option<&LsmElem>| match elem {
+            Some(LsmElem::Dummy { hold_count, .. }) => {
                 hold_count.fetch_add(1, Ordering::SeqCst);
                 return None;
             }
             _ => {
-                let mut new_head = prepped_boundary_node.take().unwrap();
-                new_head.elem.traversable_list_ver_lo_incl = lsm_state.curr_list_ver;
-                return Some(new_head);
+                return prepped_boundary_node.take();
             }
         };
         let snap_head_excl = SendPtr::from(lsm_state.update_or_push(update_or_provide_head));
@@ -44,7 +42,7 @@ impl<'txn> Txn<'txn> {
 
         let mut do_unhold = |node_ptr: SendPtr<ListNode<LsmElem>>| {
             let node_ref = unsafe { node_ptr.as_ref() };
-            if let LsmElemContent::Dummy { hold_count, .. } = &node_ref.elem.content {
+            if let LsmElem::Dummy { hold_count, .. } = &node_ref.elem {
                 let prior_hold_count = hold_count.fetch_sub(1, Ordering::SeqCst);
                 if prior_hold_count == 1 {
                     is_replace_avail |= true;
@@ -59,5 +57,30 @@ impl<'txn> Txn<'txn> {
         }
 
         is_replace_avail
+    }
+
+    pub(super) fn notify_fc_job(&self, updated_mhlv: Option<ListVer>, is_replace_avail: bool) {
+        // Send info about min_held_list_ver first, b/c it's cheaper for the F+C job to process.
+        self.send_updated_min_held_list_ver(updated_mhlv);
+        self.send_replace_avail(is_replace_avail);
+    }
+    fn send_updated_min_held_list_ver(&self, updated_mhlv: Option<ListVer>) {
+        if let Some(mhlv) = updated_mhlv {
+            self.db
+                .min_held_list_ver_tx()
+                .send_if_modified(|prior_mhlv| {
+                    if *prior_mhlv < mhlv {
+                        *prior_mhlv = mhlv;
+                        true
+                    } else {
+                        false
+                    }
+                });
+        }
+    }
+    fn send_replace_avail(&self, is_replace_avail: bool) {
+        if is_replace_avail {
+            self.db.replace_avail_tx().send(()).ok();
+        }
     }
 }

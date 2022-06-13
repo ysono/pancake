@@ -9,8 +9,10 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
-#[derive(From, Deref, DerefMut, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deref, DerefMut, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CommitVer(u64);
+
+pub const COMMIT_VER_INITIAL: CommitVer = CommitVer(0);
 
 #[derive(From, Deref, DerefMut, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TimestampNum(u64);

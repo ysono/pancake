@@ -1,16 +1,16 @@
 use crate::ds_n_a::atomic_linked_list::{AtomicLinkedList, ListNode};
 use crate::storage::engine_ssi::lsm_state::unit::{CommitVer, CommittedUnit};
-use derive_more::{Constructor, Deref, DerefMut, From};
-use std::collections::BTreeMap;
+use derive_more::{Deref, DerefMut};
+use std::collections::HashMap;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 
-#[derive(From, Deref, DerefMut, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Deref, DerefMut, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ListVer(u64);
 
-pub const LIST_VER_PLACEHOLDER: ListVer = ListVer(0);
+pub const LIST_VER_INITIAL: ListVer = ListVer(0);
 
-pub enum LsmElemContent {
+pub enum LsmElem {
     Unit(CommittedUnit),
     Dummy {
         hold_count: AtomicUsize,
@@ -18,22 +18,40 @@ pub enum LsmElemContent {
     },
 }
 
-pub struct LsmElem {
-    pub content: LsmElemContent,
-    pub traversable_list_ver_lo_incl: ListVer,
-}
-
-#[derive(Constructor)]
 pub struct LsmState {
     pub list: AtomicLinkedList<LsmElem>,
 
     pub next_commit_ver: CommitVer,
 
-    pub curr_list_ver: ListVer,
-    held_list_vers: BTreeMap<ListVer, usize>,
+    curr_list_ver: ListVer,
+    held_list_vers: HashMap<ListVer, usize>,
+    min_held_list_ver: ListVer,
 }
 
 impl LsmState {
+    pub fn new(committed_units: Vec<CommittedUnit>, next_commit_ver: CommitVer) -> Self {
+        let list_elems = committed_units.into_iter().map(LsmElem::Unit);
+        let list = AtomicLinkedList::from_elems(list_elems);
+
+        Self {
+            list,
+
+            next_commit_ver,
+
+            curr_list_ver: LIST_VER_INITIAL,
+            held_list_vers: Default::default(),
+            min_held_list_ver: LIST_VER_INITIAL,
+        }
+    }
+
+    /// Returns the previously curr, now penultimate, list_ver.
+    pub fn bump_curr_list_ver(&mut self) -> ListVer {
+        let penult = self.curr_list_ver;
+        *self.curr_list_ver += 1;
+        penult
+    }
+
+    /// Returns the curr_list_ver.
     pub fn hold_curr_list_ver(&mut self) -> ListVer {
         self.held_list_vers
             .entry(self.curr_list_ver)
@@ -41,7 +59,9 @@ impl LsmState {
         self.curr_list_ver
     }
 
-    pub fn unhold_list_ver(&mut self, arg_ver: ListVer) -> Option<GcAbleInterval> {
+    /// Returns
+    /// - an updated min_held_list_ver, if updated.
+    pub fn unhold_list_ver(&mut self, arg_ver: ListVer) -> Option<ListVer> {
         match self.held_list_vers.get_mut(&arg_ver) {
             None => {
                 return None;
@@ -53,24 +73,16 @@ impl LsmState {
                 } else {
                     self.held_list_vers.remove(&arg_ver);
 
-                    if arg_ver == self.curr_list_ver {
-                        return None;
+                    let orig_mhlv = self.min_held_list_ver;
+                    while self.min_held_list_ver < self.curr_list_ver
+                        && self.held_list_vers.get(&self.min_held_list_ver).is_none()
+                    {
+                        *self.min_held_list_ver += 1;
+                    }
+                    if orig_mhlv != self.min_held_list_ver {
+                        return Some(self.min_held_list_ver);
                     } else {
-                        let mut lo_excl = None;
-                        let mut hi_excl = None;
-
-                        for (list_ver, _) in self.held_list_vers.iter() {
-                            if list_ver < &arg_ver {
-                                lo_excl = Some(list_ver.clone());
-                            } else {
-                                hi_excl = Some(list_ver.clone());
-                                break;
-                            }
-                        }
-
-                        let hi_excl = hi_excl.unwrap_or(self.curr_list_ver);
-
-                        return Some(GcAbleInterval { lo_excl, hi_excl });
+                        return None;
                     }
                 }
             }
@@ -79,17 +91,14 @@ impl LsmState {
 
     /// Returns
     /// - the curr_list_ver.
-    /// - a newly GC'able ListVer interval, if any.
-    pub fn hold_and_unhold_list_ver<'a>(
-        &mut self,
-        prior: ListVer,
-    ) -> (ListVer, Option<GcAbleInterval>) {
-        let mut gc_itv = None;
+    /// - an updated min_held_list_ver, if updated.
+    pub fn hold_and_unhold_list_ver<'a>(&mut self, prior: ListVer) -> (ListVer, Option<ListVer>) {
+        let mut updated_mhlv = None;
         if prior != self.curr_list_ver {
-            gc_itv = self.unhold_list_ver(prior);
+            updated_mhlv = self.unhold_list_ver(prior);
             self.hold_curr_list_ver();
         }
-        return (self.curr_list_ver, gc_itv);
+        return (self.curr_list_ver, updated_mhlv);
     }
 
     pub fn is_held_list_vers_empty(&self) -> bool {
@@ -103,11 +112,11 @@ impl LsmState {
     /// Returns the resulting head.
     pub fn update_or_push<Cb>(&self, update_or_provide_head: Cb) -> *const ListNode<LsmElem>
     where
-        Cb: FnOnce(Option<&LsmElemContent>) -> Option<Box<ListNode<LsmElem>>>,
+        Cb: FnOnce(Option<&LsmElem>) -> Option<Box<ListNode<LsmElem>>>,
     {
         let maybe_head_ref = self.list.head();
-        let maybe_head_content = maybe_head_ref.map(|head_ref| &head_ref.elem.content);
-        if let Some(new_node) = update_or_provide_head(maybe_head_content) {
+        let maybe_head_elem = maybe_head_ref.map(|head_ref| &head_ref.elem);
+        if let Some(new_node) = update_or_provide_head(maybe_head_elem) {
             let new_head_ptr = self.list.push_node(new_node);
             return new_head_ptr;
         } else {
@@ -117,9 +126,4 @@ impl LsmState {
             }
         }
     }
-}
-
-pub struct GcAbleInterval {
-    pub lo_excl: Option<ListVer>,
-    pub hi_excl: ListVer,
 }
