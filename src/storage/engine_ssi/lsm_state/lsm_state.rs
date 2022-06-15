@@ -45,7 +45,7 @@ impl LsmState {
     }
 
     /// Returns the previously curr, now penultimate, list_ver.
-    pub fn bump_curr_list_ver(&mut self) -> ListVer {
+    pub fn get_and_bump_curr_list_ver(&mut self) -> ListVer {
         let penult = self.curr_list_ver;
         *self.curr_list_ver += 1;
         penult
@@ -59,8 +59,7 @@ impl LsmState {
         self.curr_list_ver
     }
 
-    /// Returns
-    /// - an updated min_held_list_ver, if updated.
+    /// Returns an updated min_held_list_ver, if updated.
     pub fn unhold_list_ver(&mut self, arg_ver: ListVer) -> Option<ListVer> {
         match self.held_list_vers.get_mut(&arg_ver) {
             None => {
@@ -73,17 +72,17 @@ impl LsmState {
                 } else {
                     self.held_list_vers.remove(&arg_ver);
 
-                    let orig_mhlv = self.min_held_list_ver;
-                    while self.min_held_list_ver < self.curr_list_ver
-                        && self.held_list_vers.get(&self.min_held_list_ver).is_none()
-                    {
-                        *self.min_held_list_ver += 1;
+                    if arg_ver == self.min_held_list_ver {
+                        while self.min_held_list_ver < self.curr_list_ver
+                            && self.held_list_vers.get(&self.min_held_list_ver).is_none()
+                        {
+                            *self.min_held_list_ver += 1;
+                        }
+                        if arg_ver != self.min_held_list_ver {
+                            return Some(self.min_held_list_ver);
+                        }
                     }
-                    if orig_mhlv != self.min_held_list_ver {
-                        return Some(self.min_held_list_ver);
-                    } else {
-                        return None;
-                    }
+                    return None;
                 }
             }
         }
@@ -92,7 +91,7 @@ impl LsmState {
     /// Returns
     /// - the curr_list_ver.
     /// - an updated min_held_list_ver, if updated.
-    pub fn hold_and_unhold_list_ver<'a>(&mut self, prior: ListVer) -> (ListVer, Option<ListVer>) {
+    pub fn hold_and_unhold_list_ver(&mut self, prior: ListVer) -> (ListVer, Option<ListVer>) {
         let mut updated_mhlv = None;
         if prior != self.curr_list_ver {
             updated_mhlv = self.unhold_list_ver(prior);

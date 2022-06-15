@@ -146,7 +146,7 @@ impl FlushingAndCompactionJob {
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
-            penult_list_ver = lsm_state.bump_curr_list_ver();
+            penult_list_ver = lsm_state.get_and_bump_curr_list_ver();
         }
 
         let nodes = slice

@@ -10,7 +10,7 @@ use tokio::sync::oneshot;
 
 const ENV_VAR_PARENT_DIR: &str = "PANCAKE_PARENT_DIR";
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let mut signal = signal(SignalKind::interrupt())?;
 
