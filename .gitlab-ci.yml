@@ -1,0 +1,8 @@
+image: "rust:latest"
+
+stages:
+  - test
+
+all_tests:
+  stage: test
+  script: cargo test -- --nocapture

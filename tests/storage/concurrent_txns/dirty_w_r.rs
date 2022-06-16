@@ -221,13 +221,13 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
     w_res?;
     let read_opt_pvs = r_res?;
 
-    /* A sanitizing validation of the test setup.
-    Assert that different reading txns saw different snapshots.
-    This assertion technically succeeds non-deterministically. If failing, try again. */
-    assert!(read_opt_pvs
+    let did_r_txns_see_diff_snaps = read_opt_pvs
         .iter()
         .skip(1)
-        .any(|opt_pv| opt_pv != &read_opt_pvs[0]));
+        .any(|opt_pv| opt_pv != &read_opt_pvs[0]);
+    if !did_r_txns_see_diff_snaps {
+        eprintln!("Test should be set up s.t. reading txns see different snapshots.");
+    }
     /* Assert that all PVs are from non-aborted txns. */
     for opt_pv in read_opt_pvs.iter() {
         if let Some(pv) = opt_pv {
