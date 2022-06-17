@@ -1,13 +1,13 @@
 use crate::storage::serde::{Datum, OptDatum};
 use anyhow::{anyhow, Result};
-use derive_more::Deref;
+use derive_more::{Deref, From};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use std::any;
 use std::io::{self, Read};
 use std::mem;
 
-#[derive(Deref, Clone, Copy)]
+#[derive(From, Deref, Clone, Copy)]
 pub struct DatumTypeInt(u8);
 impl From<DatumType> for DatumTypeInt {
     fn from(dat_type: DatumType) -> Self {

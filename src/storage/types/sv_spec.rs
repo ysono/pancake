@@ -1,10 +1,10 @@
+use crate::storage::engines_common::io_utils;
 use crate::storage::serde::{Datum, DatumType, DatumTypeInt};
 use crate::storage::types::{SVShared, Value};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use owning_ref::OwningRef;
-use std::any;
 use std::io::{BufReader, BufWriter, Read, Write};
-use std::mem;
+use std::str;
 use std::sync::Arc;
 
 /// [`SubValueSpec`] specifies a contiguous sub-portion of a [`Value`].
@@ -98,36 +98,37 @@ impl SubValueSpec {
 /* De/Serialization. */
 impl SubValueSpec {
     pub fn ser<W: Write>(&self, w: &mut BufWriter<W>) -> Result<()> {
-        // Write datum_type first, for easy alignment during reading.
+        /* datum_type */
         let datum_type_int = DatumTypeInt::from(self.datum_type);
-        w.write(&datum_type_int.to_ne_bytes())?;
+        write!(w, "{};", *datum_type_int)?;
 
+        /* member_idxs */
         for member_idx in self.member_idxs.iter() {
-            w.write(&member_idx.to_ne_bytes())?;
+            write!(w, "{},", member_idx)?;
         }
 
         Ok(())
     }
 
     pub fn deser<R: Read>(r: &mut BufReader<R>) -> Result<Self> {
-        let (_r_len, datum_type_int) = DatumTypeInt::read(r).map_err(|e| anyhow!(e))?;
+        let mut buf = vec![];
+
+        /* datum_type */
+        io_utils::read_until_then_trim(r, ';' as u8, &mut buf)?;
+        let datum_type_int = str::from_utf8(&buf)?.parse::<u8>()?;
+        let datum_type_int = DatumTypeInt::from(datum_type_int);
         let datum_type = DatumType::try_from(datum_type_int)?;
 
+        /* member_idxs */
         let mut member_idxs = vec![];
         loop {
-            let mut buf = [0u8; mem::size_of::<usize>()];
-            let r_len = r.read(&mut buf)?;
-            if r_len == 0 {
+            buf.clear();
+            io_utils::read_until_then_trim(r, ',' as u8, &mut buf)?;
+            if buf.is_empty() {
                 break;
-            } else if r_len == buf.len() {
-                let member_idx = usize::from_ne_bytes(buf);
-                member_idxs.push(member_idx);
-            } else {
-                return Err(anyhow!(
-                    "Byte misalignment in file for {}.",
-                    any::type_name::<Self>()
-                ));
             }
+            let member_idx = str::from_utf8(&buf)?.parse::<usize>()?;
+            member_idxs.push(member_idx);
         }
 
         Ok(Self {

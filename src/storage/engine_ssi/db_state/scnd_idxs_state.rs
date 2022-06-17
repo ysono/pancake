@@ -1,22 +1,13 @@
+use crate::storage::engines_common::io_utils;
 use crate::storage::types::SubValueSpec;
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, From};
-use std::any;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Write};
+use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 use std::path::Path;
 use std::str;
 use std::sync::Arc;
-
-fn read_line_trimmed<R: Read>(r: &mut BufReader<R>) -> Result<Vec<u8>> {
-    let mut buf = vec![];
-    r.read_until('\n' as u8, &mut buf)?;
-    if buf.last() == Some(&('\n' as u8)) {
-        buf.pop();
-    }
-    Ok(buf)
-}
 
 #[derive(Default, From, Deref, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct ScndIdxNum(u64);
@@ -46,36 +37,33 @@ impl ScndIdxState {
         Ok(())
     }
     fn do_deser<R: Read>(r: &mut BufReader<R>) -> Result<Option<Self>> {
-        let line = read_line_trimmed(r)?;
-        if line.len() == 0 {
+        let mut buf = vec![];
+
+        /* scnd_idx_num */
+        io_utils::read_until_then_trim(r, ',' as u8, &mut buf)?;
+        if buf.is_empty() {
             return Ok(None);
         }
-        let line = str::from_utf8(&line)?;
-        let tokens = line.split(',').collect::<Vec<&str>>();
-        match tokens.try_into() as Result<[&str; 2], _> {
-            Err(_) => Err(anyhow!(
-                "Incorrect format for {}.",
-                any::type_name::<Self>()
-            )),
-            Ok([scnd_idx_num, is_readable_str]) => {
-                let scnd_idx_num = scnd_idx_num
-                    .parse::<u64>()
-                    .map_err(|_| anyhow!("Invalid scnd_idx_num"))?;
+        let scnd_idx_num = str::from_utf8(&buf)?
+            .parse::<u64>()
+            .map_err(|_| anyhow!("Invalid scnd_idx_num"))?;
 
-                let is_readable = if is_readable_str == "T" {
-                    true
-                } else if is_readable_str == "F" {
-                    false
-                } else {
-                    return Err(anyhow!("Invalid is_readable"));
-                };
+        /* is_readable */
+        buf.clear();
+        io_utils::read_until_then_trim(r, '\n' as u8, &mut buf)?;
+        let is_readable_str = str::from_utf8(&buf)?;
+        let is_readable = if is_readable_str == "T" {
+            true
+        } else if is_readable_str == "F" {
+            false
+        } else {
+            return Err(anyhow!("Invalid is_readable"));
+        };
 
-                Ok(Some(Self {
-                    scnd_idx_num: ScndIdxNum(scnd_idx_num),
-                    is_readable,
-                }))
-            }
-        }
+        Ok(Some(Self {
+            scnd_idx_num: ScndIdxNum(scnd_idx_num),
+            is_readable,
+        }))
     }
 }
 
@@ -102,22 +90,25 @@ impl ScndIdxsState {
         Ok(())
     }
     fn do_deser<R: Read>(r: &mut BufReader<R>) -> Result<Self> {
+        let mut buf = vec![];
+
         /* next_scnd_idx_num */
-        let line = read_line_trimmed(r)?;
-        let line = str::from_utf8(&line)?;
-        let next_scnd_idx_num = line
+        io_utils::read_until_then_trim(r, '\n' as u8, &mut buf)?;
+        let next_scnd_idx_num = str::from_utf8(&buf)?
             .parse::<u64>()
             .map_err(|_| anyhow!("Invalid next_scnd_idx_num"))?;
         let next_scnd_idx_num = ScndIdxNum::from(next_scnd_idx_num);
 
         let mut scnd_idxs = HashMap::new();
         loop {
+            buf.clear();
+
             /* sv_spec */
-            let line = read_line_trimmed(r)?;
-            if line.len() == 0 {
+            io_utils::read_until_then_trim(r, '\n' as u8, &mut buf)?;
+            if buf.is_empty() {
                 break;
             }
-            let mut line_reader = BufReader::new(Cursor::new(line));
+            let mut line_reader = BufReader::new(Cursor::new(&buf));
             let sv_spec = SubValueSpec::deser(&mut line_reader)?;
 
             /* scnd_idx_state */
