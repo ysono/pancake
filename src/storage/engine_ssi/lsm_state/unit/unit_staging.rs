@@ -38,6 +38,14 @@ impl StagingUnit {
         }
     }
 
+    pub fn flush(&mut self) -> Result<()> {
+        self.prim.flush()?;
+        for (_, scnd) in self.scnds.iter_mut() {
+            scnd.flush()?;
+        }
+        Ok(())
+    }
+
     pub fn clear(&mut self) -> Result<()> {
         self.prim.clear()?;
         for (_, scnd) in self.scnds.iter_mut() {

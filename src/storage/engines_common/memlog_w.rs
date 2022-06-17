@@ -4,6 +4,7 @@ use anyhow::Result;
 use shorthand::ShortHand;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
+use std::mem;
 use std::path::Path;
 
 /// A MemLog is a sorted dictionary (called Memtable), backed up by a write-ahead log file.
@@ -38,21 +39,31 @@ where
     pub fn put(&mut self, k: K, v: OptDatum<V>) -> Result<()> {
         k.ser(&mut self.log_writer)?;
         v.ser(&mut self.log_writer)?;
-        self.log_writer.flush()?;
 
         self.r_memlog.memtable.insert(k, v);
 
         Ok(())
     }
 
+    pub fn flush(&mut self) -> Result<()> {
+        self.log_writer.flush()?;
+        Ok(())
+    }
+
     pub fn clear(&mut self) -> Result<()> {
         self.r_memlog.memtable.clear();
-        self.log_writer.flush()?;
+
         let log_file = OpenOptions::new()
             .write(true)
             .open(&self.r_memlog.log_path)?;
         log_file.set_len(0)?;
-        self.log_writer = DatumWriter::from(BufWriter::new(log_file));
+        let new_writer = DatumWriter::from(BufWriter::new(log_file));
+
+        let old_writer = mem::replace(&mut self.log_writer, new_writer);
+
+        let old_writer: BufWriter<File> = old_writer.into();
+        let (_old_file, _old_res_buf) = old_writer.into_parts(); // Drop these without flushing.
+
         Ok(())
     }
 }

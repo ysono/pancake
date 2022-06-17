@@ -3,14 +3,14 @@ use crate::storage::serde::{
     TupleDatumBodyLen,
 };
 use anyhow::Result;
-use derive_more::{Deref, DerefMut, From};
+use derive_more::{Deref, DerefMut, From, Into};
 use std::borrow::Borrow;
 use std::io::{BufWriter, Write};
 
 #[derive(Deref)]
 pub struct WriteLen(usize);
 
-#[derive(From, Deref, DerefMut)]
+#[derive(From, Into, Deref, DerefMut)]
 pub struct DatumWriter<W: Write> {
     w: BufWriter<W>,
 }

@@ -53,9 +53,14 @@ impl<'txn> Txn<'txn> {
     }
 
     pub(super) async fn try_commit(mut self) -> Result<TryCommitResult<'txn>> {
-        if self.staging.is_none() {
-            self.close().await?;
-            return Ok(TryCommitResult::DidCommit);
+        match &mut self.staging {
+            None => {
+                self.close().await?;
+                return Ok(TryCommitResult::DidCommit);
+            }
+            Some(stg) => {
+                stg.flush()?;
+            }
         }
 
         loop {

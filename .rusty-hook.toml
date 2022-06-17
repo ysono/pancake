@@ -1,6 +1,5 @@
 [hooks]
-pre-commit = "cargo fmt && cargo doc --no-deps"
-# pre-push = "cargo test"
+pre-commit = "cargo fmt --check && cargo doc --no-deps"
 
 [logging]
 verbose = true

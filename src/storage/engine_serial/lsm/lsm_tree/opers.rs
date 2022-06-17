@@ -13,6 +13,7 @@ where
     pub fn put(&mut self, k: K, v: Option<V>) -> Result<()> {
         let v = OptDatum::from(v);
         self.memlog.put(k, v)?;
+        self.memlog.flush()?;
 
         self.maybe_run_gc()?;
 
