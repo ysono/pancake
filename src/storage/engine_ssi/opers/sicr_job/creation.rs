@@ -24,7 +24,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::Ordering;
 
 impl ScndIdxCreationJob {
     pub(super) async fn create(&self, work: ScndIdxCreationWork) {
@@ -222,11 +222,11 @@ impl ScndIdxCreationJob {
     async fn insert_node(
         &self,
         snap_head_excl: SendPtr<ListNode<LsmElem>>,
-        mut node_own: Box<ListNode<LsmElem>>,
+        node_own: Box<ListNode<LsmElem>>,
     ) {
         let snap_head_excl = unsafe { snap_head_excl.as_ref() };
         let x_ptr = snap_head_excl.next.load(Ordering::SeqCst);
-        node_own.next = AtomicPtr::new(x_ptr);
+        node_own.next.store(x_ptr, Ordering::SeqCst);
         let node_ptr = Box::into_raw(node_own);
         snap_head_excl.next.store(node_ptr, Ordering::SeqCst);
     }

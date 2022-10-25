@@ -5,7 +5,7 @@ use crate::storage::engine_ssi::{
     opers::fc_job::{DanglingNodeSet, FlushingAndCompactionJob},
 };
 use anyhow::Result;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::Ordering;
 
 impl FlushingAndCompactionJob {
     pub(super) async fn flush_and_compact(&mut self) -> Result<()> {
@@ -132,8 +132,10 @@ impl FlushingAndCompactionJob {
         replacement_node: Option<Box<ListNode<LsmElem>>>,
         slice: Vec<&ListNode<LsmElem>>,
     ) {
-        if let Some(mut r_own) = replacement_node {
-            r_own.next = AtomicPtr::new(slice_tail_excl.as_ptr_mut());
+        if let Some(r_own) = replacement_node {
+            r_own
+                .next
+                .store(slice_tail_excl.as_ptr_mut(), Ordering::SeqCst);
             let r_ptr = Box::into_raw(r_own);
             slice_head_excl.next.store(r_ptr, Ordering::SeqCst);
         } else {

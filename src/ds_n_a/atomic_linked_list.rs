@@ -31,8 +31,8 @@ impl<T> AtomicLinkedList<T> {
             });
             let curr_ptr = Box::into_raw(curr_own);
 
-            let tail_ref = unsafe { &mut *tail_ptr };
-            tail_ref.next = AtomicPtr::new(curr_ptr);
+            let tail_ref = unsafe { &*tail_ptr };
+            tail_ref.next.store(curr_ptr, Ordering::SeqCst);
 
             tail_ptr = curr_ptr;
         }
@@ -59,9 +59,8 @@ impl<T> AtomicLinkedList<T> {
         self.push_node(y_own)
     }
 
-    pub fn push_node(&self, mut y_own: Box<ListNode<T>>) -> *const ListNode<T> {
-        let mut x_ptr = self.head_ptr.load(Ordering::Relaxed);
-        y_own.next = AtomicPtr::new(x_ptr);
+    pub fn push_node(&self, y_own: Box<ListNode<T>>) -> *const ListNode<T> {
+        let mut x_ptr = y_own.next.load(Ordering::SeqCst);
         let y_ptr = Box::into_raw(y_own);
         loop {
             let cae_res = self.head_ptr.compare_exchange_weak(
@@ -73,8 +72,8 @@ impl<T> AtomicLinkedList<T> {
             match cae_res {
                 Err(r_ptr) => {
                     x_ptr = r_ptr;
-                    let y_ref = unsafe { &mut *y_ptr };
-                    y_ref.next = AtomicPtr::new(x_ptr);
+                    let y_ref = unsafe { &*y_ptr };
+                    y_ref.next.store(x_ptr, Ordering::SeqCst);
                 }
                 Ok(_) => break,
             }
