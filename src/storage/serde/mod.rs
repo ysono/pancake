@@ -13,7 +13,7 @@
 //!     v1: Datum,
 //!     ...
 //!     // There are no separators in between Datums and nothing to indicate
-//!     // whether an Datum is a key or a value.
+//!     // whether a Datum is a key or a value.
 //! }
 //! ```
 //!
