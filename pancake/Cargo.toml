@@ -1,0 +1,24 @@
+[package]
+name = "pancake"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.66"
+derive_more = "0.99.17"
+hyper = { version = "0.14.20", features = ["full"] }
+itertools = "0.10.5"
+num-derive = "0.3.3"
+num-traits = "0.2.15"
+owning_ref = "0.4.1"
+regex = "1.6.0"
+routerify = "3.0.0"
+shorthand = "0.1.1"
+tokio = { version = "1.21.2", features = ["full"] }
+
+[dev-dependencies]
+async-trait = "0.1.58"
+rand = "0.8.5"
+rusty-hook = "0.11.2"
