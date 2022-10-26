@@ -1,0 +1,14 @@
+[package]
+name = "pancake_engine_tests"
+version = { workspace = true }
+edition = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+rand = { workspace = true }
+tokio = { workspace = true }
+
+pancake_engine_serial = { workspace = true }
+pancake_engine_ssi = { workspace = true }
+pancake_types = { workspace = true }

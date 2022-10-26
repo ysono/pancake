@@ -1,0 +1,16 @@
+[package]
+name = "pancake_server"
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+hyper = { workspace = true }
+regex = { workspace = true }
+routerify = { workspace = true }
+tokio = { workspace = true }
+
+pancake_engine_common = { workspace = true }
+pancake_engine_serial = { workspace = true }
+pancake_engine_ssi = { workspace = true }
+pancake_types = { workspace = true }

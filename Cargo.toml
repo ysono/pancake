@@ -1,4 +1,39 @@
 [workspace]
 members = [
-  "pancake",
+  # Serde and Types
+  "pancake_types",
+
+  # Engines
+  "pancake_engine_common",
+  "pancake_engine_serial",
+  "pancake_engine_ssi",
+  "pancake_engine_tests",
+
+  # Frontend
+  "pancake_server",
 ]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+anyhow = "1.0.66"
+async-trait = "0.1.58"
+derive_more = "0.99.17"
+hyper = { version = "0.14.20", features = ["full"] }
+itertools = "0.10.5"
+num-derive = "0.3.3"
+num-traits = "0.2.15"
+owning_ref = "0.4.1"
+rand = "0.8.5"
+regex = "1.6.0"
+routerify = "3.0.0"
+rusty-hook = "0.11.2"
+shorthand = "0.1.1"
+tokio = { version = "1.21.2", features = ["full"] }
+
+pancake_engine_common = { path = "./pancake_engine_common" }
+pancake_engine_serial = { path = "./pancake_engine_serial" }
+pancake_engine_ssi = { path = "./pancake_engine_ssi" }
+pancake_types = { path = './pancake_types' }

@@ -33,4 +33,4 @@ curl -i -X POST "${DB}/query" -d 'create index str'
 curl -i -X POST "${DB}/query" -d 'get where str between str(10) str(12)'
 ```
 
-For the full documentation on the query language, see [the rustdoc for query](https://ysono.github.io/pancake/pancake/frontend/query/basic/index.html).
+For the full documentation on the query language, see [the rustdoc for query](https://ysono.github.io/pancake/pancake_server/query/basic/index.html).
