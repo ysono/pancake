@@ -45,15 +45,15 @@
 //!
 //! Index all entries by value type.
 //!
-//! `create index int`
+//! `create index svspec(int)`
 //!
 //! Index all entries by sub-value specification.
 //!
-//! `create index nested( 0 str )`
+//! `create index svspec(0 str)`
 //!
 //! Index all entries by nested sub-value specification.
 //!
-//! `create index nested( 1 0 int )`
+//! `create index svspec(1 0 int)`
 //!
 //! ### Index-based selection
 //!
@@ -69,24 +69,24 @@
 //!
 //! - `SELECT * FROM table WHERE ${column} IS VALID COLUMN;`
 //!
-//! Get all entries by value type.
+//! Get all entries by whole-value.
 //!
-//! - `get where int int(1000)`
-//! - `get where int between int(500) int(1500)`
-//! - `get where int between _ int(1500)`
-//! - `get where int _`
+//! - `get where svspec(int) int(1000)`
+//! - `get where svspec(int) between int(500) int(1500)`
+//! - `get where svspec(int) between _ int(1500)`
+//! - `get where svspec(int) _`
 //!
 //! Get all entries by sub-value specification.
 //!
-//! - `get where nested( 0 str ) str(s6000)`
-//! - `get where nested( 0 str ) between str(s1000) str(s9000)`
-//! - `get where nested( 0 str ) _`
+//! - `get where svspec(0 str) str(s6000)`
+//! - `get where svspec(0 str) between str(s1000) str(s9000)`
+//! - `get where svspec(0 str) _`
 //!
 //! Get all entries by nested sub-value specification.
 //!
-//! - `get where nested( 1 0 int ) int(60)`
-//! - `get where nested( 1 0 int ) between int(60) int(61)`
-//! - `get where nested( 1 0 int ) _`
+//! - `get where svspec(1 0 int) int(60)`
+//! - `get where svspec(1 0 int) between int(60) int(61)`
+//! - `get where svspec(1 0 int) _`
 //!
 //! # Caveats
 //!
@@ -152,7 +152,7 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Operat
             Some(&"where") => {
                 iter.next();
 
-                let spec = subvalspec(&mut iter)?;
+                let spec = svspec(&mut iter)?;
 
                 match iter.peek() {
                     Some(&"between") => {
@@ -203,11 +203,19 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Operat
         },
         Some("create") => match iter.next() {
             Some("index") => {
-                let spec = subvalspec(&mut iter)?;
+                let spec = svspec(&mut iter)?;
                 eos(&mut iter)?;
                 return Ok(Operation::CreateScndIdx(spec));
             }
             x => return Err(anyhow!("Expected creatable but found {:?}", x)),
+        },
+        Some("delete") => match iter.next() {
+            Some("index") => {
+                let spec = svspec(&mut iter)?;
+                eos(&mut iter)?;
+                return Ok(Operation::DelScndIdx(spec));
+            }
+            x => return Err(anyhow!("Expected deletable but found {:?}", x)),
         },
         x => return Err(anyhow!("Expected operation but found {:?}", x)),
     }
@@ -277,11 +285,9 @@ fn datum<'a, I: Iterator<Item = &'a str>>(iter: &mut Peekable<I>) -> Result<Datu
     }
 }
 
-fn subvalspec<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<SubValueSpec> {
+fn svspec<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<SubValueSpec> {
     match iter.next() {
-        Some("str") => return Ok(SubValueSpec::whole(DatumType::Str)),
-        Some("int") => return Ok(SubValueSpec::whole(DatumType::I64)),
-        Some("nested") => match iter.next() {
+        Some("svspec") => match iter.next() {
             Some("(") => {
                 let mut member_idxs = vec![];
                 let mut datum_type = None;
@@ -290,31 +296,29 @@ fn subvalspec<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<SubValueS
                         Some(")") => break,
                         Some(token) => {
                             if datum_type.is_some() {
-                                return Err(anyhow!("Nested subvalspec's datum_type is followed by an extra token {}.", token));
-                            }
-                            if token == "str" {
+                                return Err(anyhow!(
+                                    "svspec() contains an extra token {} following datum_type.",
+                                    token
+                                ));
+                            } else if token == "str" {
                                 datum_type = Some(DatumType::Str);
                             } else if token == "int" {
                                 datum_type = Some(DatumType::I64);
                             } else {
                                 let member_idx = token.parse::<usize>().context(format!(
-                                    "Expected nested subvalspec member_idx but found {}.",
+                                    "Expected svspec() member_idx but found {}.",
                                     token
                                 ))?;
                                 member_idxs.push(member_idx);
                             }
                         }
                         None => {
-                            return Err(anyhow!("Expected nested subvalspec defn but found EOS"))
+                            return Err(anyhow!("Expected svspec() defn to close but found EOS."))
                         }
                     }
                 }
                 match datum_type {
-                    None => {
-                        return Err(anyhow!(
-                            "Nested subvalspec defn did not contain datum_type."
-                        ))
-                    }
+                    None => return Err(anyhow!("svspec() did not contain datum_type.")),
                     Some(datum_type) => {
                         return Ok(SubValueSpec {
                             member_idxs,
@@ -323,14 +327,9 @@ fn subvalspec<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<SubValueS
                     }
                 }
             }
-            x => {
-                return Err(anyhow!(
-                    "Expected opening of nested subvalspec but found {:?}",
-                    x
-                ))
-            }
+            x => return Err(anyhow!("Expected opening of svspec() but found {:?}.", x)),
         },
-        x => return Err(anyhow!("Expected opening of subvalspec but found {:?}", x)),
+        x => return Err(anyhow!("Expected opening of svspec() but found {:?}.", x)),
     }
 }
 
@@ -365,7 +364,7 @@ mod test {
             PrimaryKey(Datum::I64(123)),
             Some(Value(Datum::Str(String::from("val1")))),
         ));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         let q_str = "put tup( str(a) int(123) ) int(321)";
         let exp_q_obj = Operation::from(Statement::Put(
@@ -375,7 +374,7 @@ mod test {
             ])),
             Some(Value(Datum::I64(321))),
         ));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         Ok(())
     }
@@ -384,7 +383,7 @@ mod test {
     fn del() -> Result<()> {
         let q_str = "del int(123)";
         let exp_q_obj = Operation::from(Statement::Put(PrimaryKey(Datum::I64(123)), None));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         Ok(())
     }
@@ -395,19 +394,19 @@ mod test {
         let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::One(PrimaryKey(
             Datum::I64(123),
         ))));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         let q_str = "get str(key1)";
         let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::One(PrimaryKey(
             Datum::Str(String::from("key1")),
         ))));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         let q_str = "get tup( str(a) int(123) )";
         let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::One(PrimaryKey(
             Datum::Tuple(vec![Datum::Str(String::from("a")), Datum::I64(123)]),
         ))));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         Ok(())
     }
@@ -419,47 +418,47 @@ mod test {
             lo: Some(PrimaryKey(Datum::I64(123))),
             hi: Some(PrimaryKey(Datum::I64(234))),
         }));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         let q_str = "get between int(123) _";
         let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::Range {
             lo: Some(PrimaryKey(Datum::I64(123))),
             hi: None,
         }));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         let q_str = "get between _ int(234)";
         let exp_q_obj = Operation::from(Statement::GetPK(SearchRange::Range {
             lo: None,
             hi: Some(PrimaryKey(Datum::I64(234))),
         }));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         let q_str = "get between _ _";
         let exp_q_obj =
             Operation::from(Statement::GetPK(SearchRange::Range { lo: None, hi: None }));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         Ok(())
     }
 
     #[test]
     fn get_where() -> Result<()> {
-        let q_str = "get where int _";
+        let q_str = "get where svspec(int) _";
         let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::whole(DatumType::I64),
             SearchRange::all(),
         ));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
-        let q_str = "get where int int(123)";
+        let q_str = "get where svspec(int) int(123)";
         let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::whole(DatumType::I64),
             SearchRange::One(SubValue(Datum::I64(123))),
         ));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
-        let q_str = "get where nested( 1 0 str ) str(subval_a)";
+        let q_str = "get where svspec(1 0 str) str(subval_a)";
         let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec {
                 member_idxs: vec![1, 0],
@@ -467,14 +466,14 @@ mod test {
             },
             SearchRange::One(SubValue(Datum::Str(String::from("subval_a")))),
         ));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         Ok(())
     }
 
     #[test]
     fn get_where_between() -> Result<()> {
-        let q_str = "get where int between int(123) int(234)";
+        let q_str = "get where svspec(int) between int(123) int(234)";
         let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::whole(DatumType::I64),
             SearchRange::Range {
@@ -482,9 +481,9 @@ mod test {
                 hi: Some(SubValue(Datum::I64(234))),
             },
         ));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
-        let q_str = "get where int between int(123) _";
+        let q_str = "get where svspec(int) between int(123) _";
         let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::whole(DatumType::I64),
             SearchRange::Range {
@@ -492,9 +491,9 @@ mod test {
                 hi: None,
             },
         ));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
-        let q_str = "get where int between _ int(234)";
+        let q_str = "get where svspec(int) between _ int(234)";
         let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::whole(DatumType::I64),
             SearchRange::Range {
@@ -502,37 +501,60 @@ mod test {
                 hi: Some(SubValue(Datum::I64(234))),
             },
         ));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
-        let q_str = "get where int between _ _";
+        let q_str = "get where svspec(int) between _ _";
         let exp_q_obj = Operation::from(Statement::GetSV(
             SubValueSpec::whole(DatumType::I64),
             SearchRange::all(),
         ));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         Ok(())
     }
 
     #[test]
     fn create_scnd_idx() -> Result<()> {
-        let q_str = "create index int";
+        let q_str = "create index svspec(int)";
         let exp_q_obj = Operation::CreateScndIdx(SubValueSpec::whole(DatumType::I64));
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
-        let q_str = "create index nested( 2 int )";
+        let q_str = "create index svspec(2 int)";
         let exp_q_obj = Operation::CreateScndIdx(SubValueSpec {
             member_idxs: vec![2],
             datum_type: DatumType::I64,
         });
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
-        let q_str = "create index nested( 1 0 str )";
+        let q_str = "create index svspec(1 0 str)";
         let exp_q_obj = Operation::CreateScndIdx(SubValueSpec {
             member_idxs: vec![1, 0],
             datum_type: DatumType::Str,
         });
-        assert!(parse(q_str)? == exp_q_obj);
+        assert_eq!(parse(q_str)?, exp_q_obj);
+
+        Ok(())
+    }
+
+    #[test]
+    fn delete_scnd_idx() -> Result<()> {
+        let q_str = "delete index svspec(int)";
+        let exp_q_obj = Operation::DelScndIdx(SubValueSpec::whole(DatumType::I64));
+        assert_eq!(parse(q_str)?, exp_q_obj);
+
+        let q_str = "delete index svspec(2 int)";
+        let exp_q_obj = Operation::DelScndIdx(SubValueSpec {
+            member_idxs: vec![2],
+            datum_type: DatumType::I64,
+        });
+        assert_eq!(parse(q_str)?, exp_q_obj);
+
+        let q_str = "delete index svspec(1 0 str)";
+        let exp_q_obj = Operation::DelScndIdx(SubValueSpec {
+            member_idxs: vec![1, 0],
+            datum_type: DatumType::Str,
+        });
+        assert_eq!(parse(q_str)?, exp_q_obj);
 
         Ok(())
     }

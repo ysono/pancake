@@ -37,8 +37,10 @@ async fn main() -> Result<()> {
     ssi_db.terminate().await;
 
     frontend_task.await?;
-    ssi_fc_task.await??;
-    ssi_sicr_task.await??;
+    let ssi_fc_res = ssi_fc_task.await?;
+    let ssi_sicr_res = ssi_sicr_task.await?;
+    ssi_fc_res?;
+    ssi_sicr_res?;
 
     Ok(())
 }

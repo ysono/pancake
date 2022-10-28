@@ -7,7 +7,6 @@ pub enum Statement {
     Put(PrimaryKey, Option<Value>),
 }
 
-#[allow(dead_code)] // `DelScndIdx` is never used. TODO support it in query language.
 #[derive(PartialEq, Eq, Debug)]
 pub enum Operation {
     Query(Statement),

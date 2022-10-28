@@ -46,8 +46,10 @@ async fn integration_test_main() -> Result<()> {
     test_concurrent_txns(&ssi_db).await?;
 
     ssi_db.terminate().await;
-    ssi_fc_task.await??;
-    ssi_sicr_task.await??;
+    let ssi_fc_res = ssi_fc_task.await?;
+    let ssi_sicr_res = ssi_sicr_task.await?;
+    ssi_fc_res?;
+    ssi_sicr_res?;
 
     Ok(())
 }

@@ -83,7 +83,7 @@ impl DbState {
         let sis = &self.scnd_idxs_state;
         match sis.scnd_idxs.get(sv_spec) {
             None => DeletionResult::DoesNotExist,
-            Some(si_state) if si_state.is_readable == true => DeletionResult::CreationInProgress,
+            Some(si_state) if si_state.is_readable != true => DeletionResult::CreationInProgress,
             Some(_) => DeletionResult::Deletable,
         }
     }
