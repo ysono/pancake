@@ -305,7 +305,7 @@ fn svspec<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<SubValueSpec>
                             } else if token == "int" {
                                 datum_type = Some(DatumType::I64);
                             } else {
-                                let member_idx = token.parse::<usize>().context(format!(
+                                let member_idx = token.parse::<u32>().context(format!(
                                     "Expected svspec() member_idx but found {}.",
                                     token
                                 ))?;

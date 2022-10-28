@@ -29,7 +29,7 @@ impl<R: Read + Seek> DatumReader<R> {
                         let (delta_r_len, body_len) =
                             DatumBodyLen::read(&mut self.r).map_err(|e| anyhow!(e))?;
                         r_len += delta_r_len;
-                        *body_len
+                        *body_len as usize
                     }
                 };
                 self.r.seek(SeekFrom::Current(dat_body_len as i64))?;
@@ -55,7 +55,7 @@ impl<R: Read + Seek> DatumReader<R> {
                         let mut buf = [0u8; mem::size_of::<i64>()];
                         self.r.read_exact(&mut buf).map_err(|e| anyhow!(e))?;
                         r_len += buf.len();
-                        let i = i64::from_ne_bytes(buf);
+                        let i = i64::from_le_bytes(buf);
                         OptDatum::Some(Datum::I64(i))
                     }
                     DatumType::Bytes => {
@@ -81,7 +81,7 @@ impl<R: Read + Seek> DatumReader<R> {
         let (delta_r_len, body_len) = DatumBodyLen::read(&mut self.r).map_err(|e| anyhow!(e))?;
         *r_len += delta_r_len;
 
-        let mut buf = vec![0u8; *body_len];
+        let mut buf = vec![0u8; *body_len as usize];
         self.r.read_exact(&mut buf).map_err(|e| anyhow!(e))?;
         *r_len += buf.len();
 
@@ -99,7 +99,7 @@ impl<R: Read + Seek> DatumReader<R> {
             MembersCount::read(&mut self.r).map_err(|e| anyhow!(e))?;
         *r_len += delta_r_len;
 
-        let mut members = Vec::with_capacity(*members_count);
+        let mut members = Vec::with_capacity(*members_count as usize);
         for _ in 0..*members_count {
             match self.deser_single(false)? {
                 ReadResult::EOF => return Err(anyhow!("EOF while reading Tuple member.")),

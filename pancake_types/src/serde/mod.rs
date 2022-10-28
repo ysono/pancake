@@ -23,57 +23,58 @@
 //! In case we need to deprecate supported datum_types over time, this allows us
 //! `(pow(2, 8) - count_of_active_datum_types)` deprecations, before rolling over to zero.
 //!
+//! Some `Datum` types have fixed body lengths; these lengths are not encoded.
+//! For other `Datum` types, which have dynamic body lengths, these lengths are
+//! encoded following `datum_type`.
+//! Readers may skip the body.
+//!
+//! A `Datum::Tuple` nests other non-`Tombstone` `Datum`s, including possibly other `Datum::Tuple`s.
+//!
 //! ```text
 //! struct OptDatum::Tombstone {
-//!     datum_type:     DatumTypeInt(u8),
+//!     datum_type:     u8,
 //! }
 //!
 //! struct Datum::I64 {
-//!     datum_type:     DatumTypeInt(u8),
-//!     datum_body:     [u8; 4],
+//!     datum_type:     u8,
+//!     datum_body:     [u8; 8],
 //! }
 //!
 //! struct Datum::Bytes or Datum::Str {
-//!     datum_type:     DatumTypeInt(u8),
-//!     datum_body_len: DatumBodyLen(usize),
-//!     datum_body:     [u8; datum_body_len],
+//!     datum_type:         u8,
+//!     datum_body_len:     u32,
+//!     datum_body:         [u8; datum_body_len],
 //! }
-//! ```
 //!
-//! A `Tuple`-typed `Datum` nests other `Datum`s, including possibly other `Tuple`-typed `Datum`s.
-//!
-//! ```text
 //! struct Datum::Tuple {
-//!     datum_type:     DatumTypeInt(u8),
-//!     datum_body_len: DatumBodyLen(usize),
-//!     datum_body:     TupleBody {
-//!         members_count:  MembersCount(usize),
-//!         member_0:       Datum::I64 {
-//!             datum_type:     DatumTypeInt(u8),
-//!             datum_body:     [u8; 4],
+//!     datum_type:         u8,
+//!     datum_body_len:     u32,
+//!     datum_body:         {
+//!         members_count:      u32,
+//!         member_0:           Datum::I64 {
+//!             datum_type:         u8,
+//!             datum_body:         [u8; 8],
 //!         },
-//!         member_1:       Datum::Bytes or Datum::Str {
-//!             datum_type:     DatumTypeInt(u8),
-//!             datum_body_len: DatumBodyLen(usize),
-//!             datum_body:     [u8; datum_body_len],
+//!         member_1:           Datum::Bytes or Datum::Str {
+//!             datum_type:         u8,
+//!             datum_body_len:     u32,
+//!             datum_body:         [u8; datum_body_len],
 //!         },
-//!         member_2:       Datum::Tuple {
-//!             datum_type:     DatumTypeInt(u8),
+//!         member_2:           Datum::Tuple {
+//!             datum_type:         u8,
 //!             // (Notice, no datum_body_len here.)
-//!             datum_body: TupleBody {
-//!                 members_count:  MembersCount(usize),
-//!                 member_0:       Datum::*,
+//!             datum_body:         {
+//!                 members_count:      u32,
+//!                 member_0:           Datum::*,
 //!                 ...
 //!             }
 //!         },
+//!         member_3:           Datum::*
 //!         ...
 //!         // Tombstone may not be nested under Tuple.
 //!     }
 //! }
 //! ```
-//!
-//! A `Datum` can be skipped over without being deserialized.
-//! The amount of bytes to skip is derived dynamically according to `datum_type`.
 
 mod iter_k;
 mod iter_kv;

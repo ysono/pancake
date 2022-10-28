@@ -57,7 +57,7 @@ use std::sync::Arc;
 /// ```
 #[derive(PartialEq, Eq, Hash, Debug)]
 pub struct SubValueSpec {
-    pub member_idxs: Vec<usize>,
+    pub member_idxs: Vec<u32>,
     pub datum_type: DatumType,
 }
 
@@ -76,9 +76,10 @@ impl SubValueSpec {
     pub fn extract(&self, pv: &Arc<Value>) -> Option<SVShared> {
         let mut dat: &Datum = pv;
         for member_idx in self.member_idxs.iter() {
+            let member_idx = *member_idx as usize;
             match dat {
-                Datum::Tuple(members) if *member_idx < members.len() => {
-                    dat = &members[*member_idx];
+                Datum::Tuple(members) if member_idx < members.len() => {
+                    dat = &members[member_idx];
                 }
                 _ => return None,
             }
@@ -127,7 +128,7 @@ impl SubValueSpec {
             if buf.is_empty() {
                 break;
             }
-            let member_idx = str::from_utf8(&buf)?.parse::<usize>()?;
+            let member_idx = str::from_utf8(&buf)?.parse::<u32>()?;
             member_idxs.push(member_idx);
         }
 

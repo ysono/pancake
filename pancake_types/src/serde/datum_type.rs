@@ -19,7 +19,7 @@ impl DatumTypeInt {
     pub fn read(r: &mut impl Read) -> Result<(usize, Self), io::Error> {
         let mut buf = [0u8; mem::size_of::<u8>()];
         r.read_exact(&mut buf)?;
-        let int = u8::from_ne_bytes(buf);
+        let int = u8::from_le_bytes(buf);
         Ok((buf.len(), Self(int)))
     }
 }

@@ -27,7 +27,7 @@ impl<W: Write> DatumWriter<W> {
     pub fn ser_dat(&mut self, dat: &Datum) -> Result<WriteLen> {
         let dat_type = DatumType::from(dat);
         match dat {
-            Datum::I64(i) => self.ser_fixed_len_datum_body(dat_type, i.to_ne_bytes()),
+            Datum::I64(i) => self.ser_fixed_len_datum_body(dat_type, i.to_le_bytes()),
             Datum::Bytes(b) => self.ser_variable_len_datum_body(dat_type, b),
             Datum::Str(s) => self.ser_variable_len_datum_body(dat_type, s.as_bytes()),
             Datum::Tuple(members) => self.ser_root_tuple(&members[..]),
@@ -40,16 +40,16 @@ impl<W: Write> DatumWriter<W> {
         buf: [u8; LEN],
     ) -> Result<WriteLen> {
         let mut w_len = 0;
-        w_len += self.w.write(&DatumTypeInt::from(dat_type).to_ne_bytes())?;
+        w_len += self.w.write(&DatumTypeInt::from(dat_type).to_le_bytes())?;
         w_len += self.w.write(&buf)?;
         Ok(WriteLen(w_len))
     }
     fn ser_variable_len_datum_body(&mut self, dat_type: DatumType, buf: &[u8]) -> Result<WriteLen> {
         let mut w_len = 0;
-        w_len += self.w.write(&DatumTypeInt::from(dat_type).to_ne_bytes())?;
+        w_len += self.w.write(&DatumTypeInt::from(dat_type).to_le_bytes())?;
         w_len += self
             .w
-            .write(&DatumBodyLen::from_body_buf(buf).to_ne_bytes())?;
+            .write(&DatumBodyLen::from_body_buf(buf).to_le_bytes())?;
         w_len += self.w.write(buf)?;
         Ok(WriteLen(w_len))
     }
@@ -60,8 +60,8 @@ impl<W: Write> DatumWriter<W> {
         let mut w_len = 0;
         w_len += self
             .w
-            .write(&DatumTypeInt::from(DatumType::Tuple).to_ne_bytes())?;
-        w_len += self.w.write(&root_tup_body_len.to_ne_bytes())?;
+            .write(&DatumTypeInt::from(DatumType::Tuple).to_le_bytes())?;
+        w_len += self.w.write(&root_tup_body_len.to_le_bytes())?;
         self.ser_nested_tuple_body(members, &mut w_len)?;
         Ok(WriteLen(w_len))
     }
@@ -74,7 +74,7 @@ impl<W: Write> DatumWriter<W> {
     }
     fn derive_nested_single_len(dat: &Datum) -> NestedDatumLen {
         match dat {
-            Datum::I64(i) => NestedDatumLen::from_fixed_body_len(&i.to_ne_bytes()),
+            Datum::I64(i) => NestedDatumLen::from_fixed_body_len(&i.to_le_bytes()),
             Datum::Bytes(b) => {
                 NestedDatumLen::from_variable_body_len(DatumBodyLen::from_body_buf(b))
             }
@@ -94,7 +94,7 @@ impl<W: Write> DatumWriter<W> {
     ) -> Result<()> {
         *w_len += self
             .w
-            .write(&MembersCount::from_members(members).to_ne_bytes())?;
+            .write(&MembersCount::from_members(members).to_le_bytes())?;
         for member in members {
             self.ser_nested_single(member.borrow(), w_len)?;
         }
@@ -104,7 +104,7 @@ impl<W: Write> DatumWriter<W> {
         let dat_type = DatumType::from(dat);
         match dat {
             Datum::I64(i) => {
-                *w_len += self.ser_fixed_len_datum_body(dat_type, i.to_ne_bytes())?.0;
+                *w_len += self.ser_fixed_len_datum_body(dat_type, i.to_le_bytes())?.0;
             }
             Datum::Bytes(b) => {
                 *w_len += self.ser_variable_len_datum_body(dat_type, b)?.0;
@@ -115,7 +115,7 @@ impl<W: Write> DatumWriter<W> {
             Datum::Tuple(members) => {
                 *w_len += self
                     .w
-                    .write(&DatumTypeInt::from(DatumType::Tuple).to_ne_bytes())?;
+                    .write(&DatumTypeInt::from(DatumType::Tuple).to_le_bytes())?;
                 self.ser_nested_tuple_body(members, w_len)?;
             }
         }
