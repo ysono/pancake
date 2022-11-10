@@ -2,6 +2,8 @@ mod engine_serial;
 mod engine_ssi;
 mod resp;
 
+use crate::wasm::engine_serial::WasmEngine as SerialWasmEng;
+use crate::wasm::engine_ssi::WasmEngine as SsiWasmEng;
 use anyhow::{Error, Result};
 use hyper::{Body, Request, Response, Server, StatusCode};
 use pancake_engine_serial::DB as SerialDb;
@@ -30,12 +32,19 @@ async fn error_handler(err: routerify::RouteError, _: RequestInfo) -> Response<B
         .unwrap()
 }
 
-fn router(serial_db: Arc<RwLock<SerialDb>>, ssi_db: Arc<SsiDb>) -> Router<Body, Error> {
+fn router(
+    serial_db: Arc<RwLock<SerialDb>>,
+    serial_wasm_engine: SerialWasmEng,
+    ssi_db: Arc<SsiDb>,
+    ssi_wasm_engine: SsiWasmEng,
+) -> Router<Body, Error> {
     let mut rb = Router::builder()
         .middleware(Middleware::pre(logger))
         .err_handler_with_info(error_handler)
         .data(serial_db)
-        .data(ssi_db);
+        .data(serial_wasm_engine)
+        .data(ssi_db)
+        .data(ssi_wasm_engine);
     rb = engine_serial::handlers::add_routes(rb);
     rb = engine_ssi::handlers::add_routes(rb);
     rb.build().unwrap()
@@ -43,10 +52,12 @@ fn router(serial_db: Arc<RwLock<SerialDb>>, ssi_db: Arc<SsiDb>) -> Router<Body, 
 
 pub async fn main(
     serial_db: Arc<RwLock<SerialDb>>,
+    serial_wasm_engine: SerialWasmEng,
     ssi_db: Arc<SsiDb>,
+    ssi_wasm_engine: SsiWasmEng,
     terminate_rx: oneshot::Receiver<()>,
 ) {
-    let router = router(serial_db, ssi_db);
+    let router = router(serial_db, serial_wasm_engine, ssi_db, ssi_wasm_engine);
 
     let service = RouterService::new(router).unwrap();
 

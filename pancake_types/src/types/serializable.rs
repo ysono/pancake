@@ -2,14 +2,28 @@ use crate::serde::{Datum, OptDatum, ReadResult, WriteLen};
 use anyhow::{anyhow, Result};
 use std::any;
 use std::borrow::Borrow;
-use std::io::{Read, Seek, Write};
+use std::io::{Cursor, Read, Seek, Write};
 
 pub trait Ser {
     fn ser<W: Write>(&self, w: &mut W) -> Result<WriteLen>;
+
+    fn ser_solo(&self) -> Result<Vec<u8>> {
+        let mut buf = vec![];
+        self.ser(&mut buf)?;
+        Ok(buf)
+    }
 }
 pub trait Deser: Sized {
     fn skip<R: Read + Seek>(r: &mut R) -> Result<ReadResult<()>>;
     fn deser<R: Read + Seek>(r: &mut R) -> Result<ReadResult<Self>>;
+
+    fn deser_solo(buf: &[u8]) -> Result<Self> {
+        let mut r = Cursor::new(&buf);
+        match Self::deser(&mut r)? {
+            ReadResult::EOF => Err(anyhow!("No data")),
+            ReadResult::Some(_, moi) => Ok(moi),
+        }
+    }
 }
 
 /* Blanket impls for Ser */

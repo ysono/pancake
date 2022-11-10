@@ -22,8 +22,8 @@ mod test_serde {
 
     fn verify_serde(spec: SubValueSpec) -> Result<()> {
         let mut buf = vec![];
-        spec.ser(&mut BufWriter::new(&mut buf))?;
-        let deserialized = SubValueSpec::deser(&mut BufReader::new(Cursor::new(buf)))?;
+        spec.ser(&mut buf)?;
+        let deserialized = SubValueSpec::deser(&mut Cursor::new(&buf))?;
         assert_eq!(spec, deserialized);
         Ok(())
     }

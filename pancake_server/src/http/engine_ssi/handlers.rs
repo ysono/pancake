@@ -2,6 +2,7 @@ use super::query;
 use crate::api::{Operation, SearchRange, Statement};
 use crate::http::resp;
 use crate::query::basic::{self as query_basic};
+use crate::wasm::engine_ssi::WasmEngine;
 use anyhow::{Error, Result};
 use hyper::{Body, Request, Response};
 use pancake_engine_ssi::DB;
@@ -16,6 +17,7 @@ pub fn add_routes(rb: RouterBuilder<Body, Error>) -> RouterBuilder<Body, Error> 
         .put("/ssi/key/:key", put_handler)
         .delete("/ssi/key/:key", delete_handler)
         .post("/ssi/query", query_handler)
+        .post("/ssi/wasm", wasm_handler)
 }
 
 async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
@@ -80,5 +82,21 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
             Err(e) => return resp::err(e),
             Ok(()) => return resp::no_content(),
         },
+    }
+}
+
+async fn wasm_handler(req: Request<Body>) -> Result<Response<Body>> {
+    let (parts, body) = req.into_parts();
+
+    let compo_bytes = hyper::body::to_bytes(body).await?;
+
+    let retry_limit = 5;
+
+    let engine = parts.data::<WasmEngine>().unwrap();
+
+    let wasm_res = engine.serve(&compo_bytes, retry_limit).await;
+    match wasm_res {
+        Err(e) => resp::err(e),
+        Ok(s) => resp::ok(s),
     }
 }

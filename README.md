@@ -14,14 +14,14 @@ See [doc diagrams](./doc).
 
 ## Sample usage
 
-Start the server:
+Starting the server:
 
 ```sh
 cargo run --package pancake_server
 ```
 
-Access the server:
+Accessing the server:
 
-See [this sample test script](./pancake_server/tests/pancake-test-script.sh) for an example.
-
-For the full documentation on the query language, see [the rustdoc for query](https://ysono.github.io/pancake/pancake_server/query/basic/index.html).
+- Simple CRUD by http method.
+- A [query language](https://ysono.github.io/pancake/pancake_server/query/basic/index.html). See [this sample test script](./pancake_server/tests/pancake-test-script.sh) for examples.
+- Transaction expressed as a [WASM component](https://github.com/WebAssembly/component-model). See [instruction](examples_wasm_txn/readme.md).

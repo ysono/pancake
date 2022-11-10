@@ -46,7 +46,7 @@ impl<'txn> Txn<'txn> {
     pub async fn run<ClientOk>(
         db: &'txn DB,
         retry_limit: usize,
-        run_txn: impl Fn(&mut Self) -> Result<ClientCommitDecision<ClientOk>>,
+        mut run_txn: impl FnMut(&mut Self) -> Result<ClientCommitDecision<ClientOk>>,
     ) -> Result<ClientOk> {
         let db_state_guard = db.db_state().read().await;
         if db_state_guard.is_terminating == true {

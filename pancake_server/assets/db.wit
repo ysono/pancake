@@ -1,0 +1,25 @@
+record pk {
+    bytes: list<u8>
+}
+record pv {
+    bytes: list<u8>
+}
+record pkpv {
+    pk: pk,
+    pv: pv,
+}
+record sv {
+    bytes: list<u8>
+}
+record sv-spec {
+    bytes: list<u8>
+}
+
+get-pk-one: func(pk: pk)
+    -> result<option<pkpv>, string>
+get-pk-range: func(pk-lo: option<pk>, pk-hi: option<pk>)
+    -> result<list<pkpv>, string>
+get-sv-range: func(sv-spec: sv-spec, sv-lo: option<sv>, sv-hi: option<sv>)
+    -> result<list<pkpv>, string>
+put: func(pk: pk, opt-pv: option<pv>)
+    -> result<_, string>

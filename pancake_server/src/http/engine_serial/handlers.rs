@@ -2,6 +2,7 @@ use super::query;
 use crate::api::{Operation, SearchRange, Statement};
 use crate::http::resp;
 use crate::query::basic::{self as query_basic};
+use crate::wasm::engine_serial::WasmEngine;
 use anyhow::{Error, Result};
 use hyper::{Body, Request, Response};
 use pancake_engine_serial::DB;
@@ -16,6 +17,7 @@ pub fn add_routes(rb: RouterBuilder<Body, Error>) -> RouterBuilder<Body, Error> 
         .put("/serial/key/:key", put_handler)
         .delete("/serial/key/:key", delete_handler)
         .post("/serial/query", query_handler)
+        .post("/serial/wasm", wasm_handler)
 }
 
 async fn get_handler(req: Request<Body>) -> Result<Response<Body>> {
@@ -85,5 +87,19 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
                 Ok(()) => return resp::no_content(),
             }
         }
+    }
+}
+
+async fn wasm_handler(req: Request<Body>) -> Result<Response<Body>> {
+    let (parts, body) = req.into_parts();
+
+    let compo_bytes = hyper::body::to_bytes(body).await?;
+
+    let engine = parts.data::<WasmEngine>().unwrap();
+
+    let wasm_res = engine.serve(&compo_bytes);
+    match wasm_res {
+        Err(e) => resp::err(e),
+        Ok(s) => resp::ok(s),
     }
 }

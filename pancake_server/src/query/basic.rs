@@ -108,7 +108,7 @@ use regex::Regex;
 use std::iter::Peekable;
 
 pub fn parse(q_str: &str) -> Result<Operation> {
-    let reg = Regex::new(r"\s+|\b").unwrap();
+    let reg = Regex::new(r"\s+|\b")?;
     let iter = reg.split(q_str).filter(|w| w.len() > 0).peekable();
     root(iter)
 }

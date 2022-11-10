@@ -3,7 +3,7 @@ use crate::serde::{Datum, DatumType, DatumTypeInt};
 use crate::types::{SVShared, Value};
 use anyhow::Result;
 use owning_ref::OwningRef;
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, Cursor, Write};
 use std::str;
 use std::sync::Arc;
 
@@ -98,7 +98,7 @@ impl SubValueSpec {
 
 /* De/Serialization. */
 impl SubValueSpec {
-    pub fn ser<W: Write>(&self, w: &mut BufWriter<W>) -> Result<()> {
+    pub fn ser<W: Write>(&self, w: &mut W) -> Result<()> {
         /* datum_type */
         let datum_type_int = DatumTypeInt::from(self.datum_type);
         write!(w, "{};", *datum_type_int)?;
@@ -111,7 +111,7 @@ impl SubValueSpec {
         Ok(())
     }
 
-    pub fn deser<R: Read>(r: &mut BufReader<R>) -> Result<Self> {
+    pub fn deser<R: BufRead>(r: &mut R) -> Result<Self> {
         let mut buf = vec![];
 
         /* datum_type */
@@ -136,6 +136,17 @@ impl SubValueSpec {
             member_idxs,
             datum_type,
         })
+    }
+
+    pub fn ser_solo(&self) -> Result<Vec<u8>> {
+        let mut buf = vec![];
+        self.ser(&mut buf)?;
+        Ok(buf)
+    }
+
+    pub fn deser_solo(buf: &[u8]) -> Result<Self> {
+        let mut r = Cursor::new(&buf);
+        Self::deser(&mut r)
     }
 }
 

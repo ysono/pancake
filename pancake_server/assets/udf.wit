@@ -1,0 +1,6 @@
+variant commit-decision {
+    commit(string),
+    abort(string),
+}
+
+run-txn: func() -> result<commit-decision, string>

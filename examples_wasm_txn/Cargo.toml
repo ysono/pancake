@@ -1,0 +1,26 @@
+[package]
+name = "examples_wasm_txn"
+version = { workspace = true }
+edition = { workspace = true }
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow = { workspace = true }
+wit-bindgen-guest-rust = { workspace = true }
+
+pancake_types = { workspace = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+const-gen = { workspace = true }
+
+pancake_types = { workspace = true }
+
+[features]
+simple_get_pk_one = []
+simple_get_pk_range = []
+simple_get_sv_range = []
+simple_put = []
+simple_del = []

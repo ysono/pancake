@@ -9,6 +9,7 @@ hyper = { workspace = true }
 regex = { workspace = true }
 routerify = { workspace = true }
 tokio = { workspace = true }
+wit-bindgen-host-wasmtime-rust = { workspace = true }
 
 pancake_engine_common = { workspace = true }
 pancake_engine_serial = { workspace = true }
