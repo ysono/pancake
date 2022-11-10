@@ -1,7 +1,7 @@
 use crate::lsm_state::entryset::CommittedEntrySet;
 use itertools::Itertools;
 use pancake_engine_common::{Entry, WritableMemLog};
-use pancake_types::serde::{Deser, OptDatum};
+use pancake_types::types::Deser;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::iter;
 
@@ -10,10 +10,10 @@ pub fn merge_committed_entrysets<'a, K, V, Q>(
     entrysets: impl Iterator<Item = &'a CommittedEntrySet<K, V>>,
     k_lo: Option<&'a Q>,
     k_hi: Option<&'a Q>,
-) -> impl 'a + Iterator<Item = Entry<'a, K, OptDatum<V>>>
+) -> impl 'a + Iterator<Item = Entry<'a, K, V>>
 where
     K: 'a + Deser + Ord + PartialOrd<Q>,
-    OptDatum<V>: 'a + Deser,
+    V: 'a + Deser,
 {
     let entries_iters = entrysets
         .enumerate()
@@ -61,10 +61,10 @@ pub fn merge_txnlocal_and_committed_entrysets<'a, K, V, Q>(
     committed_entrysets: impl 'a + Iterator<Item = &'a CommittedEntrySet<K, V>>,
     k_lo: Option<&'a Q>,
     k_hi: Option<&'a Q>,
-) -> impl 'a + Iterator<Item = Entry<'a, K, OptDatum<V>>>
+) -> impl 'a + Iterator<Item = Entry<'a, K, V>>
 where
     K: 'a + Deser + Ord + PartialOrd<Q>,
-    OptDatum<V>: 'a + Deser,
+    V: 'a + Deser,
 {
     let mut s_entries = staging.map(|w_memlog| w_memlog.r_memlog().get_range(k_lo, k_hi));
     let s_entries = iter::from_fn(move || match s_entries.as_mut() {
@@ -76,7 +76,7 @@ where
     let mut c_entries = merge_committed_entrysets(committed_entrysets, k_lo, k_hi).peekable();
 
     /* K-merge manually due to type difference. */
-    let ret_iter_fn = move || -> Option<Entry<K, OptDatum<V>>> {
+    let ret_iter_fn = move || -> Option<Entry<K, V>> {
         let s_cmp_c = match (s_entries.peek(), c_entries.peek()) {
             (None, None) => Ordering::Less,
             (None, Some(_)) => Ordering::Greater,

@@ -8,7 +8,7 @@ use crate::{
 };
 use anyhow::Result;
 use pancake_engine_common::{Entry, SSTable};
-use pancake_types::serde::{Deser, OptDatum};
+use pancake_types::{serde::OptDatum, types::Deser};
 use std::cmp;
 
 impl FlushingAndCompactionJob {
@@ -88,7 +88,7 @@ impl FlushingAndCompactionJob {
     }
 
     fn derive_kmerged_iter<'a, K, V>(
-        entrysets: impl Iterator<Item = &'a CommittedEntrySet<K, V>>,
+        entrysets: impl Iterator<Item = &'a CommittedEntrySet<K, OptDatum<V>>>,
         skip_tombstones: bool,
     ) -> impl Iterator<Item = Entry<'a, K, OptDatum<V>>>
     where

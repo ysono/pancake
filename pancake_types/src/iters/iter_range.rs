@@ -1,4 +1,4 @@
-use crate::serde::{DatumReader, Deser, ReadResult};
+use crate::{serde::ReadResult, types::Deser};
 use anyhow::{anyhow, Result};
 use std::any;
 use std::cmp::Ordering;
@@ -18,7 +18,7 @@ enum State {
 /// The iterator deserializes every `K`; and if this `K` is out of the desired range,
 /// it skips deserialization of `V`.
 pub struct KeyValueRangeIterator<'a, K, V, Q> {
-    r: DatumReader<File>,
+    r: BufReader<File>,
     k_lo: Option<&'a Q>,
     k_hi: Option<&'a Q>,
     state: State,
@@ -32,7 +32,7 @@ where
 {
     pub fn new(file: File, k_lo: Option<&'a Q>, k_hi: Option<&'a Q>) -> Self {
         Self {
-            r: DatumReader::from(BufReader::new(file)),
+            r: BufReader::new(file),
             k_lo,
             k_hi,
             state: State::NotBegun,
@@ -56,7 +56,7 @@ where
         }
     }
     fn skip_v(&mut self) -> Result<()> {
-        match self.r.skip()? {
+        match V::skip(&mut self.r)? {
             ReadResult::EOF => Err(anyhow!(
                 "EOF where a {} is expected.",
                 any::type_name::<V>()

@@ -2,7 +2,7 @@ use super::LSMTree;
 use crate::lsm::merging;
 use anyhow::Result;
 use pancake_engine_common::{Entry, SSTable};
-use pancake_types::serde::{OptDatum, Serializable};
+use pancake_types::{serde::OptDatum, types::Serializable};
 use std::mem;
 
 static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;

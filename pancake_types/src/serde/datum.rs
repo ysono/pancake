@@ -1,6 +1,13 @@
 use crate::serde::DatumType;
 use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 
+mod deser;
+mod ser;
+#[cfg(test)]
+mod serde_test;
+pub use deser::*;
+pub use ser::*;
+
 #[derive(PartialEq, Eq, Debug)]
 pub enum Datum {
     I64(i64),

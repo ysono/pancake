@@ -3,13 +3,16 @@ use crate::{
     lsm_state::{entryset::CommittedEntrySet, unit::UnitDir},
 };
 use anyhow::Result;
-use pancake_types::types::{PKShared, PVShared, SVPKShared};
+use pancake_types::{
+    serde::OptDatum,
+    types::{PKShared, PVShared, SVPKShared},
+};
 use std::collections::HashMap;
 use std::fs;
 
 pub struct CompactedUnit {
-    pub prim: Option<CommittedEntrySet<PKShared, PVShared>>,
-    pub scnds: HashMap<ScndIdxNum, CommittedEntrySet<SVPKShared, PVShared>>,
+    pub prim: Option<CommittedEntrySet<PKShared, OptDatum<PVShared>>>,
+    pub scnds: HashMap<ScndIdxNum, CommittedEntrySet<SVPKShared, OptDatum<PVShared>>>,
     pub dir: UnitDir,
 }
 

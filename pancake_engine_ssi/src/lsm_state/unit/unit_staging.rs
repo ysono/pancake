@@ -1,13 +1,16 @@
 use crate::{db_state::ScndIdxNum, lsm_state::unit::UnitDir};
 use anyhow::Result;
 use pancake_engine_common::WritableMemLog;
-use pancake_types::types::{PKShared, PVShared, SVPKShared};
+use pancake_types::{
+    serde::OptDatum,
+    types::{PKShared, PVShared, SVPKShared},
+};
 use std::collections::{hash_map, HashMap};
 use std::fs;
 
 pub struct StagingUnit {
-    pub prim: WritableMemLog<PKShared, PVShared>,
-    pub scnds: HashMap<ScndIdxNum, WritableMemLog<SVPKShared, PVShared>>,
+    pub prim: WritableMemLog<PKShared, OptDatum<PVShared>>,
+    pub scnds: HashMap<ScndIdxNum, WritableMemLog<SVPKShared, OptDatum<PVShared>>>,
     pub dir: UnitDir,
 }
 
@@ -26,7 +29,7 @@ impl StagingUnit {
     pub fn ensure_create_scnd<'a>(
         &'a mut self,
         si_num: ScndIdxNum,
-    ) -> Result<&'a mut WritableMemLog<SVPKShared, PVShared>> {
+    ) -> Result<&'a mut WritableMemLog<SVPKShared, OptDatum<PVShared>>> {
         match self.scnds.entry(si_num) {
             hash_map::Entry::Occupied(entry) => Ok(entry.into_mut()),
             hash_map::Entry::Vacant(entry) => {

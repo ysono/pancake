@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use pancake_engine_common::fs_utils::{self, PathNameNum};
 use pancake_engine_common::{SSTable, WritableMemLog};
-use pancake_types::serde::{OptDatum, Serializable};
+use pancake_types::{serde::OptDatum, types::Serializable};
 use std::path::{Path, PathBuf};
 
 const LOG_FILE_NAME: &str = "commit_log.kv";
@@ -32,8 +32,8 @@ const SSTABLES_DIR_NAME: &str = "sstables";
 ///
 /// When the same key exists in multiple internal tables, only the result from the newest table is retrieved.
 pub struct LSMTree<K, V> {
-    memlog: WritableMemLog<K, V>,
-    sstables: Vec<SSTable<K, V>>,
+    memlog: WritableMemLog<K, OptDatum<V>>,
+    sstables: Vec<SSTable<K, OptDatum<V>>>,
     sstables_dir_path: PathBuf,
     next_sstable_file_num: PathNameNum,
 }

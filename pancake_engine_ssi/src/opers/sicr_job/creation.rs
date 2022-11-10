@@ -129,7 +129,7 @@ impl ScndIdxCreationJob {
     fn create_intermediary_sstables<'a>(
         &'a self,
         scnd_entries: impl Iterator<Item = Entry<'a, SVPKShared, PVShared>>,
-    ) -> Result<Vec<SSTable<SVPKShared, PVShared>>> {
+    ) -> Result<Vec<SSTable<SVPKShared, OptDatum<PVShared>>>> {
         const FLUSH_PERIOD: usize = 5;
 
         let memtable = RefCell::new(BTreeMap::<SVPKShared, PVShared>::new());
@@ -163,9 +163,9 @@ impl ScndIdxCreationJob {
     }
 
     fn create_combined_sstable(
-        intermediary_sstables: Vec<SSTable<SVPKShared, PVShared>>,
+        intermediary_sstables: Vec<SSTable<SVPKShared, OptDatum<PVShared>>>,
         out_file_path: PathBuf,
-    ) -> Result<SSTable<SVPKShared, PVShared>> {
+    ) -> Result<SSTable<SVPKShared, OptDatum<PVShared>>> {
         let entries_iters = intermediary_sstables
             .iter()
             .map(|sstable| sstable.get_range(None::<&SVPKShared>, None::<&SVPKShared>));
@@ -188,7 +188,7 @@ impl ScndIdxCreationJob {
 
     fn create_compacted_unit(
         &self,
-        intermediary_sstables: Vec<SSTable<SVPKShared, PVShared>>,
+        intermediary_sstables: Vec<SSTable<SVPKShared, OptDatum<PVShared>>>,
         scnd_idx_num: ScndIdxNum,
     ) -> Result<CompactedUnit> {
         let new_unit_dir = self.db.lsm_dir().format_new_unit_dir_path();

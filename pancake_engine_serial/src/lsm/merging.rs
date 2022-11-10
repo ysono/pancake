@@ -1,7 +1,7 @@
 use anyhow::Result;
 use itertools::Itertools;
 use pancake_engine_common::{Entry, SSTable, WritableMemLog};
-use pancake_types::serde::{Deser, OptDatum};
+use pancake_types::types::Deser;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::iter;
 
@@ -10,10 +10,10 @@ pub fn merge_sstables<'a, K, V, Q>(
     sstables: &'a [SSTable<K, V>],
     k_lo: Option<&'a Q>,
     k_hi: Option<&'a Q>,
-) -> impl 'a + Iterator<Item = Result<(K, OptDatum<V>)>>
+) -> impl 'a + Iterator<Item = Result<(K, V)>>
 where
     K: Deser + Ord + PartialOrd<Q>,
-    OptDatum<V>: Deser,
+    V: Deser,
 {
     let iter_of_iters = sstables.iter().enumerate().map(|(sst_i, sst)| {
         // NB: the index/position of the sstable is included for the purpose of breaking ties
@@ -67,10 +67,10 @@ pub fn merge_memlog_and_sstables<'a, K, V, Q>(
     sstables: &'a [SSTable<K, V>],
     k_lo: Option<&'a Q>,
     k_hi: Option<&'a Q>,
-) -> impl 'a + Iterator<Item = Entry<'a, K, OptDatum<V>>>
+) -> impl 'a + Iterator<Item = Entry<'a, K, V>>
 where
     K: Deser + Ord + PartialOrd<Q>,
-    OptDatum<V>: Deser,
+    V: Deser,
 {
     let mut mt_iter = memlog.r_memlog().get_range(k_lo, k_hi).peekable();
     let mut ssts_iter = merge_sstables(sstables, k_lo, k_hi).peekable();
@@ -80,7 +80,7 @@ where
     Memtable iterator item = (&K, &V)
     SSTable iterator item = Result<(K, V)>
     */
-    let ret_iter_fn = move || -> Option<Entry<K, OptDatum<V>>> {
+    let ret_iter_fn = move || -> Option<Entry<K, V>> {
         let mt_cmp_sst = match (mt_iter.peek(), ssts_iter.peek()) {
             (None, None) => Ordering::Less,
             (None, Some(_)) => Ordering::Greater,

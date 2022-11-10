@@ -10,13 +10,16 @@ use crate::{
 };
 use anyhow::Result;
 use pancake_engine_common::{ReadonlyMemLog, SSTable};
-use pancake_types::types::{PKShared, PVShared, SVPKShared};
+use pancake_types::{
+    serde::OptDatum,
+    types::{PKShared, PVShared, SVPKShared},
+};
 use std::collections::HashMap;
 use std::fs;
 
 pub struct CommittedUnit {
-    pub prim: Option<CommittedEntrySet<PKShared, PVShared>>,
-    pub scnds: HashMap<ScndIdxNum, CommittedEntrySet<SVPKShared, PVShared>>,
+    pub prim: Option<CommittedEntrySet<PKShared, OptDatum<PVShared>>>,
+    pub scnds: HashMap<ScndIdxNum, CommittedEntrySet<SVPKShared, OptDatum<PVShared>>>,
     pub dir: UnitDir,
     pub commit_info: CommitInfo,
 }
@@ -26,13 +29,13 @@ impl CommittedUnit {
     /// - There should be no cost converting each `WritableMemLog` to `ReadonlyMemLog`.
     /// - There *is* a cost of serializing a CommitInfo.
     pub fn from_staging(stg: StagingUnit, commit_ver: CommitVer) -> Result<Self> {
-        let prim: ReadonlyMemLog<PKShared, PVShared> = stg.prim.into();
+        let prim: ReadonlyMemLog<PKShared, OptDatum<PVShared>> = stg.prim.into();
         let prim_entryset = CommittedEntrySet::RMemLog(prim);
         let scnds = stg
             .scnds
             .into_iter()
             .map(|(scnd_idx_num, w_memlog)| {
-                let r_memlog: ReadonlyMemLog<SVPKShared, PVShared> = w_memlog.into();
+                let r_memlog: ReadonlyMemLog<SVPKShared, OptDatum<PVShared>> = w_memlog.into();
                 let entryset = CommittedEntrySet::RMemLog(r_memlog);
                 (scnd_idx_num, entryset)
             })

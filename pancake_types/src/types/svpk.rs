@@ -1,10 +1,9 @@
-use crate::serde::{Datum, DatumWriter, Ser, Serializable, WriteLen};
-use crate::types::{PKShared, PrimaryKey, SVShared, SubValue};
+use crate::serde::{Datum, OptDatum, ReadResult, WriteLen};
+use crate::types::{Deser, PKShared, PrimaryKey, SVShared, Ser, Serializable, SubValue};
 use anyhow::{anyhow, Result};
-use std::any;
 use std::borrow::Borrow;
 use std::cmp::{Ord, Ordering, PartialOrd};
-use std::io::Write;
+use std::io::{Read, Seek, Write};
 use std::sync::Arc;
 
 /// A tuple containing [`SVShared`] and [`PKShared`].
@@ -18,29 +17,43 @@ pub struct SVPKShared {
 
 /* SVPKShared is Serializable. */
 impl Ser for SVPKShared {
-    fn ser<W: Write>(&self, w: &mut DatumWriter<W>) -> Result<WriteLen> {
-        let data = [&self.sv as &Datum, &self.pk as &Datum];
-        w.ser_root_tuple(&data[..])
+    fn ser<W: Write>(&self, w: &mut W) -> Result<WriteLen> {
+        let mut w_len = 0;
+        w_len += *((&self.sv as &Datum).ser(w)?);
+        w_len += *((&self.pk as &Datum).ser(w)?);
+        Ok(WriteLen::new_manual(w_len))
     }
 }
-impl TryFrom<Datum> for SVPKShared {
-    type Error = anyhow::Error;
-    fn try_from(mut dat: Datum) -> Result<Self> {
-        if let Datum::Tuple(tup) = dat {
-            match tup.try_into() as Result<[Datum; 2], _> {
-                Ok([sv, pk]) => {
-                    let sv = SVShared::Own(Arc::new(SubValue(sv)));
-                    let pk = Arc::new(PrimaryKey(pk));
-                    return Ok(SVPKShared { sv, pk });
-                }
-                Err(mbrs) => dat = Datum::Tuple(mbrs),
-            }
-        }
-        Err(anyhow!(
-            "{} could not be deserialized from {:?}",
-            any::type_name::<Self>(),
-            dat
-        ))
+impl Deser for SVPKShared {
+    fn skip<R: Read + Seek>(r: &mut R) -> Result<ReadResult<()>> {
+        let sv_r_len = match OptDatum::<Datum>::skip(r)? {
+            ReadResult::EOF => return Ok(ReadResult::EOF),
+            ReadResult::Some(r_len, ()) => r_len,
+        };
+        let pk_r_len = match OptDatum::<Datum>::skip(r)? {
+            ReadResult::EOF => return Err(anyhow!("SV found but PK not found.")),
+            ReadResult::Some(r_len, ()) => r_len,
+        };
+
+        let r_len = sv_r_len + pk_r_len;
+        return Ok(ReadResult::Some(r_len, ()));
+    }
+    fn deser<R: Read + Seek>(r: &mut R) -> Result<ReadResult<Self>> {
+        let (sv_r_len, sv_dat) = match Datum::deser(r)? {
+            ReadResult::EOF => return Ok(ReadResult::EOF),
+            ReadResult::Some(r_len, dat) => (r_len, dat),
+        };
+        let (pk_r_len, pk_dat) = match Datum::deser(r)? {
+            ReadResult::EOF => return Err(anyhow!("SV found but PK not found.")),
+            ReadResult::Some(r_len, dat) => (r_len, dat),
+        };
+
+        let r_len = sv_r_len + pk_r_len;
+        let svpk = SVPKShared {
+            sv: SVShared::Own(Arc::new(SubValue(sv_dat))),
+            pk: Arc::new(PrimaryKey(pk_dat)),
+        };
+        return Ok(ReadResult::Some(r_len, svpk));
     }
 }
 impl Serializable for SVPKShared {}

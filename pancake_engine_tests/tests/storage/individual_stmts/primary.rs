@@ -9,11 +9,11 @@ use std::sync::Arc;
 pub async fn put_del_get_getrange(db: &mut impl OneStmtDbAdaptor) -> Result<()> {
     let mut pk_to_expected_pv = BTreeMap::<PKShared, Option<PVShared>>::new();
 
-    let data_count = 100usize;
+    let entries_count = 100usize;
 
     // Insert random data. Then delete some of them randomly.
     {
-        for _ in 0..data_count {
+        for _ in 0..entries_count {
             let i = rand::random::<u16>();
 
             let pk = Arc::new(gen::gen_str_pk(format!("key{}", i)));
@@ -38,7 +38,7 @@ pub async fn put_del_get_getrange(db: &mut impl OneStmtDbAdaptor) -> Result<()> 
 
     // Among the above-inserted data, query over a range in the middle.
     {
-        let range_lo_i = data_count / 4;
+        let range_lo_i = entries_count / 4;
         let range_hi_i = range_lo_i * 3;
         let exp_range = pk_to_expected_pv
             .into_iter()

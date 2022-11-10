@@ -2,7 +2,7 @@ use super::LSMTree;
 use crate::lsm::merging;
 use anyhow::Result;
 use pancake_engine_common::Entry;
-use pancake_types::serde::{OptDatum, Serializable};
+use pancake_types::{serde::OptDatum, types::Serializable};
 use std::borrow::Borrow;
 
 impl<K, V> LSMTree<K, V>

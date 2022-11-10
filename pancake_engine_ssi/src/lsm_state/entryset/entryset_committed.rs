@@ -1,5 +1,5 @@
 use pancake_engine_common::{Entry, ReadonlyMemLog, SSTable};
-use pancake_types::serde::{Deser, OptDatum};
+use pancake_types::types::Deser;
 use std::borrow::Borrow;
 use std::iter;
 
@@ -11,9 +11,9 @@ pub enum CommittedEntrySet<K, V> {
 impl<K, V> CommittedEntrySet<K, V>
 where
     K: Deser + Ord,
-    OptDatum<V>: Deser,
+    V: Deser,
 {
-    pub fn get_one<'a, Q>(&'a self, k: &'a Q) -> Option<Entry<'a, K, OptDatum<V>>>
+    pub fn get_one<'a, Q>(&'a self, k: &'a Q) -> Option<Entry<'a, K, V>>
     where
         K: Borrow<Q> + PartialOrd<Q>,
         Q: Ord,
@@ -28,7 +28,7 @@ where
         &'a self,
         k_lo: Option<&'a Q>,
         k_hi: Option<&'a Q>,
-    ) -> impl Iterator<Item = Entry<'a, K, OptDatum<V>>>
+    ) -> impl Iterator<Item = Entry<'a, K, V>>
     where
         K: PartialOrd<Q>,
     {
@@ -45,7 +45,7 @@ where
             }
         }
 
-        let ret_iter_fn = move || -> Option<Entry<K, OptDatum<V>>> {
+        let ret_iter_fn = move || -> Option<Entry<K, V>> {
             if let Some(rml_iter) = rml_iter.as_mut() {
                 rml_iter.next()
             } else if let Some(sst_iter) = sst_iter.as_mut() {
@@ -56,12 +56,7 @@ where
         };
         iter::from_fn(ret_iter_fn)
     }
-}
 
-impl<K, V> CommittedEntrySet<K, V>
-where
-    K: Deser + Ord,
-{
     pub fn get_all_keys(&self) -> impl Iterator<Item = Entry<K, ()>> {
         let mut rml_iter = None;
         let mut sst_iter = None;

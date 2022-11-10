@@ -1,23 +1,8 @@
 //! # Serialization format
 //!
-//! Following pseudocode depicts the byte representation on disk.
-//! In-memory representations are distinct from this.
+//! The primitive de/serializable types are [`OptDatum`] and [`Datum`].
 //!
-//! This file format is applicable for both commit logs and ss tables.
-//!
-//! ```text
-//! struct File {
-//!     k0: Datum,
-//!     v0: Datum,
-//!     k1: Datum,
-//!     v1: Datum,
-//!     ...
-//!     // There are no separators in between Datums and nothing to indicate
-//!     // whether a Datum is a key or a value.
-//! }
-//! ```
-//!
-//! `Datum` comes in several varieties.
+//! The below pseudocode depicts their serialized representations.
 //!
 //! They all start with `datum_type`, which is encoded in `u8`.
 //! In case we need to deprecate supported datum_types over time, this allows us
@@ -76,27 +61,10 @@
 //! }
 //! ```
 
-mod iter_k;
-mod iter_kv;
-mod iter_range;
+mod datum;
+mod datum_type;
 mod lengths;
 
-mod datum_type;
-mod primitives;
-mod serde_reader;
-mod serde_writer;
-mod serializable;
-
-#[cfg(test)]
-mod serde_rw_test;
-
-pub use iter_k::*;
-pub use iter_kv::*;
-pub use iter_range::*;
-pub use lengths::*;
-
+pub use datum::*;
 pub use datum_type::*;
-pub use primitives::*;
-pub use serde_reader::*;
-pub use serde_writer::*;
-pub use serializable::*;
+use lengths::*;

@@ -1,23 +1,23 @@
 #[cfg(test)]
 mod test {
-    use crate::serde::{Datum, DatumReader, DatumWriter, OptDatum, ReadResult};
+    use crate::serde::{Datum, OptDatum, ReadResult};
     use anyhow::{anyhow, Result};
     use itertools::Itertools;
     use rand::seq::SliceRandom;
-    use std::io::{BufReader, BufWriter, Cursor};
+    use std::io::Cursor;
 
     fn verify(pre_serialized: &Vec<OptDatum<Datum>>) -> Result<()> {
-        let mut serialized: Vec<u8> = vec![];
-        let mut w_len_at_each_dat: Vec<usize> = vec![]; // Cumulative w_len.
-        {
-            let mut w = DatumWriter::from(BufWriter::new(Cursor::new(&mut serialized)));
+        let (serialized, w_len_at_each_dat) = {
+            let mut serialized: Vec<u8> = vec![];
+            let mut w_len_at_each_dat: Vec<usize> = vec![]; // Cumulative `w_len`s.
+
+            let w = &mut serialized;
             let mut w_len = 0;
-            for optdat in pre_serialized.iter() {
-                let delta_w_len = w.ser_optdat(optdat)?;
+            for optdat in pre_serialized {
+                let delta_w_len = optdat.ser(w)?;
                 w_len += *delta_w_len;
                 w_len_at_each_dat.push(w_len);
             }
-            drop(w);
             assert_eq!(
                 serialized.len(),
                 w_len,
@@ -25,13 +25,15 @@ mod test {
                 pre_serialized,
                 serialized
             );
-        }
+
+            (serialized, w_len_at_each_dat)
+        };
 
         {
-            let mut r = DatumReader::from(BufReader::new(Cursor::new(&mut serialized)));
+            let mut r = Cursor::new(&serialized);
             let mut r_len = 0;
             for dat_i in 0..pre_serialized.len() {
-                match r.skip()? {
+                match OptDatum::<Datum>::skip(&mut r)? {
                     ReadResult::EOF => return Err(anyhow!("Premature EOF")),
                     ReadResult::Some(delta_r_len, ()) => r_len += delta_r_len,
                 }
@@ -39,7 +41,7 @@ mod test {
             }
             assert_eq!(
                 ReadResult::EOF,
-                r.deser()?,
+                OptDatum::<Datum>::deser(&mut r)?,
                 "\n{:?}\n{:?}\n",
                 pre_serialized,
                 serialized
@@ -47,11 +49,11 @@ mod test {
         }
 
         {
-            let mut r = DatumReader::from(BufReader::new(Cursor::new(&mut serialized)));
+            let mut r = Cursor::new(&serialized);
             let mut r_len = 0;
             let mut deserialized: Vec<OptDatum<Datum>> = vec![];
             for dat_i in 0..pre_serialized.len() {
-                match r.deser()? {
+                match OptDatum::<Datum>::deser(&mut r)? {
                     ReadResult::EOF => return Err(anyhow!("Premature EOF")),
                     ReadResult::Some(delta_r_len, optdat) => {
                         r_len += delta_r_len;
@@ -62,7 +64,7 @@ mod test {
             }
             assert_eq!(
                 ReadResult::EOF,
-                r.deser()?,
+                OptDatum::<Datum>::deser(&mut r)?,
                 "\n{:?}\n{:?}\n",
                 pre_serialized,
                 serialized
@@ -89,8 +91,15 @@ mod test {
     fn gen_str() -> OptDatum<Datum> {
         OptDatum::Some(Datum::Str(String::from("asdf")))
     }
-    fn gen_tup_depth1() -> OptDatum<Datum> {
+    fn gen_tup_depth1_memb1() -> OptDatum<Datum> {
         OptDatum::Some(Datum::Tuple(vec![Datum::Str(String::from("asdf"))]))
+    }
+    fn gen_tup_depth1_membmult() -> OptDatum<Datum> {
+        OptDatum::Some(Datum::Tuple(vec![
+            Datum::Str(String::from("asdf")),
+            Datum::I64(9),
+            Datum::Str(String::from("zxcv")),
+        ]))
     }
     fn gen_tup_depth3() -> OptDatum<Datum> {
         OptDatum::Some(Datum::Tuple(vec![
@@ -109,7 +118,8 @@ mod test {
             gen_i64,
             gen_bytes,
             gen_str,
-            gen_tup_depth1,
+            gen_tup_depth1_memb1,
+            gen_tup_depth1_membmult,
             gen_tup_depth3,
         ];
 

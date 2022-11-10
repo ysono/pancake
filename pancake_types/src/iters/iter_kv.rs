@@ -1,4 +1,4 @@
-use crate::serde::{DatumReader, Deser, ReadResult};
+use crate::{serde::ReadResult, types::Deser};
 use anyhow::{anyhow, Result};
 use std::any;
 use std::fs::File;
@@ -7,14 +7,14 @@ use std::marker::PhantomData;
 
 /// An iterator that deserializes `K` and `V` alternately from a file.
 pub struct KeyValueIterator<K, V> {
-    r: DatumReader<File>,
+    r: BufReader<File>,
     _phant: PhantomData<(K, V)>,
 }
 
 impl<K, V> From<File> for KeyValueIterator<K, V> {
     fn from(file: File) -> Self {
         Self {
-            r: DatumReader::from(BufReader::new(file)),
+            r: BufReader::new(file),
             _phant: PhantomData,
         }
     }

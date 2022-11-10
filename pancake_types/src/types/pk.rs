@@ -1,18 +1,13 @@
-use crate::serde::{Datum, DatumWriter, OptDatum, Ser, Serializable, WriteLen};
-use anyhow::Result;
+use crate::{serde::Datum, types::Serializable};
 use derive_more::{Deref, From};
+use std::borrow::Borrow;
 use std::cmp::{Ordering, PartialOrd};
-use std::io::Write;
 use std::sync::Arc;
 
 #[derive(From, Deref, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct PrimaryKey(pub Datum);
 
-#[derive(From, Deref, PartialEq, Eq, Debug)]
-pub struct Value(pub Datum);
-
 pub type PKShared = Arc<PrimaryKey>;
-pub type PVShared = Arc<Value>;
 
 /* PKShared is comparable against PrimaryKey. */
 impl PartialEq<PrimaryKey> for PKShared {
@@ -39,9 +34,9 @@ impl PartialOrd<&PrimaryKey> for PKShared {
 }
 
 /* PKShared is Serializable. */
-impl Ser for PKShared {
-    fn ser<W: Write>(&self, w: &mut DatumWriter<W>) -> Result<WriteLen> {
-        w.ser_dat(self)
+impl Borrow<Datum> for PKShared {
+    fn borrow(&self) -> &Datum {
+        self
     }
 }
 impl From<Datum> for PKShared {
@@ -50,19 +45,3 @@ impl From<Datum> for PKShared {
     }
 }
 impl Serializable for PKShared {}
-
-/* OptDatum<PVShared> is Serializable. */
-impl Ser for OptDatum<PVShared> {
-    fn ser<W: Write>(&self, w: &mut DatumWriter<W>) -> Result<WriteLen> {
-        match self {
-            OptDatum::Tombstone => w.ser_optdat(&OptDatum::Tombstone),
-            OptDatum::Some(pv) => w.ser_dat(pv),
-        }
-    }
-}
-impl From<Datum> for PVShared {
-    fn from(dat: Datum) -> Self {
-        Arc::new(Value(dat))
-    }
-}
-impl Serializable for OptDatum<PVShared> {}

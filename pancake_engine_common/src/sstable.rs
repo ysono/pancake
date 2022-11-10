@@ -2,8 +2,10 @@ use crate::ds_n_a::bisect;
 use crate::entry::Entry;
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut, From};
-use pancake_types::serde::{
-    DatumWriter, Deser, KeyIterator, KeyValueRangeIterator, OptDatum, ReadResult, Ser,
+use pancake_types::{
+    iters::{KeyIterator, KeyValueRangeIterator},
+    serde::ReadResult,
+    types::{Deser, Ser},
 };
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fs::{self, File, OpenOptions};
@@ -33,22 +35,22 @@ pub struct SSTable<K, V> {
 
 impl<K, V> SSTable<K, V>
 where
-    K: Ser + Ord + Clone,
-    OptDatum<V>: Ser,
+    K: Ser + Ord,
+    V: Ser,
 {
     pub fn new<'a>(
-        entries: impl Iterator<Item = Entry<'a, K, OptDatum<V>>>,
+        entries: impl Iterator<Item = Entry<'a, K, V>>,
         kv_file_path: PathBuf,
     ) -> Result<Self>
     where
-        K: 'a,
+        K: 'a + Clone,
         V: 'a,
     {
         let kv_file = OpenOptions::new()
             .create_new(true)
             .write(true)
             .open(&kv_file_path)?;
-        let mut datum_writer = DatumWriter::from(BufWriter::new(kv_file));
+        let mut w = BufWriter::new(kv_file);
 
         let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
         let mut file_offset = FileOffset(0);
@@ -57,8 +59,8 @@ where
             let (k_ref, v_ref) = entry.try_borrow()?;
 
             let mut delta_offset = 0;
-            delta_offset += *(k_ref.ser(&mut datum_writer)?);
-            delta_offset += *(v_ref.ser(&mut datum_writer)?);
+            delta_offset += *(k_ref.ser(&mut w)?);
+            delta_offset += *(v_ref.ser(&mut w)?);
 
             if is_kv_sparsely_captured(entry_i) {
                 let k_own = entry.take_k()?;
@@ -68,7 +70,7 @@ where
             file_offset.0 += delta_offset as u64;
         }
 
-        datum_writer.flush()?;
+        w.flush()?;
 
         Ok(Self {
             sparse_file_offsets,
@@ -80,11 +82,11 @@ where
 impl<K, V> SSTable<K, V>
 where
     K: Deser + Ord,
-    OptDatum<V>: Deser,
+    V: Deser,
 {
     pub fn load(kv_file_path: PathBuf) -> Result<Self> {
         let kv_file = File::open(&kv_file_path)?;
-        let mut key_iter = KeyIterator::new(kv_file);
+        let mut key_iter = KeyIterator::<K, V>::new(kv_file);
 
         let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
         let mut file_offset = FileOffset(0);
@@ -113,7 +115,7 @@ where
         })
     }
 
-    pub fn get_one<Q>(&self, k: &Q) -> Option<Result<(K, OptDatum<V>)>>
+    pub fn get_one<Q>(&self, k: &Q) -> Option<Result<(K, V)>>
     where
         K: PartialOrd<Q>,
     {
@@ -130,7 +132,7 @@ where
         &'a self,
         k_lo: Option<&'a Q>,
         k_hi: Option<&'a Q>,
-    ) -> impl 'a + Iterator<Item = Result<(K, OptDatum<V>)>>
+    ) -> impl 'a + Iterator<Item = Result<(K, V)>>
     where
         K: PartialOrd<Q>,
     {
@@ -143,7 +145,7 @@ where
             .map_err(|e| anyhow!(e))
             .map(|file| KeyValueRangeIterator::new(file, k_lo, k_hi));
 
-        let ret_iter_fn = move || -> Option<Result<(K, OptDatum<V>)>> {
+        let ret_iter_fn = move || -> Option<Result<(K, V)>> {
             match res_file_iter.as_mut() {
                 Err(e) => {
                     // This error occurred during the construction of the iterator.
@@ -155,16 +157,11 @@ where
         };
         iter::from_fn(ret_iter_fn)
     }
-}
 
-impl<K, V> SSTable<K, V>
-where
-    K: Deser + Ord,
-{
     pub fn get_all_keys(&self) -> impl Iterator<Item = Result<K>> {
         let mut res_file_iter = File::open(&self.kv_file_path)
             .map_err(|e| anyhow!(e))
-            .map(|file| KeyIterator::new(file).map(|res| res.map(|(_delta_r_len, k)| k)));
+            .map(|file| KeyIterator::<K, V>::new(file).map(|res| res.map(|(_delta_r_len, k)| k)));
 
         let ret_iter_fn = move || -> Option<Result<K>> {
             match res_file_iter.as_mut() {

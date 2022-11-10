@@ -1,5 +1,5 @@
 use anyhow::Result;
-use pancake_types::serde::{Deser, KeyValueIterator, OptDatum};
+use pancake_types::{iters::KeyValueIterator, types::Deser};
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -8,14 +8,14 @@ use std::path::{Path, PathBuf};
 
 /// A MemLog is a sorted dictionary (called Memtable), backed up by a write-ahead log file.
 pub struct ReadonlyMemLog<K, V> {
-    pub memtable: BTreeMap<K, OptDatum<V>>,
+    pub memtable: BTreeMap<K, V>,
     pub log_path: PathBuf,
 }
 
 impl<K, V> ReadonlyMemLog<K, V>
 where
     K: Deser + Ord,
-    OptDatum<V>: Deser,
+    V: Deser,
 {
     pub fn load<P: AsRef<Path>>(log_path: P) -> Result<Self> {
         let log_path = log_path.as_ref();
@@ -23,7 +23,7 @@ where
         let mut memtable = BTreeMap::default();
         if log_path.exists() {
             let log_file = File::open(log_path)?;
-            let iter = KeyValueIterator::<K, OptDatum<V>>::from(log_file);
+            let iter = KeyValueIterator::<K, V>::from(log_file);
             for res_kv in iter {
                 let (k, v) = res_kv?;
                 memtable.insert(k, v);
@@ -40,7 +40,7 @@ where
         self.memtable.len()
     }
 
-    pub fn get_one<Q>(&self, k: &Q) -> Option<(&K, &OptDatum<V>)>
+    pub fn get_one<Q>(&self, k: &Q) -> Option<(&K, &V)>
     where
         Q: Ord,
         K: Borrow<Q>,
@@ -52,7 +52,7 @@ where
         &'a self,
         k_lo: Option<&'a Q>,
         k_hi: Option<&'a Q>,
-    ) -> impl Iterator<Item = (&K, &OptDatum<V>)>
+    ) -> impl Iterator<Item = (&K, &V)>
     where
         K: PartialOrd<Q>,
     {
@@ -74,7 +74,7 @@ where
             })
     }
 
-    pub fn get_whole_range(&self) -> impl Iterator<Item = (&K, &OptDatum<V>)> {
+    pub fn get_whole_range(&self) -> impl Iterator<Item = (&K, &V)> {
         self.memtable.iter()
     }
 }

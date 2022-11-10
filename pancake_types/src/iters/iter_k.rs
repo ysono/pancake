@@ -1,4 +1,4 @@
-use crate::serde::{DatumReader, Deser, ReadResult};
+use crate::{serde::ReadResult, types::Deser};
 use anyhow::{anyhow, Result};
 use std::fs::File;
 use std::io::BufReader;
@@ -6,18 +6,19 @@ use std::marker::PhantomData;
 
 /// Given a file that encodes `K` and `V` alternately,
 /// this iterator always skips `V`, and optionally deserializes `K`.
-pub struct KeyIterator<K> {
-    r: DatumReader<File>,
-    _phant: PhantomData<K>,
+pub struct KeyIterator<K, V> {
+    r: BufReader<File>,
+    _phant: PhantomData<(K, V)>,
 }
 
-impl<K> KeyIterator<K>
+impl<K, V> KeyIterator<K, V>
 where
     K: Deser,
+    V: Deser,
 {
     pub fn new(file: File) -> Self {
         Self {
-            r: DatumReader::from(BufReader::new(file)),
+            r: BufReader::new(file),
             _phant: PhantomData,
         }
     }
@@ -32,7 +33,7 @@ where
                 k = k_;
             }
         }
-        match self.r.skip()? {
+        match V::skip(&mut self.r)? {
             ReadResult::EOF => return Err(anyhow!("EOF while skipping a V.",)),
             ReadResult::Some(read_len_, ()) => {
                 read_len += read_len_;
@@ -43,13 +44,13 @@ where
 
     pub fn skip_kv(&mut self) -> Result<ReadResult<()>> {
         let mut read_len;
-        match self.r.skip()? {
+        match K::skip(&mut self.r)? {
             ReadResult::EOF => return Ok(ReadResult::EOF),
             ReadResult::Some(read_len_, ()) => {
                 read_len = read_len_;
             }
         }
-        match self.r.skip()? {
+        match V::skip(&mut self.r)? {
             ReadResult::EOF => return Err(anyhow!("EOF while skipping a V.",)),
             ReadResult::Some(read_len_, ()) => {
                 read_len += read_len_;
@@ -59,9 +60,10 @@ where
     }
 }
 
-impl<K> Iterator for KeyIterator<K>
+impl<K, V> Iterator for KeyIterator<K, V>
 where
     K: Deser,
+    V: Deser,
 {
     type Item = Result<(usize, K)>;
 
