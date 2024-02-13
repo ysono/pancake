@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, From};
-use pancake_engine_common::fs_utils;
+use pancake_engine_common::fs_utils::{self, PathNameNum};
 use pancake_types::{io_utils, types::SubValueSpec};
 use std::collections::HashMap;
 use std::fs::OpenOptions;
@@ -14,6 +14,16 @@ mod test;
 #[derive(Default, From, Deref, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct ScndIdxNum(u64);
 
+impl From<PathNameNum> for ScndIdxNum {
+    fn from(num: PathNameNum) -> Self {
+        Self(*num)
+    }
+}
+impl Into<PathNameNum> for ScndIdxNum {
+    fn into(self) -> PathNameNum {
+        PathNameNum::from(self.0)
+    }
+}
 impl ScndIdxNum {
     pub fn get_and_inc(&mut self) -> Self {
         let ret = Self(self.0);

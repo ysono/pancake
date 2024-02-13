@@ -48,7 +48,7 @@ impl FlushingAndCompactionJob {
 
             let mut compacted_entries = compacted_entries.peekable();
             if let Some(_) = compacted_entries.peek() {
-                let out_path = compacted_unit.dir.format_scnd_path(*scnd_idx_num);
+                let out_path = compacted_unit.dir.format_scnd_file_path(*scnd_idx_num);
 
                 let out_sstable = SSTable::new(compacted_entries, out_path)?;
 
@@ -67,7 +67,7 @@ impl FlushingAndCompactionJob {
 
             let mut compacted_entries = compacted_entries.peekable();
             if let Some(_) = compacted_entries.peek() {
-                let out_path = compacted_unit.dir.format_prim_path();
+                let out_path = compacted_unit.dir.format_prim_file_path();
 
                 let out_sstable = SSTable::new(compacted_entries, out_path)?;
 

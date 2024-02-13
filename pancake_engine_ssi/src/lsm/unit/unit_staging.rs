@@ -15,8 +15,8 @@ pub struct StagingUnit {
 
 impl StagingUnit {
     pub fn new(dir: UnitDir) -> Result<Self> {
-        fs_utils::create_dir_all(&*dir)?;
-        let prim_path = dir.format_prim_path();
+        fs_utils::create_dir_all(dir.path())?;
+        let prim_path = dir.format_prim_file_path();
         let prim_memlog = WritableMemLog::load_or_new(prim_path)?;
         Ok(Self {
             prim: prim_memlog,
@@ -32,7 +32,7 @@ impl StagingUnit {
         match self.scnds.entry(si_num) {
             hash_map::Entry::Occupied(entry) => Ok(entry.into_mut()),
             hash_map::Entry::Vacant(entry) => {
-                let file_path = self.dir.format_scnd_path(si_num);
+                let file_path = self.dir.format_scnd_file_path(si_num);
                 let w_memlog = WritableMemLog::load_or_new(file_path)?;
                 let w_memlog = entry.insert(w_memlog);
                 Ok(w_memlog)
@@ -58,7 +58,7 @@ impl StagingUnit {
     }
 
     pub fn remove_dir(self) -> Result<()> {
-        fs_utils::remove_dir_all(&*self.dir)?;
+        fs_utils::remove_dir_all(self.dir.path())?;
         Ok(())
     }
 }

@@ -9,7 +9,6 @@ use crate::{
     },
 };
 use anyhow::Result;
-use pancake_engine_common::fs_utils;
 use shorthand::ShortHand;
 use std::path::Path;
 use std::sync::Arc;
@@ -43,12 +42,10 @@ impl DB {
         let si_state_file_path = db_dir_path.join(SCND_IDXS_STATE_FILE_NAME);
         let lsm_dir_path = db_dir_path.join(LSM_DIR_NAME);
         let si_cr_dir_path = db_dir_path.join(SCND_IDXS_CREATION_JOB_DIR_NAME);
-        fs_utils::create_dir_all(&lsm_dir_path)?;
-        fs_utils::create_dir_all(&si_cr_dir_path)?;
 
         let db_state = DbState::load_or_new(&si_state_file_path)?;
 
-        let (lsm_dir, lsm_state) = LsmDir::load_or_new_lsm_dir(lsm_dir_path)?;
+        let (lsm_dir, lsm_state) = LsmDir::load_or_new(lsm_dir_path)?;
 
         let (min_held_list_ver_tx, min_held_list_ver_rx) = watch::channel(LIST_VER_INITIAL);
         let (replace_avail_tx, replace_avail_rx) = watch::channel(());

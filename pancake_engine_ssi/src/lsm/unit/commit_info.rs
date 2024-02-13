@@ -5,7 +5,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use pancake_engine_common::fs_utils;
 use shorthand::ShortHand;
 use std::any;
-use std::cmp::{Ord, Ordering, PartialOrd};
+use std::cmp::{Ord, PartialOrd};
 use std::fs::OpenOptions;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -92,18 +92,5 @@ impl CommitInfo {
         let file = fs_utils::open_file(p, OpenOptions::new().read(true))?;
         let mut r = BufReader::new(file);
         Self::do_deser(&mut r)
-    }
-}
-
-impl PartialOrd for CommitInfo {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let commit_ver_ord = self.commit_ver_hi_incl.cmp(&other.commit_ver_hi_incl);
-        let ord = commit_ver_ord.then_with(|| self.timestamp_num.cmp(&other.timestamp_num));
-        Some(ord)
-    }
-}
-impl Ord for CommitInfo {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
     }
 }

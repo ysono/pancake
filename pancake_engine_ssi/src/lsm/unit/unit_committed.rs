@@ -46,7 +46,7 @@ impl CommittedUnit {
             timestamp_num: TimestampNum::from(0),
             data_type: CommitDataType::MemLog,
         };
-        let commit_info_path = stg.dir.format_commit_info_path();
+        let commit_info_path = stg.dir.format_commit_info_file_path();
         commit_info.ser(commit_info_path)?;
 
         Ok(Self {
@@ -60,7 +60,7 @@ impl CommittedUnit {
     /// Cost:
     /// - This constructor serializes CommitInfo (so caller shouldn't do it before).
     pub fn from_compacted(compacted: CompactedUnit, commit_info: CommitInfo) -> Result<Self> {
-        let commit_info_path = compacted.dir.format_commit_info_path();
+        let commit_info_path = compacted.dir.format_commit_info_file_path();
         commit_info.ser(commit_info_path)?;
 
         Ok(Self {
@@ -73,7 +73,7 @@ impl CommittedUnit {
 
     pub fn load(dir: UnitDir, commit_info: CommitInfo) -> Result<Self> {
         let prim = {
-            let prim_path = dir.format_prim_path();
+            let prim_path = dir.format_prim_file_path();
             if prim_path.exists() {
                 let ces = match commit_info.data_type() {
                     CommitDataType::MemLog => {
@@ -91,7 +91,7 @@ impl CommittedUnit {
 
         let mut scnds = HashMap::new();
         {
-            for res in dir.list_scnd_paths()? {
+            for res in dir.list_scnd_file_paths()? {
                 let (scnd_path, si_num) = res?;
                 let ces = match commit_info.data_type() {
                     CommitDataType::MemLog => {
@@ -114,7 +114,7 @@ impl CommittedUnit {
     }
 
     pub fn remove_dir(self) -> Result<()> {
-        fs_utils::remove_dir_all(&*self.dir)?;
+        fs_utils::remove_dir_all(self.dir.path())?;
         Ok(())
     }
 }

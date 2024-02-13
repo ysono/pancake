@@ -18,7 +18,7 @@ pub struct CompactedUnit {
 
 impl CompactedUnit {
     pub fn new_empty(dir: UnitDir) -> Result<Self> {
-        fs_utils::create_dir_all(&*dir)?;
+        fs_utils::create_dir_all(dir.path())?;
         Ok(Self {
             prim: None,
             scnds: HashMap::new(),
@@ -31,7 +31,7 @@ impl CompactedUnit {
     }
 
     pub fn remove_dir(self) -> Result<()> {
-        fs_utils::remove_dir_all(&*self.dir)?;
+        fs_utils::remove_dir_all(self.dir.path())?;
         Ok(())
     }
 }

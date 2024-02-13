@@ -191,7 +191,7 @@ impl ScndIdxCreationJob {
     ) -> Result<CompactedUnit> {
         let new_unit_dir = self.db.lsm_dir().format_new_unit_dir_path();
         let mut compacted_unit = CompactedUnit::new_empty(new_unit_dir)?;
-        let combined_sstable_path = compacted_unit.dir.format_scnd_path(scnd_idx_num);
+        let combined_sstable_path = compacted_unit.dir.format_scnd_file_path(scnd_idx_num);
         let combined_sstable =
             Self::create_combined_sstable(intermediary_sstables, combined_sstable_path)?;
         let out_entryset = CommittedEntrySet::SSTable(combined_sstable);

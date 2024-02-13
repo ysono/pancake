@@ -7,6 +7,9 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+const SPEC_FILE_NAME: &str = "sv_spec.txt";
+const LSM_DIR_NAME: &str = "lsm";
+
 /// A secondary index is an abstraction of as sorted dictionary mapping
 /// `(sub-portion of value , primary key)` : `value`.
 ///
@@ -24,11 +27,10 @@ pub struct SecondaryIndex {
 
 impl SecondaryIndex {
     fn spec_file_path<P: AsRef<Path>>(scnd_idx_dir_path: P) -> PathBuf {
-        scnd_idx_dir_path.as_ref().join("sv_spec.txt")
+        scnd_idx_dir_path.as_ref().join(SPEC_FILE_NAME)
     }
-
     fn lsm_dir_path<P: AsRef<Path>>(scnd_idx_dir_path: P) -> PathBuf {
-        scnd_idx_dir_path.as_ref().join("lsm")
+        scnd_idx_dir_path.as_ref().join(LSM_DIR_NAME)
     }
 
     pub fn load<P: AsRef<Path>>(scnd_idx_dir_path: P) -> Result<Self> {

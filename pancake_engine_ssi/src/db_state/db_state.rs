@@ -1,5 +1,6 @@
 use crate::db_state::{ScndIdxNum, ScndIdxState, ScndIdxsState};
 use anyhow::{anyhow, Result};
+use pancake_engine_common::fs_utils;
 use pancake_types::types::SubValueSpec;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -14,28 +15,27 @@ pub struct DbState {
 
 impl DbState {
     pub fn load_or_new<P: AsRef<Path>>(scnd_idxs_state_file_path: P) -> Result<Self> {
-        let path = scnd_idxs_state_file_path.as_ref();
-        let mut scnd_idxs_state;
-        if path.exists() {
-            scnd_idxs_state = ScndIdxsState::deser(path)?;
-            /* Ignore scnd idxs that previously failed to be created.
-            This allows a new scnd idx for the same sv_spec to be created again. */
-            scnd_idxs_state.scnd_idxs.retain(|sv_spec, si_state| {
-                if !si_state.is_readable {
-                    eprintln!(
-                        "Secondary index creation for {sv_spec:?} never completed last time.",
-                    );
+        let sis_path = scnd_idxs_state_file_path.as_ref();
+        let scnd_idxs_state;
+        if sis_path.exists() {
+            scnd_idxs_state = ScndIdxsState::deser(sis_path)?;
+            for (sv_spec, si_state) in scnd_idxs_state.scnd_idxs.iter() {
+                if si_state.is_readable == false {
+                    return Err(anyhow!("Prior secondary index creation never completed for {sv_spec:?}. You should remove this secondary index's info manually from {sis_path:?}", ));
                 }
-                si_state.is_readable
-            });
+            }
         } else {
+            let parent_path = sis_path.parent().ok_or_else(|| anyhow!("Secondary index state file must be located under a parent directory. Invalid file path: {sis_path:?}"))?;
+            fs_utils::create_dir_all(parent_path)?;
+
             scnd_idxs_state = ScndIdxsState::default();
-            scnd_idxs_state.ser(path)?;
+            scnd_idxs_state.ser(sis_path)?;
         }
 
         Ok(Self {
             scnd_idxs_state,
-            scnd_idxs_state_file_path: path.into(),
+            scnd_idxs_state_file_path: sis_path.into(),
+
             is_terminating: false,
         })
     }
