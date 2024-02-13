@@ -34,8 +34,7 @@ impl FlushingAndCompactionJob {
             };
             snap_head_excl = SendPtr::from(lsm_state.update_or_push(update_or_provide_head));
 
-            output_commit_ver = lsm_state.next_commit_ver;
-            *lsm_state.next_commit_ver += 1;
+            output_commit_ver = lsm_state.fetch_inc_next_commit_ver();
         }
 
         self.traverse_and_compact(unsafe { snap_head_excl.as_ref() })

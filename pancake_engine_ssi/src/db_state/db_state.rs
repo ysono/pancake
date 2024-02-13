@@ -28,7 +28,7 @@ impl DbState {
             let parent_path = sis_path.parent().ok_or_else(|| anyhow!("Secondary index state file must be located under a parent directory. Invalid file path: {sis_path:?}"))?;
             fs_utils::create_dir_all(parent_path)?;
 
-            scnd_idxs_state = ScndIdxsState::default();
+            scnd_idxs_state = ScndIdxsState::new_empty();
             scnd_idxs_state.ser(sis_path)?;
         }
 
@@ -55,7 +55,7 @@ impl DbState {
         }
 
         let sis = &mut self.scnd_idxs_state;
-        let scnd_idx_num = sis.next_scnd_idx_num.get_and_inc();
+        let scnd_idx_num = sis.next_scnd_idx_num.fetch_inc();
         let scnd_idx_state = ScndIdxState {
             scnd_idx_num,
             is_readable: false,

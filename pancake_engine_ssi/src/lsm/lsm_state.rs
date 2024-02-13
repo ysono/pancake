@@ -4,14 +4,19 @@ use crate::ds_n_a::{
 };
 use crate::lsm::unit::{CommitVer, CommittedUnit};
 use anyhow::Result;
-use derive_more::{Deref, DerefMut};
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 
-#[derive(Deref, DerefMut, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ListVer(u64);
 
-pub const LIST_VER_INITIAL: ListVer = ListVer(0);
+impl ListVer {
+    pub const AT_BOOTUP: Self = Self(0);
+
+    pub fn inc(self) -> Self {
+        Self(self.0 + 1)
+    }
+}
 
 pub enum LsmElem {
     Unit(CommittedUnit),
@@ -24,7 +29,7 @@ pub enum LsmElem {
 pub struct LsmState {
     pub list: AtomicLinkedList<LsmElem>,
 
-    pub next_commit_ver: CommitVer,
+    next_commit_ver: CommitVer,
 
     curr_list_ver: ListVer,
     held_list_vers: Multiset<ListVer>,
@@ -41,16 +46,27 @@ impl LsmState {
 
             next_commit_ver,
 
-            curr_list_ver: LIST_VER_INITIAL,
+            curr_list_ver: ListVer::AT_BOOTUP,
             held_list_vers: Multiset::default(),
-            min_held_list_ver: LIST_VER_INITIAL,
+            min_held_list_ver: ListVer::AT_BOOTUP,
         }
     }
 
-    /// Returns the previously curr, now penultimate, list_ver.
-    pub fn get_and_bump_curr_list_ver(&mut self) -> ListVer {
+    pub fn next_commit_ver(&self) -> CommitVer {
+        self.next_commit_ver
+    }
+
+    /// Returns the previously "next", newly "curr", CommitVer.
+    pub fn fetch_inc_next_commit_ver(&mut self) -> CommitVer {
+        let curr = self.next_commit_ver;
+        self.next_commit_ver = self.next_commit_ver.inc();
+        curr
+    }
+
+    /// Returns the previously "curr", newly "penultimate", ListVer.
+    pub fn fetch_inc_curr_list_ver(&mut self) -> ListVer {
         let penult = self.curr_list_ver;
-        *self.curr_list_ver += 1;
+        self.curr_list_ver = self.curr_list_ver.inc();
         penult
     }
 
@@ -74,7 +90,7 @@ impl LsmState {
         while (self.min_held_list_ver < self.curr_list_ver)
             && (self.held_list_vers.contains(&self.min_held_list_ver) == false)
         {
-            *self.min_held_list_ver += 1;
+            self.min_held_list_ver = self.min_held_list_ver.inc();
             did_change = true;
         }
 

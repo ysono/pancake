@@ -1,22 +1,56 @@
 use anyhow::{anyhow, Result};
-use derive_more::{Deref, DerefMut, From};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use pancake_engine_common::fs_utils;
 use shorthand::ShortHand;
 use std::any;
-use std::cmp::{Ord, PartialOrd};
+use std::cmp::{self, Ord, PartialOrd};
 use std::fs::OpenOptions;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
-#[derive(Deref, DerefMut, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// The commit version uniquely identifies every commitment as well as the datastore state after the commitment.
+///
+/// The datastore's commit version increases for the whole lifetime of the datastore instance.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CommitVer(u64);
 
-pub const COMMIT_VER_INITIAL: CommitVer = CommitVer(0);
+impl CommitVer {
+    pub const AT_EMPTY_DATASTORE: Self = Self(0);
 
-#[derive(From, Deref, DerefMut, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TimestampNum(u64);
+    pub fn inc(self) -> Self {
+        Self(self.0 + 1)
+    }
+}
+
+/// The ordered number that disambiguates 2+ [`CommitInfo`] instances.
+///
+/// In case 2+ [`CommitInfo`]s overlap in their [`CommitVer`] intervals,
+/// this number indicates the new-ness of each [`CommitInfo`].
+///
+/// When loading a collection of overlapping [`CommitInfo`]s,
+/// all among them with the largest [`ReplacementNum`] should be retained,
+/// and all other others should be ignored and discarded.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ReplacementNum(u64);
+
+impl ReplacementNum {
+    pub const FOR_NEW_COMMIT_VER_INTERVAL: Self = Self(0);
+
+    pub fn max(mut vals: impl Iterator<Item = Self>) -> Option<Self> {
+        let mut max_val = vals.next();
+        for val in vals {
+            max_val = Some(cmp::max(max_val.unwrap(), val));
+        }
+        max_val
+    }
+    pub fn new_larger_than_all_of(vals: impl Iterator<Item = Self>) -> Self {
+        match Self::max(vals) {
+            None => Self(0),
+            Some(val) => Self(val.0 + 1),
+        }
+    }
+}
 
 #[derive(FromPrimitive, ToPrimitive, PartialEq, Eq)]
 pub enum CommitDataType {
@@ -28,7 +62,7 @@ pub enum CommitDataType {
 pub struct CommitInfo {
     pub commit_ver_hi_incl: CommitVer,
     pub commit_ver_lo_incl: CommitVer,
-    pub timestamp_num: TimestampNum,
+    pub replacement_num: ReplacementNum,
     pub data_type: CommitDataType,
 }
 
@@ -39,7 +73,7 @@ impl CommitInfo {
             "{},{},{},{}",
             self.commit_ver_hi_incl.0,
             self.commit_ver_lo_incl.0,
-            self.timestamp_num.0,
+            self.replacement_num.0,
             self.data_type.to_u8().unwrap(),
         )?;
         Ok(())
@@ -54,16 +88,16 @@ impl CommitInfo {
                 "Incorrect format for {}.",
                 any::type_name::<Self>()
             )),
-            Ok([hi, lo, ts, typ]) => {
+            Ok([hi, lo, replc_num, typ]) => {
                 let hi = hi
                     .parse::<u64>()
                     .map_err(|_| anyhow!("Invalid commit_ver_hi_incl"))?;
                 let lo = lo
                     .parse::<u64>()
                     .map_err(|_| anyhow!("Invalid commit_ver_lo_incl"))?;
-                let ts = ts
+                let replc_num = replc_num
                     .parse::<u64>()
-                    .map_err(|_| anyhow!("Invalid timestamp_num"))?;
+                    .map_err(|_| anyhow!("Invalid replacement_num"))?;
                 let typ = typ
                     .parse::<u8>()
                     .map_err(|_| anyhow!("Invalid data_type"))?;
@@ -75,7 +109,7 @@ impl CommitInfo {
                 Ok(Self {
                     commit_ver_hi_incl: CommitVer(hi),
                     commit_ver_lo_incl: CommitVer(lo),
-                    timestamp_num: TimestampNum(ts),
+                    replacement_num: ReplacementNum(replc_num),
                     data_type: typ,
                 })
             }

@@ -1,5 +1,5 @@
 use crate::lsm::{
-    unit::{CommitInfo, CommitVer, CommittedUnit, UnitDir, COMMIT_VER_INITIAL},
+    unit::{CommitInfo, CommitVer, CommittedUnit, UnitDir},
     LsmState,
 };
 use anyhow::{anyhow, Context, Result};
@@ -66,12 +66,8 @@ impl LsmDir {
     /// - The next commit ver.
     fn load_committed_units(mut pq: BinaryHeap<CIUD>) -> Result<(Vec<CommittedUnit>, CommitVer)> {
         let next_commit_ver = match pq.peek() {
-            None => COMMIT_VER_INITIAL,
-            Some(committed_unit) => {
-                let mut commit_ver_hi = committed_unit.commit_info.commit_ver_hi_incl().clone();
-                *commit_ver_hi += 1;
-                commit_ver_hi
-            }
+            None => CommitVer::AT_EMPTY_DATASTORE,
+            Some(committed_unit) => committed_unit.commit_info.commit_ver_hi_incl().inc(),
         };
 
         let mut committed_units = Vec::<CommittedUnit>::new();
@@ -107,16 +103,16 @@ struct CIUD {
 impl PartialOrd for CIUD {
     /// Compare
     /// 1. [`CommitInfo::commit_ver_hi_incl`]
-    /// 1. [`CommitInfo::timestamp_num`]
+    /// 1. [`CommitInfo::replacement_num`]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let slf_commit_ver = &self.commit_info.commit_ver_hi_incl;
         let oth_commit_ver = &other.commit_info.commit_ver_hi_incl;
         let commit_ver_ord = slf_commit_ver.cmp(oth_commit_ver);
 
         let ord = commit_ver_ord.then_with(|| {
-            let slf_ts = &self.commit_info.timestamp_num;
-            let oth_ts = &other.commit_info.timestamp_num;
-            slf_ts.cmp(oth_ts)
+            let slf_rn = &self.commit_info.replacement_num;
+            let oth_rn = &other.commit_info.replacement_num;
+            slf_rn.cmp(oth_rn)
         });
 
         Some(ord)

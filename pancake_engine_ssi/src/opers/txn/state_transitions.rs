@@ -25,7 +25,7 @@ impl<'txn> Txn<'txn> {
             snap_head_excl =
                 Self::hold_boundary_at_head(&mut lsm_state, &mut prepped_boundary_node);
 
-            snap_next_commit_ver = lsm_state.next_commit_ver;
+            snap_next_commit_ver = lsm_state.next_commit_ver();
 
             snap_list_ver = lsm_state.hold_curr_list_ver();
         }
@@ -68,7 +68,7 @@ impl<'txn> Txn<'txn> {
             {
                 let lsm_state = self.db.lsm_state().lock().await;
 
-                if self.snap_next_commit_ver != lsm_state.next_commit_ver {
+                if self.snap_next_commit_ver != lsm_state.next_commit_ver() {
                     self.update_snapshot_for_conflict_checking(lsm_state, prepped_boundary_node)?;
                     if self.has_conflict()? {
                         return Ok(TryCommitResult::Conflict(self));
@@ -89,7 +89,7 @@ impl<'txn> Txn<'txn> {
         let snap_head_excl =
             Self::hold_boundary_at_head(&mut lsm_state, &mut prepped_boundary_node);
 
-        self.snap_next_commit_ver = lsm_state.next_commit_ver;
+        self.snap_next_commit_ver = lsm_state.next_commit_ver();
 
         let updated_mhlv;
         (self.snap_list_ver, updated_mhlv) =
@@ -116,7 +116,7 @@ impl<'txn> Txn<'txn> {
             snap_head_excl =
                 Self::hold_boundary_at_head(&mut lsm_state, &mut prepped_boundary_node);
 
-            self.snap_next_commit_ver = lsm_state.next_commit_ver;
+            self.snap_next_commit_ver = lsm_state.next_commit_ver();
 
             (self.snap_list_ver, updated_mhlv) =
                 lsm_state.hold_and_unhold_list_ver(self.snap_list_ver)?;
@@ -160,15 +160,14 @@ impl<'txn> Txn<'txn> {
     }
 
     fn do_commit(mut self, mut lsm_state: MutexGuard<LsmState>) -> Result<()> {
+        let commit_ver = lsm_state.fetch_inc_next_commit_ver();
+
         /* Push a node with CommittedUnit.
         Note, moving Staging to CommittedUnit is an expensive operation,
         and we're doing it under a mutex guard. */
-        let committed_unit =
-            CommittedUnit::from_staging(self.staging.take().unwrap(), lsm_state.next_commit_ver)?;
+        let committed_unit = CommittedUnit::from_staging(self.staging.take().unwrap(), commit_ver)?;
         let elem = LsmElem::Unit(committed_unit);
         lsm_state.list.push_elem(elem);
-
-        *lsm_state.next_commit_ver += 1;
 
         let updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver)?;
 

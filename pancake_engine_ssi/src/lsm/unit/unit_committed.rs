@@ -3,7 +3,7 @@ use crate::{
     lsm::{
         entryset::CommittedEntrySet,
         unit::{
-            CommitDataType, CommitInfo, CommitVer, CompactedUnit, StagingUnit, TimestampNum,
+            CommitDataType, CommitInfo, CommitVer, CompactedUnit, ReplacementNum, StagingUnit,
             UnitDir,
         },
     },
@@ -43,7 +43,7 @@ impl CommittedUnit {
         let commit_info = CommitInfo {
             commit_ver_hi_incl: commit_ver,
             commit_ver_lo_incl: commit_ver,
-            timestamp_num: TimestampNum::from(0),
+            replacement_num: ReplacementNum::FOR_NEW_COMMIT_VER_INTERVAL,
             data_type: CommitDataType::MemLog,
         };
         let commit_info_path = stg.dir.format_commit_info_file_path();

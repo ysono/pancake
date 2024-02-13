@@ -5,7 +5,9 @@ use crate::{
     lsm::{
         entryset::{merging, CommittedEntrySet},
         lsm_state_utils,
-        unit::{CommitDataType, CommitInfo, CommitVer, CommittedUnit, CompactedUnit, TimestampNum},
+        unit::{
+            CommitDataType, CommitInfo, CommitVer, CommittedUnit, CompactedUnit, ReplacementNum,
+        },
         LsmElem,
     },
     opers::sicr_job::{ScndIdxCreationJob, ScndIdxCreationRequest, ScndIdxCreationWork},
@@ -209,7 +211,7 @@ impl ScndIdxCreationJob {
         let commit_info = CommitInfo {
             commit_ver_hi_incl: commit_ver,
             commit_ver_lo_incl: commit_ver,
-            timestamp_num: TimestampNum::from(0),
+            replacement_num: ReplacementNum::FOR_NEW_COMMIT_VER_INTERVAL,
             data_type: CommitDataType::SSTable,
         };
 

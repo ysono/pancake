@@ -2,7 +2,7 @@ mod scnd_client_req;
 
 use crate::{
     db_state::DbState,
-    lsm::{ListVer, LsmDir, LsmState, LIST_VER_INITIAL},
+    lsm::{ListVer, LsmDir, LsmState},
     opers::{
         fc_job::FlushingAndCompactionJob,
         sicr_job::{ScndIdxCreationJob, ScndIdxCreationRequest},
@@ -47,7 +47,7 @@ impl DB {
 
         let (lsm_dir, lsm_state) = LsmDir::load_or_new(lsm_dir_path)?;
 
-        let (min_held_list_ver_tx, min_held_list_ver_rx) = watch::channel(LIST_VER_INITIAL);
+        let (min_held_list_ver_tx, min_held_list_ver_rx) = watch::channel(ListVer::AT_BOOTUP);
         let (replace_avail_tx, replace_avail_rx) = watch::channel(());
         let (scnd_idx_request_tx, scnd_idx_request_rx) = mpsc::channel(SIREQ_CHANNEL_CAPACITY);
         let (scnd_idx_work_tx, scnd_idx_work_rx) = mpsc::channel(SIREQ_CHANNEL_CAPACITY);

@@ -2,14 +2,13 @@ use crate::{
     db_state::ScndIdxState,
     lsm::{
         entryset::{merging, CommittedEntrySet},
-        unit::{CommitDataType, CommitInfo, CommittedUnit, CompactedUnit, TimestampNum},
+        unit::{CommitDataType, CommitInfo, CommittedUnit, CompactedUnit, ReplacementNum},
     },
     opers::fc_job::FlushingAndCompactionJob,
 };
 use anyhow::Result;
 use pancake_engine_common::{Entry, SSTable};
 use pancake_types::{serde::OptDatum, types::Deser};
-use std::cmp;
 
 impl FlushingAndCompactionJob {
     /// A given slice should be compacted iff any of:
@@ -119,17 +118,15 @@ impl FlushingAndCompactionJob {
         #[rustfmt::skip]
         let commit_ver_lo_incl = units.clone().last().unwrap().commit_info.commit_ver_lo_incl().clone();
 
-        let mut timestamp_num = TimestampNum::from(0);
-        for unit in units {
-            let ts = unit.commit_info.timestamp_num();
-            timestamp_num = cmp::max(timestamp_num, *ts);
-        }
-        *timestamp_num += 1;
+        let replc_nums = units
+            .iter()
+            .map(|unit| unit.commit_info.replacement_num().clone());
+        let replacement_num = ReplacementNum::new_larger_than_all_of(replc_nums);
 
         CommitInfo {
             commit_ver_hi_incl,
             commit_ver_lo_incl,
-            timestamp_num,
+            replacement_num,
             data_type: CommitDataType::SSTable,
         }
     }
