@@ -1,6 +1,6 @@
 use crate::fs_utils;
 use anyhow::Result;
-use pancake_types::{iters::KeyValueIterator, types::Deser};
+use pancake_types::{iters::KeyValueReader, types::Deser};
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -24,7 +24,7 @@ where
         let mut memtable = BTreeMap::default();
         if log_path.exists() {
             let log_file = fs_utils::open_file(log_path, OpenOptions::new().read(true))?;
-            let iter = KeyValueIterator::<K, V>::from(log_file);
+            let iter = KeyValueReader::<_, K, V>::from(log_file).into_iter_kv();
             for res_kv in iter {
                 let (k, v) = res_kv?;
                 memtable.insert(k, v);
