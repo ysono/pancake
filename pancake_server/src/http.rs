@@ -25,10 +25,10 @@ async fn logger(req: Request<Body>) -> Result<Request<Body>> {
 }
 
 async fn error_handler(err: routerify::RouteError, _: RequestInfo) -> Response<Body> {
-    eprintln!("{}", err);
+    eprintln!("{err}");
     Response::builder()
         .status(StatusCode::INTERNAL_SERVER_ERROR)
-        .body(Body::from(format!("Something went wrong: {}", err)))
+        .body(Body::from(format!("Something went wrong: {err}")))
         .unwrap()
 }
 
@@ -64,7 +64,7 @@ pub async fn main(
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
     let server = Server::bind(&addr).serve(service);
-    println!("Frontend is running on: {}", addr);
+    println!("Frontend is running on: {addr}");
 
     let server = server.with_graceful_shutdown(async move {
         terminate_rx.await.ok();
@@ -72,6 +72,6 @@ pub async fn main(
     let server_res = server.await;
     println!("Frontend is exiting.");
     if let Err(err) = server_res {
-        eprintln!("Frontend error: {}", err);
+        eprintln!("Frontend error: {err}");
     }
 }

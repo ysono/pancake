@@ -88,7 +88,7 @@ impl DB {
             let iter = scnd_idx.get_range(sv_lo, sv_hi);
             return Ok(iter);
         }
-        Err(anyhow!("Secondary index does not exist for {:?}", spec))
+        Err(anyhow!("Secondary index does not exist for {spec:?}"))
     }
 
     pub fn create_scnd_idx(&mut self, spec: Arc<SubValueSpec>) -> Result<()> {
@@ -120,7 +120,7 @@ impl DB {
         let dir_path = dir_path.as_ref();
         let maybe_file_name = dir_path.file_name().and_then(|os_str| os_str.to_str());
         let res_file_name =
-            maybe_file_name.ok_or(anyhow!("Unexpected scnd_idx dir path {:?}", dir_path));
+            maybe_file_name.ok_or(anyhow!("Unexpected scnd_idx dir path {dir_path:?}"));
         res_file_name.and_then(|file_name| PathNameNum::parse_hex(file_name))
     }
 }

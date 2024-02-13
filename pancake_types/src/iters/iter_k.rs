@@ -34,7 +34,7 @@ where
             }
         }
         match V::skip(&mut self.r)? {
-            ReadResult::EOF => return Err(anyhow!("EOF while skipping a V.",)),
+            ReadResult::EOF => return Err(anyhow!("EOF while skipping a V.")),
             ReadResult::Some(read_len_, ()) => {
                 read_len += read_len_;
             }
@@ -51,7 +51,7 @@ where
             }
         }
         match V::skip(&mut self.r)? {
-            ReadResult::EOF => return Err(anyhow!("EOF while skipping a V.",)),
+            ReadResult::EOF => return Err(anyhow!("EOF while skipping a V.")),
             ReadResult::Some(read_len_, ()) => {
                 read_len += read_len_;
             }

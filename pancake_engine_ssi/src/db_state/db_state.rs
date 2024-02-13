@@ -23,8 +23,7 @@ impl DbState {
             scnd_idxs_state.scnd_idxs.retain(|sv_spec, si_state| {
                 if !si_state.is_readable {
                     eprintln!(
-                        "Secondary index creation for {:?} never completed last time.",
-                        sv_spec
+                        "Secondary index creation for {sv_spec:?} never completed last time.",
                     );
                 }
                 si_state.is_readable
@@ -70,7 +69,7 @@ impl DbState {
         let sis = &mut self.scnd_idxs_state;
 
         match sis.scnd_idxs.get_mut(sv_spec) {
-            None => return Err(anyhow!("No state for {:?}", sv_spec)),
+            None => return Err(anyhow!("No state for {sv_spec:?}")),
             Some(si_state) => {
                 si_state.is_readable = true;
                 sis.ser(&self.scnd_idxs_state_file_path)?;

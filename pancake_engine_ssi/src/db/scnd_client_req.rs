@@ -16,10 +16,7 @@ impl DB {
             } else {
                 "it's being created"
             };
-            format!(
-                "Secondary index for {:?} already exists, and {}",
-                sv_spec, sfx
-            )
+            format!("Secondary index for {sv_spec:?} already exists, and {sfx}")
         };
 
         {
@@ -60,7 +57,7 @@ impl DB {
     }
 
     pub async fn delete_scnd_idx(&self, sv_spec: &SubValueSpec) -> Result<()> {
-        let err_comment = || format!("Secondary index for {:?} is being created.", sv_spec);
+        let err_comment = || format!("Secondary index for {sv_spec:?} is being created.");
 
         {
             let db_state = self.db_state.read().await;

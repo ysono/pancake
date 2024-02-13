@@ -80,7 +80,7 @@ where
         let file_path = file_path.as_ref();
         let maybe_file_stem = file_path.file_stem().and_then(|os_str| os_str.to_str());
         let res_file_stem =
-            maybe_file_stem.ok_or(anyhow!("Unexpected SSTable file path {:?}", file_path));
+            maybe_file_stem.ok_or(anyhow!("Unexpected SSTable file path {file_path:?}"));
         res_file_stem.and_then(|file_stem| PathNameNum::parse_hex(file_stem))
     }
 

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::task::JoinHandle;
 
 fn gen_pk(doctor_id: usize) -> PrimaryKey {
-    gen::gen_str_pk(format!("doctor.{}", doctor_id))
+    gen::gen_str_pk(format!("doctor.{doctor_id}"))
 }
 fn gen_pv(is_on_call: bool) -> Value {
     Value(Datum::Bytes(vec![is_on_call as u8]))

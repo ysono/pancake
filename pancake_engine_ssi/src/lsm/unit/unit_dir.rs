@@ -18,7 +18,7 @@ impl UnitDir {
     }
     pub fn format_scnd_path(&self, num: ScndIdxNum) -> PathBuf {
         let numstr = PathNameNum::from(*num).format_hex();
-        let file_name = format!("{}{}{}", SI_KV_FILE_NAME_PFX, numstr, SI_KV_FILE_NAME_EXT);
+        let file_name = format!("{SI_KV_FILE_NAME_PFX}{numstr}{SI_KV_FILE_NAME_EXT}");
         self.join(file_name)
     }
     fn parse_scnd_file_num<P: AsRef<Path>>(file_path: P) -> Option<ScndIdxNum> {

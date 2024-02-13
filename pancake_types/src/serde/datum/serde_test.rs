@@ -21,9 +21,7 @@ mod test {
             assert_eq!(
                 serialized.len(),
                 w_len,
-                "\n{:?}\n{:?}\n",
-                pre_serialized,
-                serialized
+                "\n{pre_serialized:?}\n{serialized:?}\n",
             );
 
             (serialized, w_len_at_each_dat)
@@ -42,9 +40,7 @@ mod test {
             assert_eq!(
                 ReadResult::EOF,
                 OptDatum::<Datum>::deser(&mut r)?,
-                "\n{:?}\n{:?}\n",
-                pre_serialized,
-                serialized
+                "\n{pre_serialized:?}\n{serialized:?}\n",
             );
         }
 
@@ -65,14 +61,11 @@ mod test {
             assert_eq!(
                 ReadResult::EOF,
                 OptDatum::<Datum>::deser(&mut r)?,
-                "\n{:?}\n{:?}\n",
-                pre_serialized,
-                serialized
+                "\n{pre_serialized:?}\n{serialized:?}\n",
             );
             assert_eq!(
                 pre_serialized, &deserialized,
-                "\n{:?}\n{:?}\n",
-                pre_serialized, serialized
+                "\n{pre_serialized:?}\n{serialized:?}\n",
             );
         }
 

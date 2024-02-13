@@ -131,8 +131,7 @@ impl LsmDir {
     fn parse_unit_dir_num<P: AsRef<Path>>(dir_path: P) -> Result<PathNameNum> {
         let dir_path = dir_path.as_ref();
         let maybe_file_name = dir_path.file_name().and_then(|os_str| os_str.to_str());
-        let res_file_name =
-            maybe_file_name.ok_or(anyhow!("Unexpected unit dir path {:?}", dir_path));
+        let res_file_name = maybe_file_name.ok_or(anyhow!("Unexpected unit dir path {dir_path:?}"));
         res_file_name.and_then(|file_name| PathNameNum::parse_hex(file_name))
     }
 }

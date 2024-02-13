@@ -51,7 +51,7 @@ mod test {
                 (Some(exp_sv), Some(act_sv)) => {
                     assert_eq!(&exp_sv, &act_sv as &SubValue);
                 }
-                etc => panic!("{:?}", etc),
+                etc => panic!("{etc:?}"),
             }
         }
 

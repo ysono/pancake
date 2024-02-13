@@ -148,7 +148,7 @@ mod test {
     where
         T: Ord + Debug,
     {
-        assert_eq!(exp, is.overlaps_with(points.into_iter())?,);
+        assert_eq!(exp, is.overlaps_with(points.into_iter())?);
         Ok(())
     }
 

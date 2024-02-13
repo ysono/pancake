@@ -96,13 +96,11 @@ impl<'txn> Txn<'txn> {
             .scnd_idxs()
             .get(sv_spec_arg)
             .ok_or(anyhow!(
-                "Secondary index does not exist for {:?}",
-                sv_spec_arg
+                "Secondary index does not exist for {sv_spec_arg:?}",
             ))?;
         if is_readable == &false {
             return Err(anyhow!(
-                "Secondary index for {:?} has not finished building",
-                sv_spec_arg
+                "Secondary index for {sv_spec_arg:?} has not finished building",
             ));
         }
 

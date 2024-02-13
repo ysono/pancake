@@ -207,7 +207,7 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Operat
                 eos(&mut iter)?;
                 return Ok(Operation::CreateScndIdx(spec));
             }
-            x => return Err(anyhow!("Expected creatable but found {:?}", x)),
+            x => return Err(anyhow!("Expected creatable but found {x:?}")),
         },
         Some("delete") => match iter.next() {
             Some("index") => {
@@ -215,9 +215,9 @@ fn root<'a, I: Iterator<Item = &'a str>>(mut iter: Peekable<I>) -> Result<Operat
                 eos(&mut iter)?;
                 return Ok(Operation::DelScndIdx(spec));
             }
-            x => return Err(anyhow!("Expected deletable but found {:?}", x)),
+            x => return Err(anyhow!("Expected deletable but found {x:?}")),
         },
-        x => return Err(anyhow!("Expected operation but found {:?}", x)),
+        x => return Err(anyhow!("Expected operation but found {x:?}")),
     }
 }
 
@@ -229,8 +229,7 @@ fn datum<'a, I: Iterator<Item = &'a str>>(iter: &mut Peekable<I>) -> Result<Datu
                     Some(")") => return Ok(Datum::Str(String::from(str_literal))),
                     x => {
                         return Err(anyhow!(
-                            "Expected closing of string literal but found {:?}",
-                            x
+                            "Expected closing of string literal but found {x:?}",
                         ))
                     }
                 },
@@ -238,8 +237,7 @@ fn datum<'a, I: Iterator<Item = &'a str>>(iter: &mut Peekable<I>) -> Result<Datu
             },
             x => {
                 return Err(anyhow!(
-                    "Expected opening of string literal but found {:?}",
-                    x
+                    "Expected opening of string literal but found {x:?}",
                 ))
             }
         },
@@ -248,20 +246,17 @@ fn datum<'a, I: Iterator<Item = &'a str>>(iter: &mut Peekable<I>) -> Result<Datu
                 Some(int_literal) => {
                     let int_val = int_literal
                         .parse::<i64>()
-                        .context(format!("Expected i64 literal but found {}", int_literal))?;
+                        .context(format!("Expected i64 literal but found {int_literal}"))?;
                     match iter.next() {
                         Some(")") => return Ok(Datum::I64(int_val)),
                         x => {
-                            return Err(anyhow!(
-                                "Expected closing of int literal but found {:?}",
-                                x
-                            ))
+                            return Err(anyhow!("Expected closing of int literal but found {x:?}"))
                         }
                     }
                 }
                 None => return Err(anyhow!("Expected int literal but found EOS")),
             },
-            x => return Err(anyhow!("Expected opening of int literal but found {:?}", x)),
+            x => return Err(anyhow!("Expected opening of int literal but found {x:?}")),
         },
         Some("tup") => match iter.next() {
             Some("(") => {
@@ -279,9 +274,9 @@ fn datum<'a, I: Iterator<Item = &'a str>>(iter: &mut Peekable<I>) -> Result<Datu
                     }
                 }
             }
-            x => return Err(anyhow!("Expected opening of tuple but found {:?}", x)),
+            x => return Err(anyhow!("Expected opening of tuple but found {x:?}")),
         },
-        x => Err(anyhow!("Expected datum type but found {:?}", x)),
+        x => Err(anyhow!("Expected datum type but found {x:?}")),
     }
 }
 
@@ -297,8 +292,7 @@ fn svspec<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<SubValueSpec>
                         Some(token) => {
                             if datum_type.is_some() {
                                 return Err(anyhow!(
-                                    "svspec() contains an extra token {} following datum_type.",
-                                    token
+                                    "svspec() contains an extra token {token} following datum_type.",
                                 ));
                             } else if token == "str" {
                                 datum_type = Some(DatumType::Str);
@@ -306,8 +300,7 @@ fn svspec<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<SubValueSpec>
                                 datum_type = Some(DatumType::I64);
                             } else {
                                 let member_idx = token.parse::<u32>().context(format!(
-                                    "Expected svspec() member_idx but found {}.",
-                                    token
+                                    "Expected svspec() member_idx but found {token}.",
                                 ))?;
                                 member_idxs.push(member_idx);
                             }
@@ -327,9 +320,9 @@ fn svspec<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<SubValueSpec>
                     }
                 }
             }
-            x => return Err(anyhow!("Expected opening of svspec() but found {:?}.", x)),
+            x => return Err(anyhow!("Expected opening of svspec() but found {x:?}.")),
         },
-        x => return Err(anyhow!("Expected opening of svspec() but found {:?}.", x)),
+        x => return Err(anyhow!("Expected opening of svspec() but found {x:?}.")),
     }
 }
 
@@ -349,7 +342,7 @@ fn opt_datum<'a, I: Iterator<Item = &'a str>>(iter: &mut Peekable<I>) -> Result<
 fn eos<'a, I: Iterator<Item = &'a str>>(iter: &mut I) -> Result<()> {
     match iter.next() {
         None => Ok(()),
-        x => Err(anyhow!("Expected EOS but found {:?}", x)),
+        x => Err(anyhow!("Expected EOS but found {x:?}")),
     }
 }
 

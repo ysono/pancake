@@ -53,7 +53,7 @@ impl WasmEngine {
         match res_commit_dec {
             Err(client_str) => Err(anyhow!(client_str)),
             Ok(CommitDecision::Abort(client_str)) => Err(anyhow!(
-                "Aborting is not supported by the serial engine. Your txn's changes were already made. Wasm output: {}", client_str)),
+                "Aborting is not supported by the serial engine. Your txn's changes were already made. Wasm output: {client_str}", )),
             Ok(CommitDecision::Commit(client_str)) => Ok(client_str),
         }
     }

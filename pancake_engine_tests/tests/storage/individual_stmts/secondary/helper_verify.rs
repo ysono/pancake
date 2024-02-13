@@ -16,7 +16,7 @@ pub async fn verify_get(
     match (exp, act) {
         (Err(_exp), Err(act)) => {
             assert_eq!(
-                format!("Secondary index does not exist for {:?}", sv_spec),
+                format!("Secondary index does not exist for {sv_spec:?}"),
                 act.to_string()
             )
         }

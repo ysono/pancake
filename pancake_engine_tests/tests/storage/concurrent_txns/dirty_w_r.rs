@@ -17,8 +17,8 @@ pub async fn no_dirty_write(db: &'static DB) -> Result<()> {
     let objs_ct = 15;
     let mut tasks = vec![];
 
-    let gen_pk_str = |obj_i: u64| format!("dirty_write_test:item{}", obj_i);
-    let gen_pv_str = |txn_i: u64| format!("from txn {}", txn_i);
+    let gen_pk_str = |obj_i: u64| format!("dirty_write_test:item{obj_i}");
+    let gen_pv_str = |txn_i: u64| format!("from txn {txn_i}");
     let parse_pv_str = |s: &str| s["from txn ".len()..].parse::<u64>();
 
     /* Each writing txn puts multiple objs, then commits. */
@@ -110,8 +110,8 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
     let mut w_tasks = vec![];
     let mut r_tasks = vec![];
 
-    let gen_pk_str = |obj_i: u64| format!("dirty_read_test:item{}", obj_i);
-    let gen_pv_str = |txn_i: u64| format!("from txn {}", txn_i);
+    let gen_pk_str = |obj_i: u64| format!("dirty_read_test:item{obj_i}");
+    let gen_pv_str = |txn_i: u64| format!("from txn {txn_i}");
     let parse_pv_str = |s: &str| s["from txn ".len()..].parse::<u64>();
 
     /*
@@ -198,9 +198,7 @@ pub async fn no_dirty_read(db: &'static DB) -> Result<()> {
                     (We're asserting beyond Read Committed. Are we asserting MAV or Snapshot?) */
                     if first_opt_pv != curr_opt_pv {
                         return Err(anyhow!(
-                            "Read unequal Opt<PV>s: {:?} {:?}",
-                            first_opt_pv,
-                            curr_opt_pv
+                            "Read unequal Opt<PV>s: {first_opt_pv:?} {curr_opt_pv:?}",
                         ));
                     }
 

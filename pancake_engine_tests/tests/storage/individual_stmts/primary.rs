@@ -16,8 +16,8 @@ pub async fn put_del_get_getrange(db: &mut impl OneStmtDbAdaptor) -> Result<()> 
         for _ in 0..entries_count {
             let i = rand::random::<u16>();
 
-            let pk = Arc::new(gen::gen_str_pk(format!("key{}", i)));
-            let pv = Arc::new(gen::gen_str_pv(format!("val{}", i)));
+            let pk = Arc::new(gen::gen_str_pk(format!("key{i}")));
+            let pv = Arc::new(gen::gen_str_pv(format!("val{i}")));
 
             db.put(pk.clone(), Some(pv.clone())).await?;
 
