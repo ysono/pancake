@@ -1,6 +1,6 @@
 use crate::ds_n_a::send_ptr::SendPtr;
 use crate::{
-    lsm_state::{unit::unit_utils, LsmElem},
+    lsm::{lsm_state_utils, LsmElem},
     opers::{
         fc_job::FlushingAndCompactionJob,
         sicr_job::{ScndIdxCreationRequest, ScndIdxCreationWork},
@@ -17,7 +17,7 @@ impl FlushingAndCompactionJob {
     ) -> Result<()> {
         /* Malloc for new_head outside the mutex guard.
         Free new_head outside the mutex guard, thanks to Option<>. */
-        let mut prepped_new_head = Some(unit_utils::new_dummy_node(0, true));
+        let mut prepped_new_head = Some(lsm_state_utils::new_dummy_node(0, true));
         let snap_head_excl;
         let output_commit_ver;
         {

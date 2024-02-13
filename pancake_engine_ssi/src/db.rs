@@ -2,8 +2,7 @@ mod scnd_client_req;
 
 use crate::{
     db_state::DbState,
-    lsm_dir::LsmDir,
-    lsm_state::{ListVer, LsmState, LIST_VER_INITIAL},
+    lsm::{ListVer, LsmDir, LsmState, LIST_VER_INITIAL},
     opers::{
         fc_job::FlushingAndCompactionJob,
         sicr_job::{ScndIdxCreationJob, ScndIdxCreationRequest},

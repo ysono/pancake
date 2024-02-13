@@ -2,7 +2,7 @@ use crate::ds_n_a::{
     atomic_linked_list::{AtomicLinkedList, ListNode},
     multiset::Multiset,
 };
-use crate::lsm_state::unit::{CommitVer, CommittedUnit};
+use crate::lsm::unit::{CommitVer, CommittedUnit};
 use anyhow::Result;
 use derive_more::{Deref, DerefMut};
 use std::ptr;

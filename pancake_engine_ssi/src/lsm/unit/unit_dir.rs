@@ -1,4 +1,4 @@
-use crate::{db_state::ScndIdxNum, lsm_state::unit::CommitInfo};
+use crate::{db_state::ScndIdxNum, lsm::unit::CommitInfo};
 use anyhow::Result;
 use derive_more::{Deref, From};
 use pancake_engine_common::fs_utils::{self, PathNameNum};

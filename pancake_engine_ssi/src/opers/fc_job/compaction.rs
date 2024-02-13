@@ -1,6 +1,6 @@
 use crate::{
     db_state::ScndIdxState,
-    lsm_state::{
+    lsm::{
         entryset::{merging, CommittedEntrySet},
         unit::{CommitDataType, CommitInfo, CommittedUnit, CompactedUnit, TimestampNum},
     },

@@ -1,4 +1,4 @@
-use crate::{db_state::ScndIdxNum, lsm_state::unit::UnitDir};
+use crate::{db_state::ScndIdxNum, lsm::unit::UnitDir};
 use anyhow::Result;
 use pancake_engine_common::WritableMemLog;
 use pancake_types::{

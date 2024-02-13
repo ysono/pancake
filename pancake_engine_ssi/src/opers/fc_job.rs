@@ -5,7 +5,7 @@ mod scnd;
 use gc::DanglingNodeSet;
 
 use crate::{
-    lsm_state::ListVer,
+    lsm::ListVer,
     opers::sicr_job::{ScndIdxCreationRequest, ScndIdxCreationWork},
     DB,
 };

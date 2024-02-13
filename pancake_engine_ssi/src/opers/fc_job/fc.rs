@@ -1,7 +1,7 @@
 use crate::ds_n_a::atomic_linked_list::ListNode;
 use crate::ds_n_a::send_ptr::SendPtr;
 use crate::{
-    lsm_state::{unit::unit_utils, LsmElem},
+    lsm::{lsm_state_utils, LsmElem},
     opers::fc_job::{DanglingNodeSet, FlushingAndCompactionJob},
 };
 use anyhow::Result;
@@ -11,7 +11,7 @@ impl FlushingAndCompactionJob {
     pub(super) async fn flush_and_compact(&mut self) -> Result<()> {
         /* Malloc for new_head outside the mutex guard.
         Free new_head outside the mutex guard, thanks to Option<>. */
-        let mut prepped_new_head = Some(unit_utils::new_dummy_node(0, false));
+        let mut prepped_new_head = Some(lsm_state_utils::new_dummy_node(0, false));
         let snap_head_excl;
         {
             let lsm_state = self.db.lsm_state().lock().await;
@@ -79,7 +79,7 @@ impl FlushingAndCompactionJob {
         let skip_tombstones = curr_node.status == CurrNodeStatus::EndOfList;
         let compacted_unit = self.do_flush_and_compact(units, skip_tombstones).await?;
         if let Some(unit) = compacted_unit {
-            let node = unit_utils::new_unit_node(unit);
+            let node = lsm_state_utils::new_unit_node(unit);
             self.replace(segm_head_excl, curr_node.ptr, Some(node), slice)
                 .await;
         }

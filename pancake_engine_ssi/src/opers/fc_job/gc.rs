@@ -1,7 +1,7 @@
 use crate::ds_n_a::atomic_linked_list::ListNode;
 use crate::ds_n_a::send_ptr::SendPtr;
 use crate::{
-    lsm_state::{ListVer, LsmElem},
+    lsm::{ListVer, LsmElem},
     opers::fc_job::FlushingAndCompactionJob,
 };
 use std::time::Duration;

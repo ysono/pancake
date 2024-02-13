@@ -1,4 +1,4 @@
-use crate::lsm_state::entryset::CommittedEntrySet;
+use crate::lsm::entryset::CommittedEntrySet;
 use itertools::Itertools;
 use pancake_engine_common::{Entry, WritableMemLog};
 use pancake_types::types::Deser;

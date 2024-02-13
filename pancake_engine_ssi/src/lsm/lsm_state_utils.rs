@@ -1,5 +1,5 @@
 use crate::ds_n_a::atomic_linked_list::ListNode;
-use crate::lsm_state::{unit::CommittedUnit, LsmElem};
+use crate::lsm::{unit::CommittedUnit, LsmElem};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize};
 
 pub fn new_dummy_node(hold_count: usize, is_fence: bool) -> Box<ListNode<LsmElem>> {

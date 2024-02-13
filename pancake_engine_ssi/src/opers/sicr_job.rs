@@ -4,7 +4,7 @@ use crate::ds_n_a::atomic_linked_list::ListNode;
 use crate::ds_n_a::send_ptr::SendPtr;
 use crate::{
     db_state::ScndIdxNum,
-    lsm_state::{unit::CommitVer, LsmElem},
+    lsm::{unit::CommitVer, LsmElem},
     DB,
 };
 use anyhow::Result;

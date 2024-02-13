@@ -9,7 +9,7 @@ use crate::ds_n_a::atomic_linked_list::AtomicLinkedListSnapshot;
 use crate::ds_n_a::interval_set::IntervalSet;
 use crate::{
     db_state::{DbState, ScndIdxNum},
-    lsm_state::{
+    lsm::{
         unit::{CommitVer, StagingUnit},
         ListVer, LsmElem,
     },

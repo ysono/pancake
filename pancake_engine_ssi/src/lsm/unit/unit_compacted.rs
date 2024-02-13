@@ -1,6 +1,6 @@
 use crate::{
     db_state::ScndIdxNum,
-    lsm_state::{entryset::CommittedEntrySet, unit::UnitDir},
+    lsm::{entryset::CommittedEntrySet, unit::UnitDir},
 };
 use anyhow::Result;
 use pancake_types::{

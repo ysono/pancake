@@ -2,7 +2,7 @@ use crate::ds_n_a::atomic_linked_list::{AtomicLinkedListSnapshot, ListNode};
 use crate::ds_n_a::interval_set::IntervalSet;
 use crate::{
     db_state::DbState,
-    lsm_state::{unit::CommittedUnit, LsmElem, LsmState},
+    lsm::{unit::CommittedUnit, LsmElem, LsmState},
     opers::txn::Txn,
     DB,
 };

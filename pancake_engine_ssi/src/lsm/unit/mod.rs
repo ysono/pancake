@@ -3,7 +3,6 @@ mod unit_committed;
 mod unit_compacted;
 mod unit_dir;
 mod unit_staging;
-pub mod unit_utils;
 
 pub use commit_info::*;
 pub use unit_committed::*;

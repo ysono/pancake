@@ -2,12 +2,10 @@ use crate::ds_n_a::atomic_linked_list::{AtomicLinkedListSnapshot, ListNode};
 use crate::ds_n_a::send_ptr::SendPtr;
 use crate::{
     db_state::ScndIdxNum,
-    lsm_state::{
+    lsm::{
         entryset::{merging, CommittedEntrySet},
-        unit::{
-            unit_utils, CommitDataType, CommitInfo, CommitVer, CommittedUnit, CompactedUnit,
-            TimestampNum,
-        },
+        lsm_state_utils,
+        unit::{CommitDataType, CommitInfo, CommitVer, CommittedUnit, CompactedUnit, TimestampNum},
         LsmElem,
     },
     opers::sicr_job::{ScndIdxCreationJob, ScndIdxCreationRequest, ScndIdxCreationWork},
@@ -58,7 +56,7 @@ impl ScndIdxCreationJob {
                 self.create_compacted_unit(intermediary_sstables, *scnd_idx_num)?;
             let committed_unit =
                 Self::convert_to_committed_unit(compacted_unit, *output_commit_ver)?;
-            let node = unit_utils::new_unit_node(committed_unit);
+            let node = lsm_state_utils::new_unit_node(committed_unit);
             self.insert_node(*snap_head_excl, node).await;
 
             self.reset_working_dir()?;

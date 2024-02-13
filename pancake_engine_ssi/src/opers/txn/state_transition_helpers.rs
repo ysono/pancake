@@ -1,7 +1,7 @@
 use crate::ds_n_a::atomic_linked_list::ListNode;
 use crate::ds_n_a::send_ptr::SendPtr;
 use crate::{
-    lsm_state::{unit::unit_utils, ListVer, LsmElem, LsmState},
+    lsm::{lsm_state_utils, ListVer, LsmElem, LsmState},
     opers::txn::Txn,
 };
 use std::sync::atomic::Ordering;
@@ -9,7 +9,7 @@ use tokio::sync::MutexGuard;
 
 impl<'txn> Txn<'txn> {
     pub(super) fn prep_boundary_node() -> Option<Box<ListNode<LsmElem>>> {
-        Some(unit_utils::new_dummy_node(1, false))
+        Some(lsm_state_utils::new_dummy_node(1, false))
     }
 
     /// This helper ensures that the head is a dummy with one additional hold_count.

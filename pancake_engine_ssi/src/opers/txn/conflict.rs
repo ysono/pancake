@@ -1,4 +1,4 @@
-use crate::{lsm_state::LsmElem, opers::txn::Txn};
+use crate::{lsm::LsmElem, opers::txn::Txn};
 use anyhow::Result;
 
 impl<'txn> Txn<'txn> {

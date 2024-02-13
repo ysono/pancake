@@ -1,7 +1,7 @@
 use crate::ds_n_a::interval_set::{Interval, IntervalSet};
 use crate::{
     db_state::ScndIdxState,
-    lsm_state::{entryset::merging, unit::StagingUnit, LsmElem},
+    lsm::{entryset::merging, unit::StagingUnit, LsmElem},
     opers::txn::Txn,
 };
 use anyhow::{anyhow, Result};
