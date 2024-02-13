@@ -19,7 +19,7 @@ mod test {
     where
         T: Ord + Debug,
     {
-        let act = is.iter().collect::<Vec<_>>();
+        let act = is.itvs.iter().collect::<Vec<_>>();
         let exp = exp
             .into_iter()
             .map(|(lo_incl, hi_incl)| Interval { lo_incl, hi_incl })
@@ -35,7 +35,7 @@ mod test {
         is.merge();
         assert_content(&is, vec![]);
 
-        // Add first range
+        // Add first itv
         add_helper(&mut is, Some(10), Some(20));
         is.merge();
         assert_content(&is, vec![(Some(10), Some(20))]);
@@ -82,7 +82,7 @@ mod test {
             ],
         );
 
-        // Expand one range, low-ward
+        // Expand one itv, low-ward
         add_helper(&mut is, Some(47), Some(55));
         is.merge();
         assert_content(
@@ -95,7 +95,7 @@ mod test {
             ],
         );
 
-        // Expand one range, high-ward
+        // Expand one itv, high-ward
         add_helper(&mut is, Some(35), Some(43));
         is.merge();
         assert_content(
@@ -108,7 +108,7 @@ mod test {
             ],
         );
 
-        // Combine two ranges
+        // Unify two existing itvs with one new itv
         add_helper(&mut is, Some(43), Some(47));
         is.merge();
         assert_content(
@@ -144,11 +144,12 @@ mod test {
         assert_content(&is, vec![(None, None)]);
     }
 
-    fn assert_overlapping<T>(is: &IntervalSet<T>, points: Vec<T>, exp: bool) -> Result<()>
+    fn assert_overlapping<T>(mis: &MergedIntervalSet<T>, points: Vec<T>, exp: bool) -> Result<()>
     where
         T: Ord + Debug,
     {
-        assert_eq!(exp, is.overlaps_with(points.into_iter())?);
+        let act = mis.overlaps_with(points.into_iter())?;
+        assert_eq!(exp, act);
         Ok(())
     }
 
@@ -156,30 +157,31 @@ mod test {
     fn overlapping() -> Result<()> {
         let mut is = IntervalSet::<i32>::new();
 
-        assert_overlapping(&is, vec![1, 2, 3], false)?;
+        let mis = is.merge();
+        assert_overlapping(&mis, vec![1, 2, 3], false)?;
 
         add_helper(&mut is, Some(20), Some(30));
-        is.merge();
-        assert_overlapping(&is, vec![15, 35], false)?;
-        assert_overlapping(&is, vec![25], true)?;
-        assert_overlapping(&is, vec![15, 30, 35], true)?;
+        let mis = is.merge();
+        assert_overlapping(&mis, vec![15, 35], false)?;
+        assert_overlapping(&mis, vec![25], true)?;
+        assert_overlapping(&mis, vec![15, 30, 35], true)?;
 
         add_helper(&mut is, None, Some(10));
-        is.merge();
-        assert_overlapping(&is, vec![15, 35], false)?;
-        assert_overlapping(&is, vec![-999], true)?;
-        assert_overlapping(&is, vec![10], true)?;
-        assert_overlapping(&is, vec![20], true)?;
-        assert_overlapping(&is, vec![5, 15, 25, 35], true)?;
+        let mis = is.merge();
+        assert_overlapping(&mis, vec![15, 35], false)?;
+        assert_overlapping(&mis, vec![-999], true)?;
+        assert_overlapping(&mis, vec![10], true)?;
+        assert_overlapping(&mis, vec![20], true)?;
+        assert_overlapping(&mis, vec![5, 15, 25, 35], true)?;
 
         add_helper(&mut is, Some(40), None);
-        is.merge();
-        assert_overlapping(&is, vec![15, 35], false)?;
-        assert_overlapping(&is, vec![-999], true)?;
-        assert_overlapping(&is, vec![10], true)?;
-        assert_overlapping(&is, vec![20], true)?;
-        assert_overlapping(&is, vec![40], true)?;
-        assert_overlapping(&is, vec![5, 15, 25, 35, 45], true)?;
+        let mis = is.merge();
+        assert_overlapping(&mis, vec![15, 35], false)?;
+        assert_overlapping(&mis, vec![-999], true)?;
+        assert_overlapping(&mis, vec![10], true)?;
+        assert_overlapping(&mis, vec![20], true)?;
+        assert_overlapping(&mis, vec![40], true)?;
+        assert_overlapping(&mis, vec![5, 15, 25, 35, 45], true)?;
 
         Ok(())
     }
