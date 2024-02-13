@@ -104,12 +104,16 @@ impl OptDatum<Datum> {
         for _ in 0..*membs_ct {
             match Self::deser_::<false, _>(r)? {
                 ReadResult::EOF => return Err(anyhow!("EOF while reading Tuple member.")),
-                ReadResult::Some(_, OptDatum::Tombstone) => {
-                    return Err(anyhow!("Tombstone nested under Tuple."))
-                }
-                ReadResult::Some(delta_r_len, OptDatum::Some(dat)) => {
+                ReadResult::Some(delta_r_len, optdat) => {
                     *r_len += delta_r_len;
-                    members.push(dat);
+                    match optdat {
+                        OptDatum::Tombstone => {
+                            return Err(anyhow!("Tombstone nested under Tuple."));
+                        }
+                        OptDatum::Some(dat) => {
+                            members.push(dat);
+                        }
+                    }
                 }
             }
         }

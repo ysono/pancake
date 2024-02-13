@@ -7,6 +7,7 @@ mod test {
     use std::io::Cursor;
 
     fn verify(pre_serialized: &Vec<OptDatum<Datum>>) -> Result<()> {
+        /* Serialize. */
         let (serialized, w_len_at_each_dat) = {
             let mut serialized: Vec<u8> = vec![];
             let mut w_len_at_each_dat: Vec<usize> = vec![]; // Cumulative `w_len`s.
@@ -27,6 +28,7 @@ mod test {
             (serialized, w_len_at_each_dat)
         };
 
+        /* Skip each Datum. */
         {
             let mut r = Cursor::new(&serialized);
             let mut r_len = 0;
@@ -44,6 +46,7 @@ mod test {
             );
         }
 
+        /* Deserialize each Datum. */
         {
             let mut r = Cursor::new(&serialized);
             let mut r_len = 0;

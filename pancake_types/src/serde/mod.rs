@@ -1,8 +1,8 @@
 //! # Serialization format
 //!
-//! The primitive de/serializable types are [`OptDatum`] and [`Datum`].
+//! The primitive de/serializable type is [`OptDatum<Datum>`].
 //!
-//! The below pseudocode depicts their serialized representations.
+//! The below pseudocode depicts its serialized representations.
 //!
 //! They all start with `datum_type`, which is encoded in `u8`.
 //! In case we need to deprecate supported datum_types over time, this allows us
@@ -11,18 +11,18 @@
 //! Some `Datum` types have fixed body lengths; these lengths are not encoded.
 //! For other `Datum` types, which have dynamic body lengths, these lengths are
 //! encoded following `datum_type`.
-//! Readers may skip the body.
+//! The body length is encoded before the body, so that readers may skip the body.
 //!
 //! A `Datum::Tuple` nests other non-`Tombstone` `Datum`s, including possibly other `Datum::Tuple`s.
 //!
 //! ```text
 //! struct OptDatum::Tombstone {
-//!     datum_type:     u8,
+//!     datum_type:         u8,
 //! }
 //!
 //! struct Datum::I64 {
-//!     datum_type:     u8,
-//!     datum_body:     [u8; 8],
+//!     datum_type:         u8,
+//!     datum_body:         [u8; 8],
 //! }
 //!
 //! struct Datum::Bytes or Datum::Str {
