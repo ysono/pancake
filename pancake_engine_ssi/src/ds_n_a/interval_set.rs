@@ -3,6 +3,8 @@ use pancake_engine_common::ds_n_a::cmp::TryPartialOrd;
 use std::cmp::Ordering;
 use std::fmt::Debug;
 
+mod test;
+
 #[derive(Debug)]
 pub struct Interval<T> {
     pub lo_incl: Option<T>,
@@ -129,6 +131,3 @@ impl<T> IntervalSet<T> {
         }
     }
 }
-
-#[cfg(test)]
-mod test;

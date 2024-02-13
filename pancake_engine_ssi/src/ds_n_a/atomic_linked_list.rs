@@ -2,6 +2,8 @@ use crate::ds_n_a::send_ptr::SendPtr;
 use std::ptr::{self, NonNull};
 use std::sync::atomic::{AtomicPtr, Ordering};
 
+mod test;
+
 pub struct ListNode<T> {
     pub elem: T,
     pub next: AtomicPtr<ListNode<T>>,
@@ -164,6 +166,3 @@ impl<T: 'static> Iterator for AtomicLinkedListSnapshotIterator<T> {
         }
     }
 }
-
-#[cfg(test)]
-mod test;

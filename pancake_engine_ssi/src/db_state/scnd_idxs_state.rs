@@ -9,6 +9,8 @@ use std::path::Path;
 use std::str;
 use std::sync::Arc;
 
+mod test;
+
 #[derive(Default, From, Deref, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct ScndIdxNum(u64);
 
@@ -139,6 +141,3 @@ impl ScndIdxsState {
         Self::do_deser(&mut r)
     }
 }
-
-#[cfg(test)]
-mod test;

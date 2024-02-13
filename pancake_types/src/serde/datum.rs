@@ -3,7 +3,6 @@ use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 
 mod deser;
 mod ser;
-#[cfg(test)]
 mod serde_test;
 pub use deser::*;
 pub use ser::*;

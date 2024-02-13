@@ -7,6 +7,8 @@ use std::io::{BufRead, Cursor, Write};
 use std::str;
 use std::sync::Arc;
 
+mod test;
+
 /// [`SubValueSpec`] specifies a contiguous sub-portion of a [`Value`].
 ///
 /// The spec is a DSL for locating this sub-portion,
@@ -149,6 +151,3 @@ impl SubValueSpec {
         Self::deser(&mut r)
     }
 }
-
-#[cfg(test)]
-mod test;
