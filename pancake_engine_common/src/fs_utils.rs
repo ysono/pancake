@@ -1,6 +1,7 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use derive_more::{Deref, From};
-use std::fs;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Seek, SeekFrom};
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 
@@ -24,15 +25,48 @@ impl PathNameNum {
     }
 }
 
-pub fn read_dir<P: AsRef<Path>>(parent_path: P) -> Result<impl Iterator<Item = Result<PathBuf>>> {
-    let iter = fs::read_dir(parent_path)
-        .map_err(|e| anyhow!(e))?
-        .map(|res_entry| res_entry.map_err(|e| anyhow!(e)).map(|entry| entry.path()));
+pub fn create_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
+    let path = path.as_ref();
+    fs::create_dir_all(path).with_context(|| format!("create_dir_all {path:?}"))
+}
+
+pub fn read_dir<'a>(parent_path: &'a Path) -> Result<impl 'a + Iterator<Item = Result<PathBuf>>> {
+    let iter = fs::read_dir(parent_path).with_context(|| format!("read_dir {parent_path:?}"))?;
+    let iter = iter.map(move |res_entry| {
+        res_entry
+            .with_context(|| format!("read_dir entry {parent_path:?}"))
+            .map(|entry| entry.path())
+    });
     Ok(iter)
 }
 
 pub fn read_dir_sorted<P: AsRef<Path>>(parent_path: P) -> Result<Vec<PathBuf>> {
-    let mut entries = read_dir(parent_path)?.collect::<Result<Vec<_>>>()?;
+    let mut entries = read_dir(parent_path.as_ref())?.collect::<Result<Vec<_>>>()?;
     entries.sort();
     Ok(entries)
+}
+
+pub fn open_file<P: AsRef<Path>>(path: P, oo: &OpenOptions) -> Result<File> {
+    let path = path.as_ref();
+    oo.open(path).with_context(|| format!("open {path:?}"))
+}
+
+pub fn seek<P: AsRef<Path>>(
+    mut seekable: impl Seek,
+    sf: SeekFrom,
+    implicit_path: P,
+) -> Result<u64> {
+    seekable
+        .seek(sf)
+        .with_context(|| format!("seek {:?}", implicit_path.as_ref()))
+}
+
+pub fn remove_file<P: AsRef<Path>>(path: P) -> Result<()> {
+    let path = path.as_ref();
+    fs::remove_file(path).with_context(|| format!("remove_file {path:?}"))
+}
+
+pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
+    let path = path.as_ref();
+    fs::remove_dir_all(path).with_context(|| format!("remove_dir_all {path:?}"))
 }

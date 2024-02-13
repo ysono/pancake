@@ -46,7 +46,7 @@ where
     pub fn load_or_new<P: AsRef<Path>>(lsm_dir_path: P) -> Result<Self> {
         let log_file_path = lsm_dir_path.as_ref().join(LOG_FILE_NAME);
         let sstables_dir_path = lsm_dir_path.as_ref().join(SSTABLES_DIR_NAME);
-        std::fs::create_dir_all(&sstables_dir_path)?;
+        fs_utils::create_dir_all(&sstables_dir_path)?;
 
         let memlog = WritableMemLog::load_or_new(&log_file_path)?;
 

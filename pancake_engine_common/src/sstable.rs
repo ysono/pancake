@@ -1,5 +1,4 @@
-use crate::ds_n_a::bisect;
-use crate::entry::Entry;
+use crate::{ds_n_a::bisect, entry::Entry, fs_utils};
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut, From};
 use pancake_types::{
@@ -8,8 +7,8 @@ use pancake_types::{
     types::{Deser, Ser},
 };
 use std::cmp::{Ord, Ordering, PartialOrd};
-use std::fs::{self, File, OpenOptions};
-use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, SeekFrom, Write};
 use std::iter;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -46,10 +45,10 @@ where
         K: 'a + Clone,
         V: 'a,
     {
-        let kv_file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&kv_file_path)?;
+        let kv_file = fs_utils::open_file(
+            &kv_file_path,
+            OpenOptions::new().create_new(true).write(true),
+        )?;
         let mut w = BufWriter::new(kv_file);
 
         let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
@@ -86,7 +85,7 @@ where
     V: Deser,
 {
     pub fn load(kv_file_path: PathBuf) -> Result<Self> {
-        let kv_file = File::open(&kv_file_path)?;
+        let kv_file = fs_utils::open_file(&kv_file_path, OpenOptions::new().read(true))?;
         let mut key_iter = KeyIterator::<K, V>::new(kv_file);
 
         let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
@@ -139,11 +138,16 @@ where
     {
         let file_offset = self.sparse_file_offsets.nearest_preceding_file_offset(k_lo);
 
-        let mut res_file_iter = File::open(&self.kv_file_path)
+        let res_file = fs_utils::open_file(&self.kv_file_path, OpenOptions::new().read(true));
+        let mut res_file_iter = res_file
             .and_then(|mut file| -> Result<File, _> {
-                file.seek(SeekFrom::Start(file_offset.0)).map(|_| file)
+                fs_utils::seek(
+                    &mut file,
+                    SeekFrom::Start(file_offset.0),
+                    &self.kv_file_path,
+                )
+                .map(|_| file)
             })
-            .map_err(|e| anyhow!(e))
             .map(|file| KeyValueRangeIterator::new(file, k_lo, k_hi));
 
         let ret_iter_fn = move || -> Option<Result<(K, V)>> {
@@ -160,9 +164,12 @@ where
     }
 
     pub fn get_all_keys(&self) -> impl Iterator<Item = Result<K>> {
-        let mut res_file_iter = File::open(&self.kv_file_path)
-            .map_err(|e| anyhow!(e))
-            .map(|file| KeyIterator::<K, V>::new(file).map(|res| res.map(|(_delta_r_len, k)| k)));
+        let res_file = fs_utils::open_file(&self.kv_file_path, OpenOptions::new().read(true));
+        let mut res_file_iter = res_file.map(|file| {
+            let iter = KeyIterator::<K, V>::new(file);
+            let iter = iter.map(|res| res.map(|(_delta_r_len, k)| k));
+            iter
+        });
 
         let ret_iter_fn = move || -> Option<Result<K>> {
             match res_file_iter.as_mut() {
@@ -178,7 +185,7 @@ where
     }
 
     pub fn remove_file(&self) -> Result<()> {
-        fs::remove_file(&self.kv_file_path)?;
+        fs_utils::remove_file(&self.kv_file_path)?;
         Ok(())
     }
 }

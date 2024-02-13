@@ -1,9 +1,10 @@
+use crate::fs_utils;
 use anyhow::Result;
 use pancake_types::{iters::KeyValueIterator, types::Deser};
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::fs::File;
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 /// A MemLog is a sorted dictionary (called Memtable), backed up by a write-ahead log file.
@@ -22,7 +23,7 @@ where
 
         let mut memtable = BTreeMap::default();
         if log_path.exists() {
-            let log_file = File::open(log_path)?;
+            let log_file = fs_utils::open_file(log_path, OpenOptions::new().read(true))?;
             let iter = KeyValueIterator::<K, V>::from(log_file);
             for res_kv in iter {
                 let (k, v) = res_kv?;

@@ -6,7 +6,6 @@ use pancake_engine_common::Entry;
 use pancake_types::types::{PKShared, PVShared, PrimaryKey, SubValue, SubValueSpec};
 use std::cmp;
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -24,7 +23,7 @@ impl DB {
     pub fn load_or_new<P: AsRef<Path>>(db_dir_path: P) -> Result<DB> {
         let prim_lsm_dir_path = db_dir_path.as_ref().join(PRIM_LSM_DIR_NAME);
         let all_scnd_idxs_dir_path = db_dir_path.as_ref().join(ALL_SCND_IDXS_DIR_NAME);
-        fs::create_dir_all(&all_scnd_idxs_dir_path)?;
+        fs_utils::create_dir_all(&all_scnd_idxs_dir_path)?;
 
         let prim_lsm = LSMTree::load_or_new(prim_lsm_dir_path)?;
 

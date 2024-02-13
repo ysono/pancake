@@ -1,4 +1,4 @@
-use crate::ReadonlyMemLog;
+use crate::{fs_utils, ReadonlyMemLog};
 use anyhow::Result;
 use pancake_types::types::Serializable;
 use shorthand::ShortHand;
@@ -24,10 +24,10 @@ where
     pub fn load_or_new<P: AsRef<Path>>(log_path: P) -> Result<Self> {
         let r_memlog = ReadonlyMemLog::load(&log_path)?;
 
-        let log_file = OpenOptions::new()
-            .create(true)
-            .append(true) // *Not* write(true)
-            .open(&log_path)?;
+        let log_file = fs_utils::open_file(
+            &log_path,
+            OpenOptions::new().create(true).append(true), /* Append. *Not* write. */
+        )?;
         let log_writer = BufWriter::new(log_file);
 
         Ok(Self {
@@ -53,9 +53,8 @@ where
     pub fn clear(&mut self) -> Result<()> {
         self.r_memlog.memtable.clear();
 
-        let log_file = OpenOptions::new()
-            .write(true)
-            .open(&self.r_memlog.log_path)?;
+        let log_file =
+            fs_utils::open_file(&self.r_memlog.log_path, OpenOptions::new().write(true))?;
         log_file.set_len(0)?;
         let new_writer = BufWriter::new(log_file);
 

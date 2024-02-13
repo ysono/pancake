@@ -2,10 +2,11 @@ use anyhow::{anyhow, Result};
 use derive_more::{Deref, DerefMut, From};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
+use pancake_engine_common::fs_utils;
 use shorthand::ShortHand;
 use std::any;
 use std::cmp::{Ord, Ordering, PartialOrd};
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
@@ -81,14 +82,14 @@ impl CommitInfo {
         }
     }
     pub fn ser<P: AsRef<Path>>(&self, p: P) -> Result<()> {
-        let file = OpenOptions::new().create(true).write(true).open(p)?;
+        let file = fs_utils::open_file(p, OpenOptions::new().create(true).write(true))?;
         let mut w = BufWriter::new(file);
         self.do_ser(&mut w)?;
         w.flush()?;
         Ok(())
     }
     pub fn deser<P: AsRef<Path>>(p: P) -> Result<Self> {
-        let file = File::open(p)?;
+        let file = fs_utils::open_file(p, OpenOptions::new().read(true))?;
         let mut r = BufReader::new(file);
         Self::do_deser(&mut r)
     }

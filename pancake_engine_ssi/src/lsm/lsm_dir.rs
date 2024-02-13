@@ -6,7 +6,6 @@ use anyhow::{anyhow, Result};
 use pancake_engine_common::fs_utils::{self, PathNameNum};
 use std::cmp::{self, Ordering};
 use std::collections::BinaryHeap;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering as AtmOrdering};
 
@@ -35,7 +34,7 @@ pub struct LsmDir {
 impl LsmDir {
     pub fn load_or_new_lsm_dir<P: AsRef<Path>>(lsm_dir_path: P) -> Result<(Self, LsmState)> {
         let lsm_dir_path = lsm_dir_path.as_ref();
-        fs::create_dir_all(&lsm_dir_path)?;
+        fs_utils::create_dir_all(&lsm_dir_path)?;
 
         let (pq, next_unit_dir_num) = Self::collect_committed_unit_dirs(&lsm_dir_path)?;
 
@@ -59,7 +58,7 @@ impl LsmDir {
     ) -> Result<(BinaryHeap<CIUD>, PathNameNum)> {
         let mut pq = BinaryHeap::<CIUD>::new();
         let mut max_unit_dir_num = PathNameNum::from(0);
-        for res_unit_dir_path in fs_utils::read_dir(lsm_dir_path)? {
+        for res_unit_dir_path in fs_utils::read_dir(lsm_dir_path.as_ref())? {
             let unit_dir_path = res_unit_dir_path?;
 
             let unit_dir_num = Self::parse_unit_dir_num(&unit_dir_path)?;

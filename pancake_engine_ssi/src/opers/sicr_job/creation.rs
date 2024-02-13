@@ -111,14 +111,14 @@ impl ScndIdxCreationJob {
     }
 
     fn reset_working_dir(&self) -> Result<()> {
-        fs::create_dir_all(&self.working_dir)?;
+        fs_utils::create_dir_all(&self.working_dir)?;
         for res_sub in fs_utils::read_dir(&self.working_dir)? {
             let sub = res_sub?;
             let meta = fs::metadata(&sub)?;
             if meta.is_file() {
-                fs::remove_file(sub)?;
+                fs_utils::remove_file(sub)?;
             } else {
-                fs::remove_dir_all(sub)?;
+                fs_utils::remove_dir_all(sub)?;
             }
         }
         Ok(())

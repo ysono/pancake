@@ -9,13 +9,12 @@ use crate::{
     },
 };
 use anyhow::Result;
-use pancake_engine_common::{ReadonlyMemLog, SSTable};
+use pancake_engine_common::{fs_utils, ReadonlyMemLog, SSTable};
 use pancake_types::{
     serde::OptDatum,
     types::{PKShared, PVShared, SVPKShared},
 };
 use std::collections::HashMap;
-use std::fs;
 
 pub struct CommittedUnit {
     pub prim: Option<CommittedEntrySet<PKShared, OptDatum<PVShared>>>,
@@ -115,7 +114,7 @@ impl CommittedUnit {
     }
 
     pub fn remove_dir(self) -> Result<()> {
-        fs::remove_dir_all(&*self.dir)?;
+        fs_utils::remove_dir_all(&*self.dir)?;
         Ok(())
     }
 }

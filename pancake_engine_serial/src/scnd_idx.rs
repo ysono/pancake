@@ -1,8 +1,8 @@
 use crate::lsm::LSMTree;
 use anyhow::Result;
-use pancake_engine_common::Entry;
+use pancake_engine_common::{fs_utils, Entry};
 use pancake_types::types::{PKShared, PVShared, SVPKShared, SubValue, SubValueSpec};
-use std::fs::{self, File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -35,7 +35,7 @@ impl SecondaryIndex {
         let spec_file_path = Self::spec_file_path(&scnd_idx_dir_path);
         let lsm_dir_path = Self::lsm_dir_path(&scnd_idx_dir_path);
 
-        let spec_file = File::open(&spec_file_path)?;
+        let spec_file = fs_utils::open_file(&spec_file_path, OpenOptions::new().read(true))?;
         let mut spec_reader = BufReader::new(spec_file);
         let spec = SubValueSpec::deser(&mut spec_reader)?;
         let spec = Arc::new(spec);
@@ -56,12 +56,12 @@ impl SecondaryIndex {
     ) -> Result<Self> {
         let spec_file_path = Self::spec_file_path(&scnd_idx_dir_path);
         let lsm_dir_path = Self::lsm_dir_path(&scnd_idx_dir_path);
-        fs::create_dir_all(&lsm_dir_path)?;
+        fs_utils::create_dir_all(&lsm_dir_path)?;
 
-        let spec_file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&spec_file_path)?;
+        let spec_file = fs_utils::open_file(
+            &spec_file_path,
+            OpenOptions::new().create_new(true).write(true),
+        )?;
         let mut spec_writer = BufWriter::new(spec_file);
         spec.ser(&mut spec_writer)?;
         spec_writer.flush()?;
@@ -84,7 +84,7 @@ impl SecondaryIndex {
     }
 
     pub fn remove_dir(&self) -> Result<()> {
-        fs::remove_dir_all(&self.dir_path)?;
+        fs_utils::remove_dir_all(&self.dir_path)?;
         Ok(())
     }
 

@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
 use derive_more::{Deref, From};
-use pancake_types::io_utils;
-use pancake_types::types::SubValueSpec;
+use pancake_engine_common::fs_utils;
+use pancake_types::{io_utils, types::SubValueSpec};
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 use std::path::Path;
 use std::str;
@@ -126,17 +126,14 @@ impl ScndIdxsState {
         })
     }
     pub fn ser<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(path.as_ref())?;
+        let file = fs_utils::open_file(path, OpenOptions::new().create(true).write(true))?;
         let mut w = BufWriter::new(file);
         self.do_ser(&mut w)?;
         w.flush()?;
         Ok(())
     }
     pub fn deser<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let file = File::open(path.as_ref())?;
+        let file = fs_utils::open_file(path, OpenOptions::new().read(true))?;
         let mut r = BufReader::new(file);
         Self::do_deser(&mut r)
     }

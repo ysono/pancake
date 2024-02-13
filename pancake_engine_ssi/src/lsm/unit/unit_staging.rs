@@ -1,12 +1,11 @@
 use crate::{db_state::ScndIdxNum, lsm::unit::UnitDir};
 use anyhow::Result;
-use pancake_engine_common::WritableMemLog;
+use pancake_engine_common::{fs_utils, WritableMemLog};
 use pancake_types::{
     serde::OptDatum,
     types::{PKShared, PVShared, SVPKShared},
 };
 use std::collections::{hash_map, HashMap};
-use std::fs;
 
 pub struct StagingUnit {
     pub prim: WritableMemLog<PKShared, OptDatum<PVShared>>,
@@ -16,7 +15,7 @@ pub struct StagingUnit {
 
 impl StagingUnit {
     pub fn new(dir: UnitDir) -> Result<Self> {
-        fs::create_dir_all(&*dir)?;
+        fs_utils::create_dir_all(&*dir)?;
         let prim_path = dir.format_prim_path();
         let prim_memlog = WritableMemLog::load_or_new(prim_path)?;
         Ok(Self {
@@ -59,7 +58,7 @@ impl StagingUnit {
     }
 
     pub fn remove_dir(self) -> Result<()> {
-        fs::remove_dir_all(&*self.dir)?;
+        fs_utils::remove_dir_all(&*self.dir)?;
         Ok(())
     }
 }

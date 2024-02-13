@@ -9,8 +9,8 @@ use crate::{
     },
 };
 use anyhow::Result;
+use pancake_engine_common::fs_utils;
 use shorthand::ShortHand;
-use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch, Mutex, RwLock};
@@ -43,8 +43,8 @@ impl DB {
         let si_state_file_path = db_dir_path.join(SCND_IDXS_STATE_FILE_NAME);
         let lsm_dir_path = db_dir_path.join(LSM_DIR_NAME);
         let si_cr_dir_path = db_dir_path.join(SCND_IDXS_CREATION_JOB_DIR_NAME);
-        fs::create_dir_all(&lsm_dir_path)?;
-        fs::create_dir_all(&si_cr_dir_path)?;
+        fs_utils::create_dir_all(&lsm_dir_path)?;
+        fs_utils::create_dir_all(&si_cr_dir_path)?;
 
         let db_state = DbState::load_or_new(&si_state_file_path)?;
 
