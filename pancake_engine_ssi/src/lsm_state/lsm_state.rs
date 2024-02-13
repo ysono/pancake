@@ -1,7 +1,10 @@
-use crate::ds_n_a::atomic_linked_list::{AtomicLinkedList, ListNode};
+use crate::ds_n_a::{
+    atomic_linked_list::{AtomicLinkedList, ListNode},
+    multiset::Multiset,
+};
 use crate::lsm_state::unit::{CommitVer, CommittedUnit};
+use anyhow::Result;
 use derive_more::{Deref, DerefMut};
-use std::collections::HashMap;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 
@@ -24,7 +27,7 @@ pub struct LsmState {
     pub next_commit_ver: CommitVer,
 
     curr_list_ver: ListVer,
-    held_list_vers: HashMap<ListVer, usize>,
+    held_list_vers: Multiset<ListVer>,
     min_held_list_ver: ListVer,
 }
 
@@ -39,7 +42,7 @@ impl LsmState {
             next_commit_ver,
 
             curr_list_ver: LIST_VER_INITIAL,
-            held_list_vers: Default::default(),
+            held_list_vers: Multiset::default(),
             min_held_list_ver: LIST_VER_INITIAL,
         }
     }
@@ -53,55 +56,52 @@ impl LsmState {
 
     /// Returns the curr_list_ver.
     pub fn hold_curr_list_ver(&mut self) -> ListVer {
-        self.held_list_vers
-            .entry(self.curr_list_ver)
-            .or_insert_with(|| 1);
+        self.held_list_vers.add(self.curr_list_ver);
         self.curr_list_ver
     }
 
-    /// Returns an updated min_held_list_ver, if updated.
-    pub fn unhold_list_ver(&mut self, arg_ver: ListVer) -> Option<ListVer> {
-        match self.held_list_vers.get_mut(&arg_ver) {
-            None => {
-                return None;
-            }
-            Some(count) => {
-                if *count != 1 {
-                    *count -= 1;
-                    return None;
-                } else {
-                    self.held_list_vers.remove(&arg_ver);
+    /// Returns the updated min_held_list_ver, iff updated.
+    pub fn unhold_list_ver(&mut self, arg_ver: ListVer) -> Result<Option<ListVer>> {
+        let count = self.held_list_vers.remove(&arg_ver)?;
+        if (count == 0) && (arg_ver == self.min_held_list_ver) {
+            return Ok(self.advance_min_held_list_ver());
+        }
+        return Ok(None);
+    }
 
-                    if arg_ver == self.min_held_list_ver {
-                        while self.min_held_list_ver < self.curr_list_ver
-                            && self.held_list_vers.get(&self.min_held_list_ver).is_none()
-                        {
-                            *self.min_held_list_ver += 1;
-                        }
-                        if arg_ver != self.min_held_list_ver {
-                            return Some(self.min_held_list_ver);
-                        }
-                    }
-                    return None;
-                }
-            }
+    fn advance_min_held_list_ver(&mut self) -> Option<ListVer> {
+        let mut did_change = false;
+        while (self.min_held_list_ver < self.curr_list_ver)
+            && (self.held_list_vers.contains(&self.min_held_list_ver) == false)
+        {
+            *self.min_held_list_ver += 1;
+            did_change = true;
+        }
+
+        if did_change {
+            Some(self.min_held_list_ver)
+        } else {
+            None
         }
     }
 
     /// Returns
     /// - the curr_list_ver.
-    /// - an updated min_held_list_ver, if updated.
-    pub fn hold_and_unhold_list_ver(&mut self, prior: ListVer) -> (ListVer, Option<ListVer>) {
+    /// - the updated min_held_list_ver, iff updated.
+    pub fn hold_and_unhold_list_ver(
+        &mut self,
+        prior: ListVer,
+    ) -> Result<(ListVer, Option<ListVer>)> {
         let mut updated_mhlv = None;
         if prior != self.curr_list_ver {
-            updated_mhlv = self.unhold_list_ver(prior);
+            updated_mhlv = self.unhold_list_ver(prior)?;
             self.hold_curr_list_ver();
         }
-        return (self.curr_list_ver, updated_mhlv);
+        return Ok((self.curr_list_ver, updated_mhlv));
     }
 
     pub fn is_held_list_vers_empty(&self) -> bool {
-        self.held_list_vers.is_empty()
+        self.held_list_vers.len() == 0
     }
 
     /// Non-atomically does the following:

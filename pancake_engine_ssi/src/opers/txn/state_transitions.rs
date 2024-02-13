@@ -69,7 +69,7 @@ impl<'txn> Txn<'txn> {
                 let lsm_state = self.db.lsm_state().lock().await;
 
                 if self.snap_next_commit_ver != lsm_state.next_commit_ver {
-                    self.update_snapshot_for_conflict_checking(lsm_state, prepped_boundary_node);
+                    self.update_snapshot_for_conflict_checking(lsm_state, prepped_boundary_node)?;
                     if self.has_conflict()? {
                         return Ok(TryCommitResult::Conflict(self));
                     }
@@ -85,14 +85,15 @@ impl<'txn> Txn<'txn> {
         &mut self,
         mut lsm_state: MutexGuard<LsmState>,
         mut prepped_boundary_node: Option<Box<ListNode<LsmElem>>>,
-    ) {
+    ) -> Result<()> {
         let snap_head_excl =
             Self::hold_boundary_at_head(&mut lsm_state, &mut prepped_boundary_node);
 
         self.snap_next_commit_ver = lsm_state.next_commit_ver;
 
         let updated_mhlv;
-        (self.snap_list_ver, updated_mhlv) = lsm_state.hold_and_unhold_list_ver(self.snap_list_ver);
+        (self.snap_list_ver, updated_mhlv) =
+            lsm_state.hold_and_unhold_list_ver(self.snap_list_ver)?;
 
         drop(lsm_state);
 
@@ -101,6 +102,8 @@ impl<'txn> Txn<'txn> {
         self.snap.head_excl_ptr = snap_head_excl;
 
         self.notify_fc_job(updated_mhlv, is_replace_avail);
+
+        Ok(())
     }
 
     pub(super) async fn reset(&mut self) -> Result<()> {
@@ -116,7 +119,7 @@ impl<'txn> Txn<'txn> {
             self.snap_next_commit_ver = lsm_state.next_commit_ver;
 
             (self.snap_list_ver, updated_mhlv) =
-                lsm_state.hold_and_unhold_list_ver(self.snap_list_ver);
+                lsm_state.hold_and_unhold_list_ver(self.snap_list_ver)?;
         }
 
         let is_replace_avail =
@@ -141,7 +144,7 @@ impl<'txn> Txn<'txn> {
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
-            updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver);
+            updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver)?;
         }
 
         let is_replace_avail =
@@ -167,7 +170,7 @@ impl<'txn> Txn<'txn> {
 
         *lsm_state.next_commit_ver += 1;
 
-        let updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver);
+        let updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver)?;
 
         drop(lsm_state);
 
