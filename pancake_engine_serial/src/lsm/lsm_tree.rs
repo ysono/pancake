@@ -33,7 +33,10 @@ const SSTABLES_DIR_NAME: &str = "sstables";
 /// When the same key exists in multiple internal tables, only the result from the newest table is retrieved.
 pub struct LSMTree<K, V> {
     memlog: WritableMemLog<K, OptDatum<V>>,
+
+    /// From older to newer.
     sstables: Vec<SSTable<K, OptDatum<V>>>,
+
     sstables_dir: AntiCollisionParentDir,
 }
 

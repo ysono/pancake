@@ -27,6 +27,7 @@ pub enum LsmElem {
 }
 
 pub struct LsmState {
+    /// From newer to older.
     pub list: AtomicLinkedList<LsmElem>,
 
     next_commit_ver: CommitVer,
@@ -37,7 +38,11 @@ pub struct LsmState {
 }
 
 impl LsmState {
-    pub fn new(committed_units: Vec<CommittedUnit>, next_commit_ver: CommitVer) -> Self {
+    /// @arg committed_units: From newer to older.
+    pub fn new(
+        committed_units: impl IntoIterator<Item = CommittedUnit>,
+        next_commit_ver: CommitVer,
+    ) -> Self {
         let list_elems = committed_units.into_iter().map(LsmElem::Unit);
         let list = AtomicLinkedList::from_elems(list_elems);
 

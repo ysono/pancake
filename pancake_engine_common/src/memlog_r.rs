@@ -57,6 +57,7 @@ where
     where
         K: PartialOrd<Q>,
     {
+        // TODO replace `.skip_while()` with https://doc.rust-lang.org/stable/std/collections/struct.BTreeMap.html#method.lower_bound when the latter graduates into the stable rust.
         self.memtable
             .iter()
             .skip_while(move |(sample_k, _v)| match k_lo {

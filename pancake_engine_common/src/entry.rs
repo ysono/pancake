@@ -18,7 +18,7 @@ pub enum Entry<'a, K, V> {
 
 /* Borrowing */
 impl<'a, K, V> Entry<'a, K, V> {
-    pub fn try_borrow(&'a self) -> Result<(&'a K, &'a V)> {
+    pub fn try_borrow<'b>(&'b self) -> Result<(&'b K, &'b V)> {
         match self {
             Self::Ref((k, v)) => Ok((k, v)),
             Self::Own(res) => res
