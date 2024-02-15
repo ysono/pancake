@@ -51,18 +51,13 @@ impl FlushingAndCompactionJob {
 
                 let out_sstable = SSTable::new(compacted_entries, out_path)?;
 
-                let out_entryset = CommittedEntrySet::SSTable(out_sstable);
-
-                compacted_unit
-                    .scnds
-                    .entry(*scnd_idx_num)
-                    .or_insert(out_entryset);
+                compacted_unit.scnds.insert(*scnd_idx_num, out_sstable);
             }
         }
 
         {
-            let existing_entries = units.iter().filter_map(|unit| unit.prim.as_ref());
-            let compacted_entries = Self::derive_kmerged_iter(existing_entries, skip_tombstones);
+            let existing_entrysets = units.iter().filter_map(|unit| unit.prim.as_ref());
+            let compacted_entries = Self::derive_kmerged_iter(existing_entrysets, skip_tombstones);
 
             let mut compacted_entries = compacted_entries.peekable();
             if let Some(_) = compacted_entries.peek() {
@@ -70,9 +65,7 @@ impl FlushingAndCompactionJob {
 
                 let out_sstable = SSTable::new(compacted_entries, out_path)?;
 
-                let out_entryset = CommittedEntrySet::SSTable(out_sstable);
-
-                compacted_unit.prim = Some(out_entryset);
+                compacted_unit.prim = Some(out_sstable);
             }
         }
 

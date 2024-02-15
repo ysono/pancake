@@ -3,7 +3,7 @@ use crate::ds_n_a::send_ptr::SendPtr;
 use crate::{
     db_state::ScndIdxNum,
     lsm::{
-        entryset::{merging, CommittedEntrySet},
+        entryset::merging,
         lsm_state_utils,
         unit::{
             CommitDataType, CommitInfo, CommitVer, CommittedUnit, CompactedUnit, ReplacementNum,
@@ -196,11 +196,7 @@ impl ScndIdxCreationJob {
         let combined_sstable_path = compacted_unit.dir.format_scnd_file_path(scnd_idx_num);
         let combined_sstable =
             Self::create_combined_sstable(intermediary_sstables, combined_sstable_path)?;
-        let out_entryset = CommittedEntrySet::SSTable(combined_sstable);
-        compacted_unit
-            .scnds
-            .entry(scnd_idx_num)
-            .or_insert(out_entryset);
+        compacted_unit.scnds.insert(scnd_idx_num, combined_sstable);
         Ok(compacted_unit)
     }
 

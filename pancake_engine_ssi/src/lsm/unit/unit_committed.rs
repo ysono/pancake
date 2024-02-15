@@ -58,14 +58,21 @@ impl CommittedUnit {
     }
 
     /// Cost:
-    /// - This constructor serializes CommitInfo (so caller shouldn't do it before).
+    /// - This constructor serializes CommitInfo. The caller shouldn't do it before.
     pub fn from_compacted(compacted: CompactedUnit, commit_info: CommitInfo) -> Result<Self> {
+        let prim = compacted.prim.map(CommittedEntrySet::SSTable);
+        let scnds = compacted
+            .scnds
+            .into_iter()
+            .map(|(si_num, sstable)| (si_num, CommittedEntrySet::SSTable(sstable)))
+            .collect::<HashMap<_, _>>();
+
         let commit_info_path = compacted.dir.format_commit_info_file_path();
         commit_info.ser(commit_info_path)?;
 
         Ok(Self {
-            prim: compacted.prim,
-            scnds: compacted.scnds,
+            prim,
+            scnds,
             dir: compacted.dir,
             commit_info,
         })

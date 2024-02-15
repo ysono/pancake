@@ -1,9 +1,6 @@
-use crate::{
-    db_state::ScndIdxNum,
-    lsm::{entryset::CommittedEntrySet, unit::UnitDir},
-};
+use crate::{db_state::ScndIdxNum, lsm::unit::UnitDir};
 use anyhow::Result;
-use pancake_engine_common::fs_utils;
+use pancake_engine_common::{fs_utils, SSTable};
 use pancake_types::{
     serde::OptDatum,
     types::{PKShared, PVShared, SVPKShared},
@@ -11,8 +8,8 @@ use pancake_types::{
 use std::collections::HashMap;
 
 pub struct CompactedUnit {
-    pub prim: Option<CommittedEntrySet<PKShared, OptDatum<PVShared>>>,
-    pub scnds: HashMap<ScndIdxNum, CommittedEntrySet<SVPKShared, OptDatum<PVShared>>>,
+    pub prim: Option<SSTable<PKShared, OptDatum<PVShared>>>,
+    pub scnds: HashMap<ScndIdxNum, SSTable<SVPKShared, OptDatum<PVShared>>>,
     pub dir: UnitDir,
 }
 
