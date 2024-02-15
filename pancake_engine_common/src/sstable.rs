@@ -62,7 +62,7 @@ where
             delta_offset += *(v_ref.ser(&mut w)?);
 
             if is_kv_sparsely_captured(entry_i) {
-                let k_own = entry.take_k()?;
+                let k_own = entry.into_owned_k()?;
                 sparse_file_offsets.push((k_own, file_offset));
             }
 

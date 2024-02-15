@@ -72,7 +72,7 @@ impl SecondaryIndex {
         for entry in prim_lsm.get_whole_range() {
             let (_pk, pv) = entry.try_borrow()?;
             if let Some(sv) = spec.extract(pv) {
-                let (pk, pv) = entry.take_kv()?;
+                let (pk, pv) = entry.into_owned_kv()?;
                 let svpk = SVPKShared { sv, pk };
                 scnd_lsm.put(svpk, Some(pv))?;
             }

@@ -100,7 +100,7 @@ impl ScndIdxCreationJob {
             Err(e) => return Some(Entry::Own(Err(e))),
             Ok((_, pv)) => match sv_spec.extract(pv) {
                 None => return None,
-                Some(sv) => match prim_entry.take_kv() {
+                Some(sv) => match prim_entry.into_owned_kv() {
                     Err(e) => return Some(Entry::Own(Err(e))),
                     Ok((pk, pv)) => {
                         let svpk = SVPKShared { sv, pk };
@@ -148,7 +148,7 @@ impl ScndIdxCreationJob {
         };
 
         for (i, scnd_entry) in scnd_entries.enumerate() {
-            let (svpk, pv) = scnd_entry.take_kv()?;
+            let (svpk, pv) = scnd_entry.into_owned_kv()?;
             memtable.borrow_mut().insert(svpk, pv);
 
             if i % FLUSH_PERIOD == FLUSH_PERIOD - 1 {

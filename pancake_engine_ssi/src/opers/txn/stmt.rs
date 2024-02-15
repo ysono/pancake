@@ -43,7 +43,7 @@ impl<'txn> Txn<'txn> {
             if let Some(entry) = gotten {
                 return entry
                     .to_option_entry()
-                    .map(|entry| entry.take_kv())
+                    .map(|entry| entry.into_owned_kv())
                     .transpose();
             }
         }
