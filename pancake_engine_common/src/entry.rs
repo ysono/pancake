@@ -95,17 +95,17 @@ impl<'a, K, V> Entry<'a, K, OptDatum<V>> {
 }
 
 /* Comparing */
-impl<K, V, O> TryPartialOrd<O> for Entry<'_, K, V>
+impl<K, V, Rhs> TryPartialOrd<Rhs, anyhow::Error> for Entry<'_, K, V>
 where
-    K: PartialOrd<O>,
+    K: PartialOrd<Rhs>,
 {
-    fn try_partial_cmp(&self, other: &O) -> Result<Option<Ordering>> {
+    fn try_partial_cmp(&self, rhs: &Rhs) -> Result<Option<Ordering>, anyhow::Error> {
         match self {
-            Self::Ref((k, _)) => Ok(k.partial_cmp(&other)),
+            Self::Ref((k, _)) => Ok(k.partial_cmp(&rhs)),
             Self::Own(res) => res
                 .as_ref()
                 .map_err(|e| anyhow!(e.to_string()))
-                .map(|(k, _)| k.partial_cmp(other)),
+                .map(|(k, _)| k.partial_cmp(rhs)),
         }
     }
 }

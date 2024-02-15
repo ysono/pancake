@@ -89,9 +89,9 @@ pub struct MergedIntervalSet<'a, T> {
 }
 
 impl<'a, T> MergedIntervalSet<'a, T> {
-    pub fn overlaps_with<P>(&self, point_iter: impl Iterator<Item = P>) -> Result<bool>
+    pub fn overlaps_with<P, E>(&self, point_iter: impl Iterator<Item = P>) -> Result<bool, E>
     where
-        P: TryPartialOrd<T>,
+        P: TryPartialOrd<T, E>,
     {
         let mut itv_iter = self.itvset.itvs.iter().peekable();
         let mut point_iter = point_iter.peekable();
