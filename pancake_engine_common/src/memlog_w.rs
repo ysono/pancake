@@ -36,6 +36,7 @@ where
         })
     }
 
+    /// The caller is responsible for [`Self::flush()`]ing subsequently.
     pub fn put(&mut self, k: K, v: V) -> Result<()> {
         k.ser(&mut self.log_writer)?;
         v.ser(&mut self.log_writer)?;

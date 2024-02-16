@@ -7,7 +7,6 @@ use std::path::Path;
 const LOG_FILE_NAME: &str = "commit_log.kv";
 const SSTABLES_DIR_NAME: &str = "sstables";
 
-#[allow(rustdoc::private_intra_doc_links)]
 /// An LSMTree is an abstraction of a sorted dictionary.
 ///
 /// ### API:

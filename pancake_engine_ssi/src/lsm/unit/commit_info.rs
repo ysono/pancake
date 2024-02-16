@@ -52,6 +52,7 @@ impl ReplacementNum {
     }
 }
 
+/// The disambiguator of key-value files on disk, as to whether belonging to a MemLog or an SSTable.
 #[derive(FromPrimitive, ToPrimitive, PartialEq, Eq)]
 pub enum CommitDataType {
     MemLog = 0,

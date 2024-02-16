@@ -5,6 +5,8 @@ use pancake_engine_common::{Entry, SSTable};
 use pancake_types::{serde::OptDatum, types::Serializable};
 use std::mem;
 
+/// These thresholds are exaggeratedly small, so as to be helpful with debugging.
+/// In the future, we'll allow setting them from env vars.
 static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;
 static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 

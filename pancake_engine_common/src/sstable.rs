@@ -13,6 +13,8 @@ use std::iter;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
+/// The sparseness is exaggeratedly small, so as to be helpful with debugging.
+/// In the future, we'll allow setting it from an env var.
 const FILE_OFFSETS_SPARSENESS: usize = 3;
 
 fn is_kv_sparsely_captured(entry_i: usize) -> bool {

@@ -10,15 +10,15 @@ use std::sync::Arc;
 const SPEC_FILE_NAME: &str = "sv_spec.txt";
 const LSM_DIR_NAME: &str = "lsm";
 
-/// A secondary index is an abstraction of as sorted dictionary mapping
-/// `(sub-portion of value , primary key)` : `value`.
+/// A secondary index is an abstraction of a sorted dictionary mapping
+/// `(sub-portion of value , primary key) : value`.
 ///
 /// Clients may query for `(primary key, value)` entries based on bounds
 /// over `sub-portion of value`.
 ///
 /// Each instance of [`SecondaryIndex`] is defined by a [`SubValueSpec`],
-/// which specifies what kind of `sub-portion of value` this [`SecondaryIndex`]
-/// is responsible for.
+/// which specifies the `sub-portion of value` that this [`SecondaryIndex`]
+/// indexes on.
 pub struct SecondaryIndex {
     dir_path: PathBuf,
     spec: Arc<SubValueSpec>,
