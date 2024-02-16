@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use pancake_engine_serial::DB as SerialDb;
 use pancake_engine_ssi::{ClientCommitDecision, Txn, DB as SsiDb};
@@ -93,7 +93,10 @@ impl<'a> OneStmtSsiDbAdaptor<'a> {
     }
 
     pub async fn nonmut_create_scnd_idx(&self, sv_spec: Arc<SubValueSpec>) -> Result<()> {
-        self.db.create_scnd_idx(&sv_spec).await
+        self.db
+            .create_scnd_idx(&sv_spec)
+            .await
+            .map_err(|e| anyhow!(e))
     }
 
     pub async fn nonmut_delete_scnd_idx(&self, sv_spec: &SubValueSpec) -> Result<()> {

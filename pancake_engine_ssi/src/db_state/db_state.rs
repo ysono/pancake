@@ -44,13 +44,15 @@ impl DbState {
         &self.scnd_idxs_state.scnd_idxs
     }
 
-    pub fn can_new_scnd_idx_be_defined(&self, sv_spec: &SubValueSpec) -> Option<ScndIdxState> {
-        let sis = &self.scnd_idxs_state;
-        sis.scnd_idxs.get(sv_spec).cloned()
+    pub fn get_scnd_idx_defn(&self, sv_spec: &SubValueSpec) -> Option<ScndIdxState> {
+        self.scnd_idxs_state.scnd_idxs.get(sv_spec).cloned()
     }
-    pub fn define_new_scnd_idx(&mut self, sv_spec: &Arc<SubValueSpec>) -> Result<NewDefnResult> {
-        match self.can_new_scnd_idx_be_defined(sv_spec) {
-            Some(si_state) => return Ok(NewDefnResult::AlreadyExists(si_state)),
+    pub fn define_new_scnd_idx(
+        &mut self,
+        sv_spec: &Arc<SubValueSpec>,
+    ) -> Result<ScndIdxNewDefnResult> {
+        match self.get_scnd_idx_defn(sv_spec) {
+            Some(si_state) => return Ok(ScndIdxNewDefnResult::Existent(si_state)),
             None => {}
         }
 
@@ -62,12 +64,11 @@ impl DbState {
         };
         sis.scnd_idxs.insert(Arc::clone(sv_spec), scnd_idx_state);
         sis.ser(&self.scnd_idxs_state_file_path)?;
-        Ok(NewDefnResult::DidDefineNew(scnd_idx_num))
+        Ok(ScndIdxNewDefnResult::DidDefineNew(scnd_idx_num))
     }
 
     pub fn set_scnd_idx_as_readable(&mut self, sv_spec: &SubValueSpec) -> Result<()> {
         let sis = &mut self.scnd_idxs_state;
-
         match sis.scnd_idxs.get_mut(sv_spec) {
             None => return Err(anyhow!("No state for {sv_spec:?}")),
             Some(si_state) => {
@@ -99,8 +100,8 @@ impl DbState {
     }
 }
 
-pub enum NewDefnResult {
-    AlreadyExists(ScndIdxState),
+pub enum ScndIdxNewDefnResult {
+    Existent(ScndIdxState),
     DidDefineNew(ScndIdxNum),
 }
 

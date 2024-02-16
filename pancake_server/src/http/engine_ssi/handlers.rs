@@ -3,9 +3,9 @@ use crate::api::{Operation, SearchRange, Statement};
 use crate::http::resp;
 use crate::query::basic::{self as query_basic};
 use crate::wasm::engine_ssi::WasmEngine;
-use anyhow::{Error, Result};
+use anyhow::{anyhow, Error, Result};
 use hyper::{Body, Request, Response};
-use pancake_engine_ssi::DB;
+use pancake_engine_ssi::{ScndIdxCreationJobErr, DB};
 use pancake_types::serde::Datum;
 use pancake_types::types::{PrimaryKey, Value};
 use routerify::prelude::*;
@@ -74,8 +74,21 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
         Operation::CreateScndIdx(sv_spec) => {
             let sv_spec = Arc::new(sv_spec);
             match db.create_scnd_idx(&sv_spec).await {
-                Err(e) => return resp::err(e),
-                Ok(()) => return resp::no_content(),
+                Ok(()) => return resp::ok(""),
+                Err(ScndIdxCreationJobErr::Existent { is_readable }) => {
+                    if is_readable {
+                        return resp::not_modified("");
+                    } else {
+                        let s = "The secondary index is being created.";
+                        return resp::err(anyhow!(s));
+                    }
+                }
+                Err(ScndIdxCreationJobErr::Busy) => {
+                    let s =
+                        "Too many other existing secondary index creation jobs are in progress.";
+                    return resp::err(anyhow!(s));
+                }
+                Err(ScndIdxCreationJobErr::InternalError(e)) => return resp::err(e),
             }
         }
         Operation::DelScndIdx(sv_spec) => match db.delete_scnd_idx(&sv_spec).await {

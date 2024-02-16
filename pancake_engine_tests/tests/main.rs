@@ -35,9 +35,8 @@ async fn integration_test_main() -> Result<()> {
     let mut serial_db = SerialDb::load_or_new(serial_db_dir)?;
     let mut serial_db_adap = OneStmtSerialDbAdaptor { db: &mut serial_db };
 
-    let (ssi_db, ssi_fc_worker, ssi_sicr_job) = SsiDb::load_or_new(ssi_db_dir)?;
+    let (ssi_db, ssi_fc_worker) = SsiDb::load_or_new(ssi_db_dir)?;
     let ssi_fc_task = tokio::spawn(ssi_fc_worker.run());
-    let ssi_sicr_task = tokio::spawn(ssi_sicr_job.run());
     let mut ssi_db_adap = OneStmtSsiDbAdaptor { db: &ssi_db };
 
     test_stmts_serially(&mut serial_db_adap).await?;
@@ -47,9 +46,7 @@ async fn integration_test_main() -> Result<()> {
 
     ssi_db.terminate().await;
     let ssi_fc_res = ssi_fc_task.await?;
-    let ssi_sicr_res = ssi_sicr_task.await?;
     ssi_fc_res?;
-    ssi_sicr_res?;
 
     Ok(())
 }

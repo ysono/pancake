@@ -5,4 +5,7 @@ mod lsm;
 mod opers;
 
 pub use db::DB;
-pub use opers::txn::{ClientCommitDecision, Txn};
+pub use opers::{
+    sicr::ScndIdxCreationJobErr,
+    txn::{ClientCommitDecision, Txn},
+};

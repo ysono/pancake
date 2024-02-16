@@ -15,11 +15,19 @@ use std::sync::atomic::Ordering;
 use tokio::sync::RwLockReadGuard;
 
 impl FlushingAndCompactionWorker {
-    pub(super) async fn flush_and_compact(&mut self) -> Result<()> {
+    /// If @arg `maybe_snap_head_ptr` is `Some`, then it is assumed that
+    /// the ptr is already pushed to the linked list.
+    pub(super) async fn flush_and_compact(
+        &mut self,
+        maybe_snap_head_ptr: Option<SendPtr<ListNode<LsmElem>>>,
+    ) -> Result<()> {
         /* Hold a shared guard on `db_state` over the whole traversal of the LL. */
         let db_state_guard = self.db.db_state().read().await;
 
-        let snap_head_ref = self.establish_snap_head().await;
+        let snap_head_ref = match maybe_snap_head_ptr {
+            Some(ptr) => unsafe { ptr.as_ref() },
+            None => self.establish_snap_head().await,
+        };
 
         let mut job = FCJob {
             db: &self.db,

@@ -34,6 +34,12 @@ pub fn seek<P: AsRef<Path>>(
         .with_context(|| format!("seek {:?}", implicit_path.as_ref()))
 }
 
+pub fn rename_file<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<()> {
+    let from = from.as_ref();
+    let to = to.as_ref();
+    fs::rename(from, to).with_context(|| format!("rename {from:?} {to:?}"))
+}
+
 pub fn remove_file<P: AsRef<Path>>(path: P) -> Result<()> {
     let path = path.as_ref();
     fs::remove_file(path).with_context(|| format!("remove_file {path:?}"))
