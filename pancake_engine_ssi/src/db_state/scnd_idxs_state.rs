@@ -1,26 +1,39 @@
 use anyhow::{anyhow, Result};
-use derive_more::{Deref, From};
-use pancake_types::io_utils;
-use pancake_types::types::SubValueSpec;
+use pancake_engine_common::fs_utils::{self, PathNameNum};
+use pancake_types::{io_utils, types::SubValueSpec};
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 use std::path::Path;
 use std::str;
 use std::sync::Arc;
 
-#[derive(Default, From, Deref, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+mod test;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct ScndIdxNum(u64);
 
+impl From<PathNameNum> for ScndIdxNum {
+    fn from(num: PathNameNum) -> Self {
+        Self(*num)
+    }
+}
+impl Into<PathNameNum> for ScndIdxNum {
+    fn into(self) -> PathNameNum {
+        PathNameNum::from(self.0)
+    }
+}
 impl ScndIdxNum {
-    pub fn get_and_inc(&mut self) -> Self {
+    pub const AT_EMPTY_DATASTORE: Self = Self(0);
+
+    pub fn fetch_inc(&mut self) -> Self {
         let ret = Self(self.0);
         self.0 += 1;
         ret
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ScndIdxState {
     pub scnd_idx_num: ScndIdxNum,
     pub is_readable: bool,
@@ -67,13 +80,20 @@ impl ScndIdxState {
     }
 }
 
-#[derive(Default, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct ScndIdxsState {
     pub(super) scnd_idxs: HashMap<Arc<SubValueSpec>, ScndIdxState>,
     pub(super) next_scnd_idx_num: ScndIdxNum,
 }
 
 impl ScndIdxsState {
+    pub fn new_empty() -> Self {
+        Self {
+            scnd_idxs: Default::default(),
+            next_scnd_idx_num: ScndIdxNum::AT_EMPTY_DATASTORE,
+        }
+    }
+
     fn do_ser<W: Write>(&self, w: &mut BufWriter<W>) -> Result<()> {
         /* next_scnd_idx_num */
         write!(w, "{}\n", self.next_scnd_idx_num.0)?;
@@ -97,7 +117,7 @@ impl ScndIdxsState {
         let next_scnd_idx_num = str::from_utf8(&buf)?
             .parse::<u64>()
             .map_err(|_| anyhow!("Invalid next_scnd_idx_num"))?;
-        let next_scnd_idx_num = ScndIdxNum::from(next_scnd_idx_num);
+        let next_scnd_idx_num = ScndIdxNum(next_scnd_idx_num);
 
         let mut scnd_idxs = HashMap::new();
         loop {
@@ -124,21 +144,15 @@ impl ScndIdxsState {
         })
     }
     pub fn ser<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(path.as_ref())?;
+        let file = fs_utils::open_file(path, OpenOptions::new().create(true).write(true))?;
         let mut w = BufWriter::new(file);
         self.do_ser(&mut w)?;
         w.flush()?;
         Ok(())
     }
     pub fn deser<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let file = File::open(path.as_ref())?;
+        let file = fs_utils::open_file(path, OpenOptions::new().read(true))?;
         let mut r = BufReader::new(file);
         Self::do_deser(&mut r)
     }
 }
-
-#[cfg(test)]
-mod test;

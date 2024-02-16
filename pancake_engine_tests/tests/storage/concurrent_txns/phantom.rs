@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tokio::task::JoinHandle;
 
 fn gen_pk(item_i: usize) -> PrimaryKey {
-    gen::gen_str_pk(format!("cart_item.{}", item_i))
+    gen::gen_str_pk(format!("cart_item.{item_i}"))
 }
 fn gen_pv(price: i64) -> Value {
     Value(Datum::I64(price))

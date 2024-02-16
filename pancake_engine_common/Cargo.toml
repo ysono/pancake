@@ -7,5 +7,6 @@ edition = { workspace = true }
 anyhow = { workspace = true }
 derive_more = { workspace = true }
 shorthand = { workspace = true }
+itertools = { workspace = true }
 
 pancake_types = { workspace = true }

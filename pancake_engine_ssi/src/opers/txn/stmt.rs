@@ -1,7 +1,11 @@
 use crate::ds_n_a::interval_set::{Interval, IntervalSet};
 use crate::{
     db_state::ScndIdxState,
-    lsm_state::{entryset::merging, unit::StagingUnit, LsmElem},
+    lsm::{
+        entryset::merging,
+        unit::{CommittedUnit, StagingUnit},
+        LsmElem,
+    },
     opers::txn::Txn,
 };
 use anyhow::{anyhow, Result};
@@ -10,9 +14,18 @@ use pancake_types::serde::OptDatum;
 use pancake_types::types::{PKShared, PVShared, PrimaryKey, SVPKShared, SubValue, SubValueSpec};
 
 impl<'txn> Txn<'txn> {
-    fn ensure_snap_vec(&mut self) {
+    fn get_snap_units_iter(&self) -> impl Iterator<Item = &'txn CommittedUnit> {
+        self.snap
+            .iter_excluding_head_and_tail()
+            .filter_map(|elem| match elem {
+                LsmElem::CommittedUnit(unit) => Some(unit),
+                LsmElem::Dummy { .. } => None,
+            })
+    }
+    fn ensure_collect_snap_units_vec(&mut self) {
         if self.snap_vec.is_none() {
-            self.snap_vec = Some(self.snap.iter().collect());
+            let vec = self.get_snap_units_iter().collect();
+            self.snap_vec = Some(vec);
         }
     }
 
@@ -31,19 +44,14 @@ impl<'txn> Txn<'txn> {
         }
 
         let committed_entrysets = self
-            .snap
-            .iter()
-            .filter_map(|elem| match &elem {
-                LsmElem::Unit(unit) => Some(unit),
-                LsmElem::Dummy { .. } => None,
-            })
+            .get_snap_units_iter()
             .filter_map(|unit| unit.prim.as_ref());
         for entryset in committed_entrysets {
             let gotten = entryset.get_one(pk);
             if let Some(entry) = gotten {
                 return entry
                     .to_option_entry()
-                    .map(|entry| entry.take_kv())
+                    .map(|entry| entry.into_owned_kv())
                     .transpose();
             }
         }
@@ -56,7 +64,7 @@ impl<'txn> Txn<'txn> {
         pk_lo: Option<&'txn PrimaryKey>,
         pk_hi: Option<&'txn PrimaryKey>,
     ) -> impl Iterator<Item = Entry<PKShared, PVShared>> {
-        self.ensure_snap_vec();
+        self.ensure_collect_snap_units_vec();
 
         self.dependent_itvs_prim.add(Interval {
             lo_incl: pk_lo,
@@ -69,10 +77,6 @@ impl<'txn> Txn<'txn> {
             .as_ref()
             .unwrap()
             .iter()
-            .filter_map(|elem| match &elem {
-                LsmElem::Unit(unit) => Some(unit),
-                LsmElem::Dummy { .. } => None,
-            })
             .filter_map(|unit| unit.prim.as_ref());
         let kmerged_entries =
             merging::merge_txnlocal_and_committed_entrysets(stg, committed_entrysets, pk_lo, pk_hi);
@@ -86,7 +90,7 @@ impl<'txn> Txn<'txn> {
         sv_lo: Option<&'txn SubValue>,
         sv_hi: Option<&'txn SubValue>,
     ) -> Result<impl Iterator<Item = Entry<SVPKShared, PVShared>>> {
-        self.ensure_snap_vec();
+        self.ensure_collect_snap_units_vec();
 
         let ScndIdxState {
             scnd_idx_num,
@@ -95,14 +99,10 @@ impl<'txn> Txn<'txn> {
             .db_state_guard
             .scnd_idxs()
             .get(sv_spec_arg)
-            .ok_or(anyhow!(
-                "Secondary index does not exist for {:?}",
-                sv_spec_arg
-            ))?;
+            .ok_or_else(|| anyhow!("Secondary index does not exist for {sv_spec_arg:?}"))?;
         if is_readable == &false {
             return Err(anyhow!(
-                "Secondary index for {:?} has not finished building",
-                sv_spec_arg
+                "Secondary index for {sv_spec_arg:?} has not finished building",
             ));
         }
 
@@ -124,10 +124,6 @@ impl<'txn> Txn<'txn> {
             .as_ref()
             .unwrap()
             .iter()
-            .filter_map(|elem| match &elem {
-                LsmElem::Unit(unit) => Some(unit),
-                LsmElem::Dummy { .. } => None,
-            })
             .filter_map(|unit| unit.scnds.get(scnd_idx_num));
         let kmerged_entries =
             merging::merge_txnlocal_and_committed_entrysets(stg, committed_entrysets, sv_lo, sv_hi);
@@ -205,7 +201,7 @@ impl<'txn> Txn<'txn> {
     fn ensure_create_staging(&mut self) -> Result<()> {
         if self.staging.is_none() {
             let unit_dir = self.db.lsm_dir().format_new_unit_dir_path();
-            let stg = StagingUnit::new(unit_dir)?;
+            let stg = StagingUnit::new_empty(unit_dir)?;
             self.staging = Some(stg);
         }
         Ok(())

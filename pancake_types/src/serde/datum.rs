@@ -3,7 +3,6 @@ use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 
 mod deser;
 mod ser;
-#[cfg(test)]
 mod serde_test;
 pub use deser::*;
 pub use ser::*;
@@ -14,6 +13,23 @@ pub enum Datum {
     Bytes(Vec<u8>),
     Str(String),
     Tuple(Vec<Datum>),
+}
+impl PartialOrd for Datum {
+    fn partial_cmp(&self, other: &Datum) -> Option<Ordering> {
+        let ord = match (self, other) {
+            (Self::Bytes(slf), Self::Bytes(oth)) => slf.cmp(oth),
+            (Self::I64(slf), Self::I64(oth)) => slf.cmp(oth),
+            (Self::Str(slf), Self::Str(oth)) => slf.cmp(oth),
+            (Self::Tuple(slf), Self::Tuple(oth)) => slf.cmp(oth),
+            _ => DatumType::from(self).cmp(&DatumType::from(other)),
+        };
+        Some(ord)
+    }
+}
+impl Ord for Datum {
+    fn cmp(&self, other: &Datum) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -35,23 +51,5 @@ impl<T> Into<Option<T>> for OptDatum<T> {
             Self::Tombstone => None,
             Self::Some(t) => Some(t),
         }
-    }
-}
-
-impl PartialOrd for Datum {
-    fn partial_cmp(&self, other: &Datum) -> Option<Ordering> {
-        let ord = match (self, other) {
-            (Self::Bytes(slf), Self::Bytes(oth)) => slf.cmp(oth),
-            (Self::I64(slf), Self::I64(oth)) => slf.cmp(oth),
-            (Self::Str(slf), Self::Str(oth)) => slf.cmp(oth),
-            (Self::Tuple(slf), Self::Tuple(oth)) => slf.cmp(oth),
-            _ => DatumType::from(self).cmp(&DatumType::from(other)),
-        };
-        Some(ord)
-    }
-}
-impl Ord for Datum {
-    fn cmp(&self, other: &Datum) -> Ordering {
-        self.partial_cmp(other).unwrap()
     }
 }

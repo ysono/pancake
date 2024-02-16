@@ -7,6 +7,7 @@ mod test {
     use std::io::Cursor;
 
     fn verify(pre_serialized: &Vec<OptDatum<Datum>>) -> Result<()> {
+        /* Serialize. */
         let (serialized, w_len_at_each_dat) = {
             let mut serialized: Vec<u8> = vec![];
             let mut w_len_at_each_dat: Vec<usize> = vec![]; // Cumulative `w_len`s.
@@ -21,14 +22,13 @@ mod test {
             assert_eq!(
                 serialized.len(),
                 w_len,
-                "\n{:?}\n{:?}\n",
-                pre_serialized,
-                serialized
+                "\n{pre_serialized:?}\n{serialized:?}\n",
             );
 
             (serialized, w_len_at_each_dat)
         };
 
+        /* Skip each Datum. */
         {
             let mut r = Cursor::new(&serialized);
             let mut r_len = 0;
@@ -42,12 +42,11 @@ mod test {
             assert_eq!(
                 ReadResult::EOF,
                 OptDatum::<Datum>::deser(&mut r)?,
-                "\n{:?}\n{:?}\n",
-                pre_serialized,
-                serialized
+                "\n{pre_serialized:?}\n{serialized:?}\n",
             );
         }
 
+        /* Deserialize each Datum. */
         {
             let mut r = Cursor::new(&serialized);
             let mut r_len = 0;
@@ -65,14 +64,11 @@ mod test {
             assert_eq!(
                 ReadResult::EOF,
                 OptDatum::<Datum>::deser(&mut r)?,
-                "\n{:?}\n{:?}\n",
-                pre_serialized,
-                serialized
+                "\n{pre_serialized:?}\n{serialized:?}\n",
             );
             assert_eq!(
                 pre_serialized, &deserialized,
-                "\n{:?}\n{:?}\n",
-                pre_serialized, serialized
+                "\n{pre_serialized:?}\n{serialized:?}\n",
             );
         }
 

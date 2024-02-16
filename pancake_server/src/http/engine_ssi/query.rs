@@ -83,6 +83,6 @@ fn entries_to_str<'a>(
 }
 
 fn pkpv_to_str(body: &mut String, pk: &PrimaryKey, pv: &Value) {
-    let s = format!("Key:\r\n{:?}\r\nValue:\r\n{:?}\r\n", pk, pv);
+    let s = format!("Key:\r\n{pk:?}\r\nValue:\r\n{pv:?}\r\n");
     body.push_str(&s);
 }

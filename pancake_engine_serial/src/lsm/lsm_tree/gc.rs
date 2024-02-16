@@ -5,6 +5,8 @@ use pancake_engine_common::{Entry, SSTable};
 use pancake_types::{serde::OptDatum, types::Serializable};
 use std::mem;
 
+/// These thresholds are exaggeratedly small, so as to be helpful with debugging.
+/// In the future, we'll allow setting them from env vars.
 static MEMTABLE_FLUSH_SIZE_THRESH: usize = 7;
 static SSTABLE_COMPACT_COUNT_THRESH: usize = 4;
 
@@ -24,7 +26,7 @@ where
     }
 
     fn flush_memtable(&mut self) -> Result<()> {
-        let sst_path = self.format_new_sstable_file_path();
+        let sst_path = self.sstables_dir.format_new_child_path();
 
         let entries = self.memlog.r_memlog().get_whole_range().map(Entry::Ref);
 
@@ -39,7 +41,7 @@ where
 
     /// For now, always compact all SSTables into one SSTable.
     fn compact_sstables(&mut self) -> Result<()> {
-        let sst_path = self.format_new_sstable_file_path();
+        let sst_path = self.sstables_dir.format_new_child_path();
 
         let entries = merging::merge_sstables(&self.sstables[..], None, None)
             // skip tombstones

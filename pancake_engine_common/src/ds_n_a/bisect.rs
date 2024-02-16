@@ -56,12 +56,12 @@ mod test {
     fn check(vec: &Vec<i32>, search: i32, exp_left_idx: usize, exp_right_idx: usize) {
         let act_left_idx = bisect_left(vec, 0, vec.len(), |x| x.cmp(&search));
         if act_left_idx != exp_left_idx {
-            panic!("L {:?} {} {} {}", vec, search, exp_left_idx, act_left_idx);
+            panic!("L {vec:?} {search} {exp_left_idx} {act_left_idx}");
         }
 
         let act_right_idx = bisect_right(vec, 0, vec.len(), |x| x.cmp(&search));
         if act_right_idx != exp_right_idx {
-            panic!("R {:?} {} {} {}", vec, search, exp_right_idx, act_right_idx);
+            panic!("R {vec:?} {search} {exp_right_idx} {act_right_idx}");
         }
     }
 

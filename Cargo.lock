@@ -896,6 +896,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "derive_more",
+ "itertools",
  "pancake_types",
  "shorthand",
 ]

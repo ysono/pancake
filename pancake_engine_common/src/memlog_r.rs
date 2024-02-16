@@ -1,9 +1,10 @@
+use crate::fs_utils;
 use anyhow::Result;
-use pancake_types::{iters::KeyValueIterator, types::Deser};
+use pancake_types::{iters::KeyValueReader, types::Deser};
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::fs::File;
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 /// A MemLog is a sorted dictionary (called Memtable), backed up by a write-ahead log file.
@@ -22,8 +23,8 @@ where
 
         let mut memtable = BTreeMap::default();
         if log_path.exists() {
-            let log_file = File::open(log_path)?;
-            let iter = KeyValueIterator::<K, V>::from(log_file);
+            let log_file = fs_utils::open_file(log_path, OpenOptions::new().read(true))?;
+            let iter = KeyValueReader::<_, K, V>::from(log_file).into_iter_kv();
             for res_kv in iter {
                 let (k, v) = res_kv?;
                 memtable.insert(k, v);
@@ -56,6 +57,7 @@ where
     where
         K: PartialOrd<Q>,
     {
+        // TODO replace `.skip_while()` with https://doc.rust-lang.org/stable/std/collections/struct.BTreeMap.html#method.lower_bound when the latter graduates into the stable rust.
         self.memtable
             .iter()
             .skip_while(move |(sample_k, _v)| match k_lo {

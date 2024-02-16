@@ -1,12 +1,17 @@
 # 🥞
 
-Pancake is an experimental database with the following features:
+Pancake is a toy database. The project's goal is to learn and experiment with algorithms. As a product, Pancake works, possibly correctly, and not fastly.
 
-- Data model = Document store. Documents are dynamically typed.
-- Secondary indexes are defined on one contiguous sub-portion of values.
+Features:
+- Data model = Document, dynamically typed.
+- Each secondary index key definition covers one contiguous sub-portion of values.
+    It is specified by a sequence of integers that inspect within nested tuples.
 - Storage data structure = LSM Tree.
-- Isolation = Serializable Snapshot Isolation (SSI; i.e. optimistic locking) and Serial execution. There are two separate corresponding implementations of the storage engine.
-- No partitioning or replication (yet).
+- Storage engines:
+    - Serial execution.
+    - MMVC implementing Serializable Snapshot Isolation (i.e. optimistic locking).
+- Distributed:
+    - No partitioning or replication, yet.
 
 ## Architecture
 
@@ -22,6 +27,6 @@ cargo run --package pancake_server
 
 Accessing the server:
 
-- Simple CRUD by http method.
+- Simple CRUD by http method. See [this sample test script](./pancake_server/tests/pancake-test-script.sh) for examples.
 - A [query language](https://ysono.github.io/pancake/pancake_server/query/basic/index.html). See [this sample test script](./pancake_server/tests/pancake-test-script.sh) for examples.
 - Transaction expressed as a [WASM component](https://github.com/WebAssembly/component-model). See [instruction](examples_wasm_txn/readme.md).

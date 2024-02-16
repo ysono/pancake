@@ -8,6 +8,13 @@ pub fn no_content() -> Result<Response<Body>> {
         .map_err(|e| anyhow!(e))
 }
 
+pub fn not_modified<B: Into<Body>>(body: B) -> Result<Response<Body>> {
+    Response::builder()
+        .status(StatusCode::NOT_MODIFIED)
+        .body(body.into())
+        .map_err(|e| anyhow!(e))
+}
+
 pub fn err(e: anyhow::Error) -> Result<Response<Body>> {
     Response::builder()
         .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -15,9 +22,9 @@ pub fn err(e: anyhow::Error) -> Result<Response<Body>> {
         .map_err(|e| anyhow!(e))
 }
 
-pub fn ok(body: String) -> Result<Response<Body>> {
+pub fn ok<B: Into<Body>>(body: B) -> Result<Response<Body>> {
     Response::builder()
         .status(StatusCode::OK)
-        .body(Body::from(body))
+        .body(body.into())
         .map_err(|e| anyhow!(e))
 }

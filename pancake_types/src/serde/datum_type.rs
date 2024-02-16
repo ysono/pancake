@@ -40,11 +40,8 @@ pub enum DatumType {
 impl TryFrom<DatumTypeInt> for DatumType {
     type Error = anyhow::Error;
     fn try_from(int: DatumTypeInt) -> Result<Self> {
-        DatumType::from_u8(int.0).ok_or(anyhow!(
-            "Unknown {} {}",
-            any::type_name::<DatumTypeInt>(),
-            int.0
-        ))
+        DatumType::from_u8(int.0)
+            .ok_or_else(|| anyhow!("Unknown {} {}", any::type_name::<DatumTypeInt>(), int.0))
     }
 }
 impl From<&Datum> for DatumType {

@@ -16,7 +16,7 @@ pub async fn repeatable_read(db: &'static DB) -> Result<()> {
     let mut r_tasks = vec![];
 
     let pk = Arc::new(gen::gen_str_pk("the_repeatable_key"));
-    let gen_pv_str = |txn_i: u64| format!("from txn {}", txn_i);
+    let gen_pv_str = |txn_i: u64| format!("from txn {txn_i}");
 
     /*
     Launch writing txns by staggered delays.
@@ -60,9 +60,7 @@ pub async fn repeatable_read(db: &'static DB) -> Result<()> {
                     let curr_opt_pv = txn.get_pk_one(&pk)?.map(|(_, pv)| pv);
                     if first_opt_pv != curr_opt_pv {
                         return Err(anyhow!(
-                            "Non-repeatable read! {:?} {:?}",
-                            first_opt_pv,
-                            curr_opt_pv
+                            "Non-repeatable read! {first_opt_pv:?} {curr_opt_pv:?}",
                         ));
                     }
                 }

@@ -1,9 +1,7 @@
-//! Iterators work on files that contain "K"s and "V"s interleaved,
+//! Iterators work on files that contain "K"s and "V"s alternately,
 //! where "K" and "V" are some [`crate::types::Deser`] types.
-//! There is no separator between neighboring "K" <-> "V", and
+//! There is no separator between neighboring "K" <-> "V" <-> "K" <-> etc, and
 //! there is no indication whether the current bytes correspond to "K" or "V".
-//!
-//! This file format is applicable to both commit logs and SS tables.
 //!
 //! ```text
 //! struct File {
@@ -16,11 +14,13 @@
 //!     //   and V: Deser
 //! }
 //! ```
+//!
+//! This file format is applicable to both commit logs and SS tables.
 
-mod iter_k;
-mod iter_kv;
 mod iter_range;
+mod iters_simple;
+mod reader;
 
-pub use iter_k::*;
-pub use iter_kv::*;
 pub use iter_range::*;
+pub use iters_simple::*;
+pub use reader::*;

@@ -7,18 +7,22 @@ use std::io::{BufRead, Cursor, Write};
 use std::str;
 use std::sync::Arc;
 
+mod test;
+
 /// [`SubValueSpec`] specifies a contiguous sub-portion of a [`Value`].
 ///
 /// The spec is a DSL for locating this sub-portion,
-/// as well as an extractor of this sub-portion that returns [`SVShared`].
+/// as well as an extractor of this sub-portion.
 ///
 /// #### Specification
 ///
-/// The [`DatumType`] of the target sub-portion must be specified.
-/// If the target is a [`DatumType::Tuple`], we specify the undivided tuple.
+/// `member_idxs`:
+/// - The empty `member_idxs` specifies the whole [`Value`].
+/// - Each `member_idx` specifies a member within a [`Datum::Tuple`].
+///   A series of `member_idx`s specifies members within nested Tuples.
 ///
-/// If the sub-portion is actually the entire [`Value`], then `member_idxs` is empty.
-/// If the sub-portion is nested within a [`Datum::Tuple`], then `member_idxs` specifies the member idx at each depth.
+/// `datum_type`:
+/// - The `datum_type` equalling [`DatumType::Tuple`] specifies the whole (nested) Tuple.
 ///
 /// For example, given a tuple-typed [`Value`]
 ///
@@ -50,7 +54,7 @@ use std::sync::Arc;
 /// If you want to specify the `Datum::Tuple` containing data 3 and 4:
 ///
 /// ```text
-/// SubValueSpec::PartialTuple {
+/// SubValueSpec {
 ///     member_idxs: vec![1, 2],
 ///     datum_type: DatumType::Tuple,
 /// }
@@ -149,6 +153,3 @@ impl SubValueSpec {
         Self::deser(&mut r)
     }
 }
-
-#[cfg(test)]
-mod test;

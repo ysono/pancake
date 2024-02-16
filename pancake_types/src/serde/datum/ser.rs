@@ -106,8 +106,8 @@ impl Datum {
 
                 /* members' lens */
                 for memb in members {
-                    let memb_body_len: u32 = *(memb.intra_tuple_datum_len::<false>()?);
-                    root_body_len += memb_body_len as usize;
+                    let memb_body_len = memb.intra_tuple_datum_len::<false>()?;
+                    root_body_len += *memb_body_len as usize;
                 }
 
                 root_body_len

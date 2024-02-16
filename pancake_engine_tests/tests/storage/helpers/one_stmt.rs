@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use pancake_engine_serial::DB as SerialDb;
 use pancake_engine_ssi::{ClientCommitDecision, Txn, DB as SsiDb};
@@ -38,7 +38,7 @@ pub struct OneStmtSerialDbAdaptor<'a> {
 impl<'a> OneStmtDbAdaptor for OneStmtSerialDbAdaptor<'a> {
     async fn get_pk_one(&self, pk: &PrimaryKey) -> Result<Option<(PKShared, PVShared)>> {
         let opt_entry = self.db.get_pk_one(pk);
-        let opt_res = opt_entry.map(|entry| entry.take_kv());
+        let opt_res = opt_entry.map(|entry| entry.into_owned_kv());
         opt_res.transpose()
     }
 
@@ -49,7 +49,7 @@ impl<'a> OneStmtDbAdaptor for OneStmtSerialDbAdaptor<'a> {
     ) -> Result<Vec<(PKShared, PVShared)>> {
         self.db
             .get_pk_range(pk_lo, pk_hi)
-            .map(|entry| entry.take_kv())
+            .map(|entry| entry.into_owned_kv())
             .collect::<Result<Vec<_>>>()
     }
 
@@ -61,7 +61,7 @@ impl<'a> OneStmtDbAdaptor for OneStmtSerialDbAdaptor<'a> {
     ) -> Result<Vec<(PKShared, PVShared)>> {
         self.db
             .get_sv_range(sv_spec, sv_lo, sv_hi)?
-            .map(|entry| entry.take_kv())
+            .map(|entry| entry.into_owned_kv())
             .collect::<Result<Vec<_>>>()
     }
 
@@ -93,11 +93,17 @@ impl<'a> OneStmtSsiDbAdaptor<'a> {
     }
 
     pub async fn nonmut_create_scnd_idx(&self, sv_spec: Arc<SubValueSpec>) -> Result<()> {
-        self.db.create_scnd_idx(&sv_spec).await
+        self.db
+            .create_scnd_idx(&sv_spec)
+            .await
+            .map_err(|e| anyhow!(e))
     }
 
     pub async fn nonmut_delete_scnd_idx(&self, sv_spec: &SubValueSpec) -> Result<()> {
-        self.db.delete_scnd_idx(sv_spec).await
+        self.db
+            .delete_scnd_idx(sv_spec)
+            .await
+            .map_err(|e| anyhow!(e))
     }
 }
 
@@ -120,7 +126,7 @@ impl<'a> OneStmtDbAdaptor for OneStmtSsiDbAdaptor<'a> {
         let fut = Txn::run(self.db, 0, |txn| {
             let entries = txn.get_pk_range(pk_lo, pk_hi);
             let entries = entries
-                .map(|entry| entry.take_kv())
+                .map(|entry| entry.into_owned_kv())
                 .collect::<Result<Vec<_>>>()?;
             Ok(ClientCommitDecision::Commit(entries))
         });
@@ -137,7 +143,7 @@ impl<'a> OneStmtDbAdaptor for OneStmtSsiDbAdaptor<'a> {
         let fut = Txn::run(self.db, 0, |txn| {
             let entries = txn.get_sv_range(sv_spec, sv_lo, sv_hi)?;
             let entries = entries
-                .map(|entry| entry.convert::<PKShared, PVShared>().take_kv())
+                .map(|entry| entry.convert::<PKShared, PVShared>().into_owned_kv())
                 .collect::<Result<Vec<_>>>()?;
             Ok(ClientCommitDecision::Commit(entries))
         });

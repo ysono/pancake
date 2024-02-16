@@ -1,21 +1,20 @@
 use crate::{
     db_state::ScndIdxNum,
-    lsm_state::{
+    lsm::{
         entryset::CommittedEntrySet,
         unit::{
-            CommitDataType, CommitInfo, CommitVer, CompactedUnit, StagingUnit, TimestampNum,
+            CommitDataType, CommitInfo, CommitVer, CompactedUnit, ReplacementNum, StagingUnit,
             UnitDir,
         },
     },
 };
 use anyhow::Result;
-use pancake_engine_common::{ReadonlyMemLog, SSTable};
+use pancake_engine_common::{fs_utils, ReadonlyMemLog, SSTable};
 use pancake_types::{
     serde::OptDatum,
     types::{PKShared, PVShared, SVPKShared},
 };
 use std::collections::HashMap;
-use std::fs;
 
 pub struct CommittedUnit {
     pub prim: Option<CommittedEntrySet<PKShared, OptDatum<PVShared>>>,
@@ -26,11 +25,12 @@ pub struct CommittedUnit {
 
 impl CommittedUnit {
     /// Cost:
-    /// - There should be no cost converting each `WritableMemLog` to `ReadonlyMemLog`.
-    /// - There *is* a cost of serializing a CommitInfo.
+    /// - There is no cost converting each `WritableMemLog` to `ReadonlyMemLog`.
+    /// - There *is* a cost of serializing a [`CommitInfo`].
     pub fn from_staging(stg: StagingUnit, commit_ver: CommitVer) -> Result<Self> {
         let prim: ReadonlyMemLog<PKShared, OptDatum<PVShared>> = stg.prim.into();
-        let prim_entryset = CommittedEntrySet::RMemLog(prim);
+        let prim = CommittedEntrySet::RMemLog(prim);
+
         let scnds = stg
             .scnds
             .into_iter()
@@ -44,14 +44,14 @@ impl CommittedUnit {
         let commit_info = CommitInfo {
             commit_ver_hi_incl: commit_ver,
             commit_ver_lo_incl: commit_ver,
-            timestamp_num: TimestampNum::from(0),
+            replacement_num: ReplacementNum::FOR_NEW_COMMIT_VER_INTERVAL,
             data_type: CommitDataType::MemLog,
         };
-        let commit_info_path = stg.dir.format_commit_info_path();
+        let commit_info_path = stg.dir.format_commit_info_file_path();
         commit_info.ser(commit_info_path)?;
 
         Ok(Self {
-            prim: Some(prim_entryset),
+            prim: Some(prim),
             scnds,
             dir: stg.dir,
             commit_info,
@@ -59,51 +59,51 @@ impl CommittedUnit {
     }
 
     /// Cost:
-    /// - This constructor serializes CommitInfo (so caller shouldn't do it before).
+    /// - This constructor serializes CommitInfo. The caller shouldn't do it before.
     pub fn from_compacted(compacted: CompactedUnit, commit_info: CommitInfo) -> Result<Self> {
-        let commit_info_path = compacted.dir.format_commit_info_path();
+        let prim = compacted.prim.map(CommittedEntrySet::SSTable);
+
+        let scnds = compacted
+            .scnds
+            .into_iter()
+            .map(|(si_num, sstable)| (si_num, CommittedEntrySet::SSTable(sstable)))
+            .collect::<HashMap<_, _>>();
+
+        let commit_info_path = compacted.dir.format_commit_info_file_path();
         commit_info.ser(commit_info_path)?;
 
         Ok(Self {
-            prim: compacted.prim,
-            scnds: compacted.scnds,
+            prim,
+            scnds,
             dir: compacted.dir,
             commit_info,
         })
     }
 
     pub fn load(dir: UnitDir, commit_info: CommitInfo) -> Result<Self> {
-        let prim = {
-            let prim_path = dir.format_prim_path();
-            if prim_path.exists() {
-                let ces = match commit_info.data_type() {
-                    CommitDataType::MemLog => {
-                        CommittedEntrySet::RMemLog(ReadonlyMemLog::load(prim_path)?)
-                    }
-                    CommitDataType::SSTable => {
-                        CommittedEntrySet::SSTable(SSTable::load(prim_path)?)
-                    }
-                };
-                Some(ces)
-            } else {
-                None
-            }
+        let prim_path = dir.format_prim_file_path();
+        let prim = if prim_path.exists() {
+            let entryset = match commit_info.data_type() {
+                CommitDataType::MemLog => {
+                    CommittedEntrySet::RMemLog(ReadonlyMemLog::load(prim_path)?)
+                }
+                CommitDataType::SSTable => CommittedEntrySet::SSTable(SSTable::load(prim_path)?),
+            };
+            Some(entryset)
+        } else {
+            None
         };
 
         let mut scnds = HashMap::new();
-        {
-            for res in dir.list_scnd_paths()? {
-                let (scnd_path, si_num) = res?;
-                let ces = match commit_info.data_type() {
-                    CommitDataType::MemLog => {
-                        CommittedEntrySet::RMemLog(ReadonlyMemLog::load(scnd_path)?)
-                    }
-                    CommitDataType::SSTable => {
-                        CommittedEntrySet::SSTable(SSTable::load(scnd_path)?)
-                    }
-                };
-                scnds.insert(si_num, ces);
-            }
+        for res in dir.list_scnd_file_paths()? {
+            let (scnd_path, si_num) = res?;
+            let entryset = match commit_info.data_type() {
+                CommitDataType::MemLog => {
+                    CommittedEntrySet::RMemLog(ReadonlyMemLog::load(scnd_path)?)
+                }
+                CommitDataType::SSTable => CommittedEntrySet::SSTable(SSTable::load(scnd_path)?),
+            };
+            scnds.insert(si_num, entryset);
         }
 
         Ok(Self {
@@ -115,7 +115,7 @@ impl CommittedUnit {
     }
 
     pub fn remove_dir(self) -> Result<()> {
-        fs::remove_dir_all(&*self.dir)?;
+        fs_utils::remove_dir_all(self.dir.path())?;
         Ok(())
     }
 }

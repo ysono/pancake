@@ -1,8 +1,8 @@
-use crate::ds_n_a::atomic_linked_list::{AtomicLinkedListSnapshot, ListNode};
+use crate::ds_n_a::atomic_linked_list::{ListNode, ListSnapshot};
 use crate::ds_n_a::interval_set::IntervalSet;
 use crate::{
     db_state::DbState,
-    lsm_state::{unit::CommittedUnit, LsmElem, LsmState},
+    lsm::{unit::CommittedUnit, LsmElem, LsmState},
     opers::txn::Txn,
     DB,
 };
@@ -15,25 +15,25 @@ impl<'txn> Txn<'txn> {
         db: &'txn DB,
         db_state_guard: RwLockReadGuard<'txn, DbState>,
     ) -> Txn<'txn> {
-        let mut prepped_boundary_node = Self::prep_boundary_node();
-        let snap_head_excl;
+        let mut cand_snap_head = Self::create_boundary_node();
+        let snap_head;
         let snap_next_commit_ver;
         let snap_list_ver;
         {
             let mut lsm_state = db.lsm_state().lock().await;
 
-            snap_head_excl =
-                Self::hold_boundary_at_head(&mut lsm_state, &mut prepped_boundary_node);
+            (snap_head, cand_snap_head) = lsm_state.update_or_push_head(
+                Self::should_push_boundary_head,
+                cand_snap_head.take().unwrap(),
+            );
 
-            snap_next_commit_ver = lsm_state.next_commit_ver;
+            snap_next_commit_ver = lsm_state.next_commit_ver();
 
             snap_list_ver = lsm_state.hold_curr_list_ver();
         }
+        drop(cand_snap_head);
 
-        let snap = AtomicLinkedListSnapshot {
-            head_excl_ptr: snap_head_excl,
-            tail_excl_ptr: None,
-        };
+        let snap = ListSnapshot::new_tailless(snap_head);
 
         Self {
             db,
@@ -63,13 +63,16 @@ impl<'txn> Txn<'txn> {
             }
         }
 
+        let mut cand_snap_head = None;
         loop {
-            let prepped_boundary_node = Self::prep_boundary_node();
+            if cand_snap_head.is_none() {
+                cand_snap_head = Self::create_boundary_node();
+            }
             {
                 let lsm_state = self.db.lsm_state().lock().await;
 
-                if self.snap_next_commit_ver != lsm_state.next_commit_ver {
-                    self.update_snapshot_for_conflict_checking(lsm_state, prepped_boundary_node);
+                if self.snap_next_commit_ver != lsm_state.next_commit_ver() {
+                    self.update_snapshot_for_conflict_checking(lsm_state, &mut cand_snap_head)?;
                     if self.has_conflict()? {
                         return Ok(TryCommitResult::Conflict(self));
                     }
@@ -84,47 +87,54 @@ impl<'txn> Txn<'txn> {
     fn update_snapshot_for_conflict_checking(
         &mut self,
         mut lsm_state: MutexGuard<LsmState>,
-        mut prepped_boundary_node: Option<Box<ListNode<LsmElem>>>,
-    ) {
-        let snap_head_excl =
-            Self::hold_boundary_at_head(&mut lsm_state, &mut prepped_boundary_node);
+        cand_snap_head: &mut Option<Box<ListNode<LsmElem>>>,
+    ) -> Result<()> {
+        let snap_head;
+        (snap_head, *cand_snap_head) = lsm_state.update_or_push_head(
+            Self::should_push_boundary_head,
+            cand_snap_head.take().unwrap(),
+        );
 
-        self.snap_next_commit_ver = lsm_state.next_commit_ver;
+        self.snap_next_commit_ver = lsm_state.next_commit_ver();
 
         let updated_mhlv;
-        (self.snap_list_ver, updated_mhlv) = lsm_state.hold_and_unhold_list_ver(self.snap_list_ver);
+        (self.snap_list_ver, updated_mhlv) =
+            lsm_state.hold_and_unhold_list_ver(self.snap_list_ver)?;
 
         drop(lsm_state);
 
-        let is_replace_avail = Self::unhold_boundary_node(&[self.snap.tail_excl_ptr]);
-        self.snap.tail_excl_ptr = Some(self.snap.head_excl_ptr);
-        self.snap.head_excl_ptr = snap_head_excl;
+        let is_fc_avail = Self::unhold_boundary_nodes([self.snap.tail_ptr()]);
+        self.snap = ListSnapshot::new(snap_head, self.snap.head_ptr());
 
-        self.notify_fc_job(updated_mhlv, is_replace_avail);
+        self.notify_fc_worker(updated_mhlv, is_fc_avail);
+
+        Ok(())
     }
 
     pub(super) async fn reset(&mut self) -> Result<()> {
-        let mut prepped_boundary_node = Self::prep_boundary_node();
-        let snap_head_excl;
+        let mut cand_snap_head = Self::create_boundary_node();
+        let snap_head;
         let updated_mhlv;
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
-            snap_head_excl =
-                Self::hold_boundary_at_head(&mut lsm_state, &mut prepped_boundary_node);
+            (snap_head, cand_snap_head) = lsm_state.update_or_push_head(
+                Self::should_push_boundary_head,
+                cand_snap_head.take().unwrap(),
+            );
 
-            self.snap_next_commit_ver = lsm_state.next_commit_ver;
+            self.snap_next_commit_ver = lsm_state.next_commit_ver();
 
             (self.snap_list_ver, updated_mhlv) =
-                lsm_state.hold_and_unhold_list_ver(self.snap_list_ver);
+                lsm_state.hold_and_unhold_list_ver(self.snap_list_ver)?;
         }
+        drop(cand_snap_head);
 
-        let is_replace_avail =
-            Self::unhold_boundary_node(&[Some(self.snap.head_excl_ptr), self.snap.tail_excl_ptr]);
-        self.snap.tail_excl_ptr = None;
-        self.snap.head_excl_ptr = snap_head_excl;
+        let is_fc_avail =
+            Self::unhold_boundary_nodes([Some(self.snap.head_ptr()), self.snap.tail_ptr()]);
+        self.snap = ListSnapshot::new_tailless(snap_head);
 
-        self.notify_fc_job(updated_mhlv, is_replace_avail);
+        self.notify_fc_worker(updated_mhlv, is_fc_avail);
 
         self.snap_vec = None;
         self.dependent_itvs_prim.clear();
@@ -141,13 +151,13 @@ impl<'txn> Txn<'txn> {
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
-            updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver);
+            updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver)?;
         }
 
-        let is_replace_avail =
-            Self::unhold_boundary_node(&[Some(self.snap.head_excl_ptr), self.snap.tail_excl_ptr]);
+        let is_fc_avail =
+            Self::unhold_boundary_nodes([Some(self.snap.head_ptr()), self.snap.tail_ptr()]);
 
-        self.notify_fc_job(updated_mhlv, is_replace_avail);
+        self.notify_fc_worker(updated_mhlv, is_fc_avail);
 
         if let Some(staging) = self.staging {
             staging.remove_dir()?;
@@ -157,24 +167,23 @@ impl<'txn> Txn<'txn> {
     }
 
     fn do_commit(mut self, mut lsm_state: MutexGuard<LsmState>) -> Result<()> {
-        /* Push a node with CommittedUnit.
-        Note, moving Staging to CommittedUnit is an expensive operation,
-        and we're doing it under a mutex guard. */
-        let committed_unit =
-            CommittedUnit::from_staging(self.staging.take().unwrap(), lsm_state.next_commit_ver)?;
-        let elem = LsmElem::Unit(committed_unit);
-        lsm_state.list.push_elem(elem);
+        let commit_ver = lsm_state.fetch_inc_next_commit_ver();
 
-        *lsm_state.next_commit_ver += 1;
+        /* Note, converting StagingUnit to CommittedUnit involves writing a file,
+        which is not cheap, and we're doing it under a mutex guard. */
+        let committed_unit = CommittedUnit::from_staging(self.staging.take().unwrap(), commit_ver)?;
 
-        let updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver);
+        let elem = LsmElem::CommittedUnit(committed_unit);
+        lsm_state.list().push_head_elem(elem);
+
+        let updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver)?;
 
         drop(lsm_state);
 
-        Self::unhold_boundary_node(&[Some(self.snap.head_excl_ptr), self.snap.tail_excl_ptr]);
+        Self::unhold_boundary_nodes([Some(self.snap.head_ptr()), self.snap.tail_ptr()]);
 
-        // We just pushed a MemLog. Hence the list became replaceable.
-        self.notify_fc_job(updated_mhlv, true);
+        let is_fc_avail = true;
+        self.notify_fc_worker(updated_mhlv, is_fc_avail);
 
         Ok(())
     }

@@ -1,15 +1,15 @@
-use anyhow::Result;
 use std::cmp::Ordering;
+use std::convert::Infallible;
 
-pub trait TryPartialOrd<Rhs> {
-    fn try_partial_cmp(&self, other: &Rhs) -> Result<Option<Ordering>>;
+pub trait TryPartialOrd<Rhs, E> {
+    fn try_partial_cmp(&self, rhs: &Rhs) -> Result<Option<Ordering>, E>;
 }
 
-impl<T> TryPartialOrd<T> for T
+impl<Lhs, Rhs> TryPartialOrd<Rhs, Infallible> for Lhs
 where
-    T: Ord,
+    Lhs: PartialOrd<Rhs>,
 {
-    fn try_partial_cmp(&self, other: &T) -> Result<Option<Ordering>> {
-        Ok(Some(self.cmp(other)))
+    fn try_partial_cmp(&self, rhs: &Rhs) -> Result<Option<Ordering>, Infallible> {
+        Ok(self.partial_cmp(rhs))
     }
 }
