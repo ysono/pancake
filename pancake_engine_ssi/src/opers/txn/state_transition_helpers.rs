@@ -17,7 +17,7 @@ impl<'txn> Txn<'txn> {
                 hold_count.fetch_add(1, Ordering::SeqCst);
                 false
             }
-            LsmElem::Unit(_) => true,
+            LsmElem::CommittedUnit(_) => true,
         }
     }
 

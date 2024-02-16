@@ -15,7 +15,7 @@ pub fn new_dummy_node(hold_count: usize, is_fence: bool) -> Box<ListNode<LsmElem
 }
 
 pub fn new_unit_node(unit: CommittedUnit) -> Box<ListNode<LsmElem>> {
-    let elem = LsmElem::Unit(unit);
+    let elem = LsmElem::CommittedUnit(unit);
     let node = ListNode {
         elem,
         next: AtomicPtr::default(),

@@ -104,7 +104,7 @@ impl<'job> FCJob<'job> {
                 let node_ref = unsafe { node_ptr.as_ref() };
                 match &node_ref.elem {
                     // It's guaranteed to be a CommittedUnit.
-                    LsmElem::Unit(unit) => Some(unit),
+                    LsmElem::CommittedUnit(unit) => Some(unit),
                     LsmElem::Dummy { .. } => None,
                 }
             })
@@ -174,7 +174,7 @@ impl<'job> FCJob<'job> {
                     let curr_ref = unsafe { curr_ptr_nn.as_ref() };
                     let curr_sendptr = NonNullSendPtr::from(curr_ptr_nn);
                     match &curr_ref.elem {
-                        LsmElem::Unit(_) => break NodeInfo::CommittedUnit(curr_sendptr),
+                        LsmElem::CommittedUnit(_) => break NodeInfo::CommittedUnit(curr_sendptr),
                         LsmElem::Dummy {
                             hold_count,
                             is_fence,

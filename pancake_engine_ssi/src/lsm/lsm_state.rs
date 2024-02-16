@@ -19,7 +19,7 @@ impl ListVer {
 }
 
 pub enum LsmElem {
-    Unit(CommittedUnit),
+    CommittedUnit(CommittedUnit),
     Dummy {
         hold_count: AtomicUsize,
         is_fence: AtomicBool,
@@ -43,7 +43,7 @@ impl LsmState {
         committed_units: impl IntoIterator<Item = CommittedUnit>,
         next_commit_ver: CommitVer,
     ) -> Self {
-        let elems = committed_units.into_iter().map(LsmElem::Unit);
+        let elems = committed_units.into_iter().map(LsmElem::CommittedUnit);
         let list = AtomicLinkedList::from_elems(elems);
 
         Self {

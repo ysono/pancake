@@ -25,11 +25,12 @@ pub struct CommittedUnit {
 
 impl CommittedUnit {
     /// Cost:
-    /// - There should be no cost converting each `WritableMemLog` to `ReadonlyMemLog`.
-    /// - There *is* a cost of serializing a CommitInfo.
+    /// - There is no cost converting each `WritableMemLog` to `ReadonlyMemLog`.
+    /// - There *is* a cost of serializing a [`CommitInfo`].
     pub fn from_staging(stg: StagingUnit, commit_ver: CommitVer) -> Result<Self> {
         let prim: ReadonlyMemLog<PKShared, OptDatum<PVShared>> = stg.prim.into();
-        let prim_entryset = CommittedEntrySet::RMemLog(prim);
+        let prim = CommittedEntrySet::RMemLog(prim);
+
         let scnds = stg
             .scnds
             .into_iter()
@@ -50,7 +51,7 @@ impl CommittedUnit {
         commit_info.ser(commit_info_path)?;
 
         Ok(Self {
-            prim: Some(prim_entryset),
+            prim: Some(prim),
             scnds,
             dir: stg.dir,
             commit_info,
@@ -61,6 +62,7 @@ impl CommittedUnit {
     /// - This constructor serializes CommitInfo. The caller shouldn't do it before.
     pub fn from_compacted(compacted: CompactedUnit, commit_info: CommitInfo) -> Result<Self> {
         let prim = compacted.prim.map(CommittedEntrySet::SSTable);
+
         let scnds = compacted
             .scnds
             .into_iter()
@@ -79,37 +81,29 @@ impl CommittedUnit {
     }
 
     pub fn load(dir: UnitDir, commit_info: CommitInfo) -> Result<Self> {
-        let prim = {
-            let prim_path = dir.format_prim_file_path();
-            if prim_path.exists() {
-                let ces = match commit_info.data_type() {
-                    CommitDataType::MemLog => {
-                        CommittedEntrySet::RMemLog(ReadonlyMemLog::load(prim_path)?)
-                    }
-                    CommitDataType::SSTable => {
-                        CommittedEntrySet::SSTable(SSTable::load(prim_path)?)
-                    }
-                };
-                Some(ces)
-            } else {
-                None
-            }
+        let prim_path = dir.format_prim_file_path();
+        let prim = if prim_path.exists() {
+            let entryset = match commit_info.data_type() {
+                CommitDataType::MemLog => {
+                    CommittedEntrySet::RMemLog(ReadonlyMemLog::load(prim_path)?)
+                }
+                CommitDataType::SSTable => CommittedEntrySet::SSTable(SSTable::load(prim_path)?),
+            };
+            Some(entryset)
+        } else {
+            None
         };
 
         let mut scnds = HashMap::new();
-        {
-            for res in dir.list_scnd_file_paths()? {
-                let (scnd_path, si_num) = res?;
-                let ces = match commit_info.data_type() {
-                    CommitDataType::MemLog => {
-                        CommittedEntrySet::RMemLog(ReadonlyMemLog::load(scnd_path)?)
-                    }
-                    CommitDataType::SSTable => {
-                        CommittedEntrySet::SSTable(SSTable::load(scnd_path)?)
-                    }
-                };
-                scnds.insert(si_num, ces);
-            }
+        for res in dir.list_scnd_file_paths()? {
+            let (scnd_path, si_num) = res?;
+            let entryset = match commit_info.data_type() {
+                CommitDataType::MemLog => {
+                    CommittedEntrySet::RMemLog(ReadonlyMemLog::load(scnd_path)?)
+                }
+                CommitDataType::SSTable => CommittedEntrySet::SSTable(SSTable::load(scnd_path)?),
+            };
+            scnds.insert(si_num, entryset);
         }
 
         Ok(Self {

@@ -66,7 +66,7 @@ impl<'job> ScndIdxCreationJob<'job> {
             .iter_excluding_head_and_tail()
             .filter_map(|elem| match elem {
                 LsmElem::Dummy { .. } => None,
-                LsmElem::Unit(unit) => unit.prim.as_ref(),
+                LsmElem::CommittedUnit(unit) => unit.prim.as_ref(),
             });
         let prim_entries = merging::merge_committed_entrysets(
             prim_entrysets,

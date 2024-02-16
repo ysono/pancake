@@ -1,5 +1,4 @@
-use crate::lsm::LSMTree;
-use crate::scnd_idx::SecondaryIndex;
+use crate::{lsm::LSMTree, scnd_idx::SecondaryIndex};
 use anyhow::{anyhow, Context, Result};
 use pancake_engine_common::{
     fs_utils::{AntiCollisionParentDir, NamePattern},
@@ -51,9 +50,9 @@ impl DB {
 
     pub fn put(&mut self, pk: PKShared, pv: Option<PVShared>) -> Result<()> {
         let opt_entry = self.prim_lsm.get_one(&pk);
-        let opt_res_pair = opt_entry.as_ref().map(|entry| entry.try_borrow());
-        let opt_pair = opt_res_pair.transpose()?;
-        let old_pv: Option<&PVShared> = opt_pair.map(|pair| pair.1);
+        let opt_res_pkpv = opt_entry.as_ref().map(|entry| entry.try_borrow());
+        let opt_pkpv = opt_res_pkpv.transpose()?;
+        let old_pv: Option<&PVShared> = opt_pkpv.map(|(_, pv)| pv);
 
         for (_spec, scnd_idx) in self.scnd_idxs.iter_mut() {
             scnd_idx.put(&pk, old_pv, pv.as_ref())?;

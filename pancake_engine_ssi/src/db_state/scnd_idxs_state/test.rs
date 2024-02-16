@@ -5,7 +5,7 @@ mod test {
     use rand::prelude::*;
 
     #[test]
-    fn empty() {
+    fn empty_serialized_bytes() {
         let content = "";
         let mut r = BufReader::new(Cursor::new(content.as_bytes()));
         let res = ScndIdxsState::do_deser(&mut r);
@@ -53,7 +53,7 @@ mod test {
     }
 
     #[test]
-    fn nonempty() {
+    fn ser_then_deser_arbitrary_examples() {
         /* setup */
         let gen_sv_fns = [gen_sv_spec_whole, gen_sv_spec_partial];
         let gen_si_state_fns = [gen_si_state_sample1, gen_si_state_sample2];

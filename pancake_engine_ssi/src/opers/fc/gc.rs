@@ -40,7 +40,7 @@ impl DanglingNodeSetsDeque {
                     for node_ptr in nodes.into_iter() {
                         let node_own = unsafe { Box::from_raw(node_ptr.as_ptr().cast_mut()) };
                         match node_own.elem {
-                            LsmElem::Unit(unit) => {
+                            LsmElem::CommittedUnit(unit) => {
                                 unit.remove_dir()?;
                             }
                             LsmElem::Dummy { .. } => {}

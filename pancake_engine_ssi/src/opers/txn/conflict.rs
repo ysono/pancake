@@ -18,7 +18,7 @@ impl<'txn> Txn<'txn> {
                 .iter_excluding_head_and_tail()
                 .filter_map(|elem| match &elem {
                     LsmElem::Dummy { .. } => None,
-                    LsmElem::Unit(unit) => Some(unit),
+                    LsmElem::CommittedUnit(unit) => Some(unit),
                 });
         for unit in committed_units {
             if let Some(committed_prim) = unit.prim.as_ref() {

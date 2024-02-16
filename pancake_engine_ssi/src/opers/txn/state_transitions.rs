@@ -173,7 +173,7 @@ impl<'txn> Txn<'txn> {
         which is not cheap, and we're doing it under a mutex guard. */
         let committed_unit = CommittedUnit::from_staging(self.staging.take().unwrap(), commit_ver)?;
 
-        let elem = LsmElem::Unit(committed_unit);
+        let elem = LsmElem::CommittedUnit(committed_unit);
         lsm_state.list().push_head_elem(elem);
 
         let updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver)?;

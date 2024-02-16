@@ -18,7 +18,7 @@ impl<'txn> Txn<'txn> {
         self.snap
             .iter_excluding_head_and_tail()
             .filter_map(|elem| match elem {
-                LsmElem::Unit(unit) => Some(unit),
+                LsmElem::CommittedUnit(unit) => Some(unit),
                 LsmElem::Dummy { .. } => None,
             })
     }
@@ -99,9 +99,7 @@ impl<'txn> Txn<'txn> {
             .db_state_guard
             .scnd_idxs()
             .get(sv_spec_arg)
-            .ok_or(anyhow!(
-                "Secondary index does not exist for {sv_spec_arg:?}",
-            ))?;
+            .ok_or_else(|| anyhow!("Secondary index does not exist for {sv_spec_arg:?}"))?;
         if is_readable == &false {
             return Err(anyhow!(
                 "Secondary index for {sv_spec_arg:?} has not finished building",
