@@ -4,13 +4,13 @@ use crate::{
         entryset::{merging, CommittedEntrySet},
         unit::{CommitDataType, CommitInfo, CommittedUnit, CompactedUnit, ReplacementNum},
     },
-    opers::fc_job::fc::FCRun,
+    opers::fc::fc_traversal::FCJob,
 };
 use anyhow::Result;
 use pancake_engine_common::{Entry, SSTable};
 use pancake_types::{serde::OptDatum, types::Deser};
 
-impl<'run> FCRun<'run> {
+impl<'job> FCJob<'job> {
     pub(super) fn do_flush_and_compact<'data>(
         &self,
         units: Vec<&'data CommittedUnit>,

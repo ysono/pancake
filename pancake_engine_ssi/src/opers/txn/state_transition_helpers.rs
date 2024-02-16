@@ -38,14 +38,14 @@ impl<'txn> Txn<'txn> {
 
     /// Returns whether either node became non-held, hence LL replacement can be done.
     pub(super) fn unhold_boundary_node(node_ptrs: &[Option<SendPtr<ListNode<LsmElem>>>]) -> bool {
-        let mut is_replace_avail = false;
+        let mut is_fc_avail = false;
 
         let mut do_unhold = |node_ptr: SendPtr<ListNode<LsmElem>>| {
             let node_ref = unsafe { node_ptr.as_ref() };
             if let LsmElem::Dummy { hold_count, .. } = &node_ref.elem {
                 let prior_hold_count = hold_count.fetch_sub(1, Ordering::SeqCst);
                 if prior_hold_count == 1 {
-                    is_replace_avail |= true;
+                    is_fc_avail |= true;
                 }
             }
         };
@@ -56,13 +56,13 @@ impl<'txn> Txn<'txn> {
             }
         }
 
-        is_replace_avail
+        is_fc_avail
     }
 
-    pub(super) fn notify_fc_job(&self, updated_mhlv: Option<ListVer>, is_replace_avail: bool) {
-        // Send info about min_held_list_ver first, b/c it's cheaper for the F+C job to process.
+    pub(super) fn notify_fc_worker(&self, updated_mhlv: Option<ListVer>, is_fc_avail: bool) {
+        // Send info about min_held_list_ver first, b/c it's cheaper for the F+C worker to process.
         self.send_updated_min_held_list_ver(updated_mhlv);
-        self.send_replace_avail(is_replace_avail);
+        self.send_fc_avail(is_fc_avail);
     }
     fn send_updated_min_held_list_ver(&self, updated_mhlv: Option<ListVer>) {
         if let Some(mhlv) = updated_mhlv {
@@ -78,9 +78,9 @@ impl<'txn> Txn<'txn> {
                 });
         }
     }
-    fn send_replace_avail(&self, is_replace_avail: bool) {
-        if is_replace_avail {
-            self.db.replace_avail_tx().send(()).ok();
+    fn send_fc_avail(&self, is_fc_avail: bool) {
+        if is_fc_avail {
+            self.db.fc_avail_tx().send(()).ok();
         }
     }
 }

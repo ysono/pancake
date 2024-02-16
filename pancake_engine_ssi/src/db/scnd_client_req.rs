@@ -46,10 +46,10 @@ impl DB {
             scnd_idx_num,
             response_to_client: client_tx,
         };
-        self.scnd_idx_request_tx
+        self.scnd_idx_creation_request_tx
             .send(req)
             .await
-            .map_err(|_| anyhow!("Failed to send ScndIdxCreationRequest to the F+C job."))?;
+            .map_err(|_| anyhow!("Failed to send ScndIdxCreationRequest to the F+C worker."))?;
 
         let resp = client_rx.await;
         let resp = resp.map_err(|e| anyhow!(e)).and_then(|inner| inner);

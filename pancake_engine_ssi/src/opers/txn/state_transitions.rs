@@ -97,11 +97,11 @@ impl<'txn> Txn<'txn> {
 
         drop(lsm_state);
 
-        let is_replace_avail = Self::unhold_boundary_node(&[self.snap.tail_excl_ptr]);
+        let is_fc_avail = Self::unhold_boundary_node(&[self.snap.tail_excl_ptr]);
         self.snap.tail_excl_ptr = Some(self.snap.head_excl_ptr);
         self.snap.head_excl_ptr = snap_head_excl;
 
-        self.notify_fc_job(updated_mhlv, is_replace_avail);
+        self.notify_fc_worker(updated_mhlv, is_fc_avail);
 
         Ok(())
     }
@@ -122,12 +122,12 @@ impl<'txn> Txn<'txn> {
                 lsm_state.hold_and_unhold_list_ver(self.snap_list_ver)?;
         }
 
-        let is_replace_avail =
+        let is_fc_avail =
             Self::unhold_boundary_node(&[Some(self.snap.head_excl_ptr), self.snap.tail_excl_ptr]);
         self.snap.tail_excl_ptr = None;
         self.snap.head_excl_ptr = snap_head_excl;
 
-        self.notify_fc_job(updated_mhlv, is_replace_avail);
+        self.notify_fc_worker(updated_mhlv, is_fc_avail);
 
         self.snap_vec = None;
         self.dependent_itvs_prim.clear();
@@ -147,10 +147,10 @@ impl<'txn> Txn<'txn> {
             updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver)?;
         }
 
-        let is_replace_avail =
+        let is_fc_avail =
             Self::unhold_boundary_node(&[Some(self.snap.head_excl_ptr), self.snap.tail_excl_ptr]);
 
-        self.notify_fc_job(updated_mhlv, is_replace_avail);
+        self.notify_fc_worker(updated_mhlv, is_fc_avail);
 
         if let Some(staging) = self.staging {
             staging.remove_dir()?;
@@ -176,7 +176,7 @@ impl<'txn> Txn<'txn> {
         Self::unhold_boundary_node(&[Some(self.snap.head_excl_ptr), self.snap.tail_excl_ptr]);
 
         // We just pushed a MemLog. Hence the list became replaceable.
-        self.notify_fc_job(updated_mhlv, true);
+        self.notify_fc_worker(updated_mhlv, true);
 
         Ok(())
     }

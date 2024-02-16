@@ -241,7 +241,7 @@ impl ScndIdxCreationJob {
             is_fence.store(false, Ordering::SeqCst);
         }
 
-        self.db.replace_avail_tx().send(()).ok();
+        self.db.fc_avail_tx().send(()).ok();
         /* Even if snap_head_excl's hold_count is not zero, notify F+C anyway, because some dummies in SICr's snapshot might have become non-held. For such dummies, notification would have been sent to F+C but F+C would not have worked across those dummies. */
     }
 }

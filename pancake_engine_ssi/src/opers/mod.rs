@@ -1,3 +1,3 @@
-pub mod fc_job;
+pub mod fc;
 pub mod sicr_job;
 pub mod txn;

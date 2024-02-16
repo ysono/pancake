@@ -2,7 +2,7 @@ use crate::ds_n_a::send_ptr::SendPtr;
 use crate::{
     lsm::{lsm_state_utils, LsmElem},
     opers::{
-        fc_job::{fc::FCRun, FlushingAndCompactionJob},
+        fc::{fc_traversal::FCJob, FlushingAndCompactionWorker},
         sicr_job::{ScndIdxCreationRequest, ScndIdxCreationWork},
     },
 };
@@ -10,7 +10,7 @@ use anyhow::{anyhow, Result};
 use std::sync::atomic::Ordering;
 use tokio::sync::mpsc;
 
-impl FlushingAndCompactionJob {
+impl FlushingAndCompactionWorker {
     pub(super) async fn prep_for_scnd_idx_creation(
         &mut self,
         req: ScndIdxCreationRequest,
@@ -41,19 +41,19 @@ impl FlushingAndCompactionJob {
             output_commit_ver = lsm_state.fetch_inc_next_commit_ver();
         }
 
-        let mut run = FCRun {
+        let mut job = FCJob {
             db: &self.db,
             db_state_guard,
             dangling_nodes: &mut self.dangling_nodes,
         };
-        run.traverse_and_compact(snap_head_ref).await?;
+        job.traverse_and_compact(snap_head_ref).await?;
 
         let work = ScndIdxCreationWork {
             snap_head_excl: SendPtr::from(snap_head_ref),
             output_commit_ver,
             req,
         };
-        let send_work_res = self.scnd_idx_creation_work.send(work).await;
+        let send_work_res = self.scnd_idx_work_tx.send(work).await;
         if let Err(mpsc::error::SendError(work)) = send_work_res {
             let respond_res = work.req.response_to_client.send(Err(anyhow!(
                 "Too many secondary index creation requests in queue."

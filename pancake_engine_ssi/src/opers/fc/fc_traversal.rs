@@ -2,9 +2,10 @@ use crate::ds_n_a::{atomic_linked_list::ListNode, send_ptr::SendPtr};
 use crate::{
     db_state::DbState,
     lsm::{lsm_state_utils, LsmElem},
-    opers::fc_job::{
-        compaction::CompactionResult, gc::DanglingNodeSetsDeque, DanglingNodeSet,
-        FlushingAndCompactionJob,
+    opers::fc::{
+        fc_compaction::CompactionResult,
+        gc::{DanglingNodeSet, DanglingNodeSetsDeque},
+        FlushingAndCompactionWorker,
     },
     DB,
 };
@@ -13,19 +14,19 @@ use std::ptr;
 use std::sync::atomic::Ordering;
 use tokio::sync::RwLockReadGuard;
 
-impl FlushingAndCompactionJob {
+impl FlushingAndCompactionWorker {
     pub(super) async fn flush_and_compact(&mut self) -> Result<()> {
         /* Hold a shared guard on `db_state` over the whole traversal of the LL. */
         let db_state_guard = self.db.db_state().read().await;
 
         let snap_head_ref = self.establish_snap_head().await;
 
-        let mut run = FCRun {
+        let mut job = FCJob {
             db: &self.db,
             db_state_guard,
             dangling_nodes: &mut self.dangling_nodes,
         };
-        run.traverse_and_compact(snap_head_ref).await?;
+        job.traverse_and_compact(snap_head_ref).await?;
 
         Ok(())
     }
@@ -54,14 +55,14 @@ impl FlushingAndCompactionJob {
 ///
 /// This type is necessary iff the run makes
 /// 1+ const references and 1+ mut references
-/// to fields within struct [`FlushingAndCompactionJob`].
-pub(super) struct FCRun<'run> {
-    pub(super) db: &'run DB,
-    pub(super) db_state_guard: RwLockReadGuard<'run, DbState>,
-    pub(super) dangling_nodes: &'run mut DanglingNodeSetsDeque,
+/// to fields within struct [`FlushingAndCompactionWorker`].
+pub(super) struct FCJob<'job> {
+    pub(super) db: &'job DB,
+    pub(super) db_state_guard: RwLockReadGuard<'job, DbState>,
+    pub(super) dangling_nodes: &'job mut DanglingNodeSetsDeque,
 }
 
-impl<'run> FCRun<'run> {
+impl<'job> FCJob<'job> {
     pub(super) async fn traverse_and_compact(
         &mut self,
         mut prev_ref: &ListNode<LsmElem>,

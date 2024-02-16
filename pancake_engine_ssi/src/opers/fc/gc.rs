@@ -2,7 +2,7 @@ use crate::ds_n_a::atomic_linked_list::ListNode;
 use crate::ds_n_a::send_ptr::SendPtr;
 use crate::{
     lsm::{ListVer, LsmElem},
-    opers::fc_job::FlushingAndCompactionJob,
+    opers::fc::FlushingAndCompactionWorker,
 };
 use anyhow::Result;
 use std::collections::VecDeque;
@@ -61,7 +61,7 @@ pub struct DanglingNodeSet {
     pub nodes: Vec<Vec<SendPtr<ListNode<LsmElem>>>>,
 }
 
-impl FlushingAndCompactionJob {
+impl FlushingAndCompactionWorker {
     pub(super) async fn poll_held_list_vers_then_gc(&mut self) -> Result<()> {
         loop {
             println!("F+C is polling for all ListVers to be unheld.");

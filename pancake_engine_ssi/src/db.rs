@@ -4,7 +4,7 @@ use crate::{
     db_state::DbState,
     lsm::{ListVer, LsmDir, LsmState},
     opers::{
-        fc_job::FlushingAndCompactionJob,
+        fc::FlushingAndCompactionWorker,
         sicr_job::{ScndIdxCreationJob, ScndIdxCreationRequest},
     },
 };
@@ -28,16 +28,16 @@ pub struct DB {
     lsm_dir: LsmDir,
     lsm_state: Mutex<LsmState>,
 
+    fc_avail_tx: watch::Sender<()>,
+    scnd_idx_creation_request_tx: mpsc::Sender<ScndIdxCreationRequest>,
     min_held_list_ver_tx: watch::Sender<ListVer>,
-    replace_avail_tx: watch::Sender<()>,
-    scnd_idx_request_tx: mpsc::Sender<ScndIdxCreationRequest>,
     is_terminating_tx: watch::Sender<()>,
 }
 
 impl DB {
     pub fn load_or_new<P: AsRef<Path>>(
         db_dir_path: P,
-    ) -> Result<(Arc<Self>, FlushingAndCompactionJob, ScndIdxCreationJob)> {
+    ) -> Result<(Arc<Self>, FlushingAndCompactionWorker, ScndIdxCreationJob)> {
         let db_dir_path = db_dir_path.as_ref();
         let si_state_file_path = db_dir_path.join(SCND_IDXS_STATE_FILE_NAME);
         let lsm_dir_path = db_dir_path.join(LSM_DIR_NAME);
@@ -47,9 +47,10 @@ impl DB {
 
         let (lsm_dir, lsm_state) = LsmDir::load_or_new(lsm_dir_path)?;
 
+        let (fc_avail_tx, fc_avail_rx) = watch::channel(());
+        let (scnd_idx_creation_request_tx, scnd_idx_creation_request_rx) =
+            mpsc::channel(SIREQ_CHANNEL_CAPACITY);
         let (min_held_list_ver_tx, min_held_list_ver_rx) = watch::channel(ListVer::AT_BOOTUP);
-        let (replace_avail_tx, replace_avail_rx) = watch::channel(());
-        let (scnd_idx_request_tx, scnd_idx_request_rx) = mpsc::channel(SIREQ_CHANNEL_CAPACITY);
         let (scnd_idx_work_tx, scnd_idx_work_rx) = mpsc::channel(SIREQ_CHANNEL_CAPACITY);
         let (is_terminating_tx, is_terminating_rx) = watch::channel(());
 
@@ -59,22 +60,25 @@ impl DB {
             lsm_dir,
             lsm_state: Mutex::new(lsm_state),
 
+            fc_avail_tx,
+            scnd_idx_creation_request_tx,
             min_held_list_ver_tx,
-            replace_avail_tx,
-            scnd_idx_request_tx,
             is_terminating_tx,
         };
         let db = Arc::new(db);
 
-        let fc_job = FlushingAndCompactionJob::new(
-            Arc::clone(&db),
-            Default::default(),
+        let fc_worker = FlushingAndCompactionWorker {
+            db: Arc::clone(&db),
+
+            dangling_nodes: Default::default(),
+
+            fc_avail_rx,
+            scnd_idx_creation_request_rx,
             min_held_list_ver_rx,
-            replace_avail_rx,
-            scnd_idx_request_rx,
-            is_terminating_rx.clone(),
+            is_terminating_rx: is_terminating_rx.clone(),
+
             scnd_idx_work_tx,
-        );
+        };
 
         let sicr_job = ScndIdxCreationJob::new(
             Arc::clone(&db),
@@ -83,7 +87,7 @@ impl DB {
             is_terminating_rx,
         );
 
-        Ok((db, fc_job, sicr_job))
+        Ok((db, fc_worker, sicr_job))
     }
 
     pub async fn terminate(&self) {
