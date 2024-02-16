@@ -22,13 +22,4 @@ impl CompactedUnit {
             dir,
         })
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.prim.is_none() && self.scnds.is_empty()
-    }
-
-    pub fn remove_dir(self) -> Result<()> {
-        fs_utils::remove_dir_all(self.dir.path())?;
-        Ok(())
-    }
 }

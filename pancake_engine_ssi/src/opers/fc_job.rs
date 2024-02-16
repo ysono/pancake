@@ -2,16 +2,17 @@ mod compaction;
 mod fc;
 mod gc;
 mod scnd;
-use gc::DanglingNodeSet;
 
 use crate::{
     lsm::ListVer,
-    opers::sicr_job::{ScndIdxCreationRequest, ScndIdxCreationWork},
+    opers::{
+        fc_job::gc::{DanglingNodeSet, DanglingNodeSetsDeque},
+        sicr_job::{ScndIdxCreationRequest, ScndIdxCreationWork},
+    },
     DB,
 };
 use anyhow::Result;
 use derive_more::Constructor;
-use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
 
@@ -19,7 +20,7 @@ use tokio::sync::{mpsc, watch};
 pub struct FlushingAndCompactionJob {
     db: Arc<DB>,
 
-    dangling_nodes: VecDeque<DanglingNodeSet>,
+    dangling_nodes: DanglingNodeSetsDeque,
 
     /* rx */
     min_held_list_ver: watch::Receiver<ListVer>,
@@ -38,7 +39,7 @@ impl FlushingAndCompactionJob {
                 res = (self.min_held_list_ver.changed()) => {
                     res.ok();
                     let min_held_list_ver = self.min_held_list_ver.borrow().clone();
-                    self.gc_dangling_nodes(min_held_list_ver);
+                    self.dangling_nodes.gc_old_nodes(min_held_list_ver)?;
                 }
                 res = (self.replace_avail.changed()) => {
                     res.ok();
@@ -61,7 +62,7 @@ impl FlushingAndCompactionJob {
 
         self.scnd_idx_creation_request.close();
 
-        self.poll_held_list_vers_then_gc().await;
+        self.poll_held_list_vers_then_gc().await?;
 
         println!("F+C is exiting.");
 

@@ -2,7 +2,7 @@ use crate::ds_n_a::send_ptr::SendPtr;
 use crate::{
     lsm::{lsm_state_utils, LsmElem},
     opers::{
-        fc_job::FlushingAndCompactionJob,
+        fc_job::{fc::FCRun, FlushingAndCompactionJob},
         sicr_job::{ScndIdxCreationRequest, ScndIdxCreationWork},
     },
 };
@@ -15,33 +15,41 @@ impl FlushingAndCompactionJob {
         &mut self,
         req: ScndIdxCreationRequest,
     ) -> Result<()> {
-        /* Malloc for new_head outside the mutex guard.
-        Free new_head outside the mutex guard, thanks to Option<>. */
+        /* Hold a shared guard on `db_state` over the whole traversal of the LL. */
+        let db_state_guard = self.db.db_state().read().await;
+
+        /* The new_head is malloc'd and free'd outside the mutex guard.
+        Don't `move` the prepped new_head into the lambda. */
         let mut prepped_new_head = Some(lsm_state_utils::new_dummy_node(0, true));
-        let snap_head_excl;
+        let update_or_provide_head = |elem: Option<&LsmElem>| {
+            if let Some(LsmElem::Dummy { is_fence, .. }) = elem {
+                let prior_is_fence = is_fence.fetch_or(true, Ordering::SeqCst);
+                if prior_is_fence == false {
+                    return None;
+                }
+            }
+            return prepped_new_head.take();
+        };
+        let snap_head_ref;
         let output_commit_ver;
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
-            let update_or_provide_head = |elem: Option<&LsmElem>| {
-                if let Some(LsmElem::Dummy { is_fence, .. }) = elem {
-                    let prior_is_fence = is_fence.fetch_or(true, Ordering::SeqCst);
-                    if prior_is_fence == false {
-                        return None;
-                    }
-                }
-                return prepped_new_head.take();
-            };
-            snap_head_excl = SendPtr::from(lsm_state.update_or_push(update_or_provide_head));
+            let snap_head_ptr = lsm_state.update_or_push(update_or_provide_head);
+            snap_head_ref = unsafe { &*snap_head_ptr };
 
             output_commit_ver = lsm_state.fetch_inc_next_commit_ver();
         }
 
-        self.traverse_and_compact(unsafe { snap_head_excl.as_ref() })
-            .await?;
+        let mut run = FCRun {
+            db: &self.db,
+            db_state_guard,
+            dangling_nodes: &mut self.dangling_nodes,
+        };
+        run.traverse_and_compact(snap_head_ref).await?;
 
         let work = ScndIdxCreationWork {
-            snap_head_excl,
+            snap_head_excl: SendPtr::from(snap_head_ref),
             output_commit_ver,
             req,
         };

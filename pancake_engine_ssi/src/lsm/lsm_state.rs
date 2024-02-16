@@ -38,7 +38,7 @@ pub struct LsmState {
 }
 
 impl LsmState {
-    /// @arg committed_units: From newer to older.
+    /// @arg `committed_units`: From newer to older.
     pub fn new(
         committed_units: impl IntoIterator<Item = CommittedUnit>,
         next_commit_ver: CommitVer,
@@ -61,27 +61,32 @@ impl LsmState {
         self.next_commit_ver
     }
 
-    /// Returns the previously "next", newly "curr", CommitVer.
+    /// @return The previously "next", newly "curr", CommitVer.
     pub fn fetch_inc_next_commit_ver(&mut self) -> CommitVer {
         let curr = self.next_commit_ver;
         self.next_commit_ver = self.next_commit_ver.inc();
         curr
     }
 
-    /// Returns the previously "curr", newly "penultimate", ListVer.
-    pub fn fetch_inc_curr_list_ver(&mut self) -> ListVer {
+    /// @return
+    /// - tup.0 = The previously "curr", newly "penultimate", ListVer.
+    /// - tup.1 = The updated min_held_list_ver, iff updated.
+    pub fn fetch_inc_curr_list_ver(&mut self) -> (ListVer, Option<ListVer>) {
         let penult = self.curr_list_ver;
         self.curr_list_ver = self.curr_list_ver.inc();
-        penult
+
+        let updated_mhlv = self.advance_min_held_list_ver();
+
+        (penult, updated_mhlv)
     }
 
-    /// Returns the curr_list_ver.
+    /// @return The curr_list_ver.
     pub fn hold_curr_list_ver(&mut self) -> ListVer {
         self.held_list_vers.add(self.curr_list_ver);
         self.curr_list_ver
     }
 
-    /// Returns the updated min_held_list_ver, iff updated.
+    /// @return The updated min_held_list_ver, iff updated.
     pub fn unhold_list_ver(&mut self, arg_ver: ListVer) -> Result<Option<ListVer>> {
         let count = self.held_list_vers.remove(&arg_ver)?;
         if (count == 0) && (arg_ver == self.min_held_list_ver) {
@@ -106,9 +111,9 @@ impl LsmState {
         }
     }
 
-    /// Returns
-    /// - the curr_list_ver.
-    /// - the updated min_held_list_ver, iff updated.
+    /// @return
+    /// - tup.0 = The curr_list_ver.
+    /// - tup.1 = The updated min_held_list_ver, iff updated.
     pub fn hold_and_unhold_list_ver(
         &mut self,
         prior: ListVer,

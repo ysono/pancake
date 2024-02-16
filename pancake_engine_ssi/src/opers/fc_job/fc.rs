@@ -1,178 +1,259 @@
-use crate::ds_n_a::atomic_linked_list::ListNode;
-use crate::ds_n_a::send_ptr::SendPtr;
+use crate::ds_n_a::{atomic_linked_list::ListNode, send_ptr::SendPtr};
 use crate::{
+    db_state::DbState,
     lsm::{lsm_state_utils, LsmElem},
-    opers::fc_job::{DanglingNodeSet, FlushingAndCompactionJob},
+    opers::fc_job::{
+        compaction::CompactionResult, gc::DanglingNodeSetsDeque, DanglingNodeSet,
+        FlushingAndCompactionJob,
+    },
+    DB,
 };
 use anyhow::Result;
+use std::ptr;
 use std::sync::atomic::Ordering;
+use tokio::sync::RwLockReadGuard;
 
 impl FlushingAndCompactionJob {
     pub(super) async fn flush_and_compact(&mut self) -> Result<()> {
-        /* Malloc for new_head outside the mutex guard.
-        Free new_head outside the mutex guard, thanks to Option<>. */
+        /* Hold a shared guard on `db_state` over the whole traversal of the LL. */
+        let db_state_guard = self.db.db_state().read().await;
+
+        let snap_head_ref = self.establish_snap_head().await;
+
+        let mut run = FCRun {
+            db: &self.db,
+            db_state_guard,
+            dangling_nodes: &mut self.dangling_nodes,
+        };
+        run.traverse_and_compact(snap_head_ref).await?;
+
+        Ok(())
+    }
+
+    async fn establish_snap_head<'a>(&self) -> &'a ListNode<LsmElem> {
+        /* The new_head is malloc'd and free'd outside the mutex guard.
+        Don't `move` the prepped new_head into the lambda. */
         let mut prepped_new_head = Some(lsm_state_utils::new_dummy_node(0, false));
-        let snap_head_excl;
-        {
-            let lsm_state = self.db.lsm_state().lock().await;
-
-            let update_or_provide_head = |elem: Option<&LsmElem>| match elem {
-                Some(LsmElem::Dummy { .. }) => return None,
-                _ => {
-                    return prepped_new_head.take();
-                }
-            };
-            snap_head_excl = SendPtr::from(lsm_state.update_or_push(update_or_provide_head));
-        }
-
-        self.traverse_and_compact(unsafe { snap_head_excl.as_ref() })
-            .await?;
-
-        Ok(())
-    }
-
-    pub(super) async fn traverse_and_compact(
-        &mut self,
-        snap_head_excl: &ListNode<LsmElem>,
-    ) -> Result<()> {
-        let mut segm_head_excl = snap_head_excl;
-        loop {
-            let curr_node = self.compact_one_segment(segm_head_excl).await?;
-            match curr_node.status {
-                CurrNodeStatus::Fence | CurrNodeStatus::EndOfList => break,
-                CurrNodeStatus::NonFenceBoundary | CurrNodeStatus::CommittedUnit => {
-                    segm_head_excl = unsafe { curr_node.ptr.as_ref() };
-                }
-            }
-        }
-        Ok(())
-    }
-    async fn compact_one_segment(
-        &mut self,
-        segm_head_excl: &ListNode<LsmElem>,
-    ) -> Result<CurrNode> {
-        let mut slice = vec![];
-
-        let mut prev_ref = segm_head_excl;
-
-        let curr_node = loop {
-            let curr_node = self.cut_non_boundary_dummies(prev_ref).await;
-            match curr_node.status {
-                CurrNodeStatus::CommittedUnit => {
-                    let curr_ref = unsafe { curr_node.ptr.as_ref() };
-                    slice.push(curr_ref);
-                    prev_ref = curr_ref;
-                }
-                CurrNodeStatus::NonFenceBoundary
-                | CurrNodeStatus::Fence
-                | CurrNodeStatus::EndOfList => break curr_node,
+        let update_or_provide_head = |elem: Option<&LsmElem>| match elem {
+            Some(LsmElem::Dummy { .. }) => return None,
+            _ => {
+                return prepped_new_head.take();
             }
         };
+        let snap_head_ptr = {
+            let lsm_state = self.db.lsm_state().lock().await;
 
-        let units = slice
+            lsm_state.update_or_push(update_or_provide_head)
+        };
+        let snap_head_ref = unsafe { &*snap_head_ptr };
+        snap_head_ref
+    }
+}
+
+/// A struct that contains references that are used over the course of one run of flushing+compaction.
+///
+/// This type is necessary iff the run makes
+/// 1+ const references and 1+ mut references
+/// to fields within struct [`FlushingAndCompactionJob`].
+pub(super) struct FCRun<'run> {
+    pub(super) db: &'run DB,
+    pub(super) db_state_guard: RwLockReadGuard<'run, DbState>,
+    pub(super) dangling_nodes: &'run mut DanglingNodeSetsDeque,
+}
+
+impl<'run> FCRun<'run> {
+    pub(super) async fn traverse_and_compact(
+        &mut self,
+        mut prev_ref: &ListNode<LsmElem>,
+    ) -> Result<()> {
+        loop {
+            let curr_info = self.compact_one_segment(prev_ref).await?;
+            match curr_info {
+                NodeInfo::BoundaryDummy(curr_ptr) | NodeInfo::CommittedUnit(curr_ptr) => {
+                    // It's impossible for the curr elem to be a CommittedUnit.
+                    prev_ref = unsafe { curr_ptr.as_ref() };
+                    continue;
+                }
+                NodeInfo::FenceDummy(_) | NodeInfo::EndOfList => break,
+            }
+        }
+        Ok(())
+    }
+
+    async fn compact_one_segment(&mut self, prev_ref: &ListNode<LsmElem>) -> Result<NodeInfo> {
+        let (cut_dummy_nodes, unit_nodes, curr_info) = Self::collect_one_segment(prev_ref);
+
+        let units = unit_nodes
             .iter()
-            .filter_map(|node| match &node.elem {
-                LsmElem::Unit(unit) => Some(unit),
-                LsmElem::Dummy { .. } => None,
+            .filter_map(|node_ptr| {
+                let node_ref = unsafe { node_ptr.as_ref() };
+                match &node_ref.elem {
+                    // It's guaranteed to be a CommittedUnit.
+                    LsmElem::Unit(unit) => Some(unit),
+                    LsmElem::Dummy { .. } => None,
+                }
             })
             .collect::<Vec<_>>();
-        let skip_tombstones = curr_node.status == CurrNodeStatus::EndOfList;
-        let compacted_unit = self.do_flush_and_compact(units, skip_tombstones).await?;
-        if let Some(unit) = compacted_unit {
-            let node = lsm_state_utils::new_unit_node(unit);
-            self.replace(segm_head_excl, curr_node.ptr, Some(node), slice)
-                .await;
+        let skip_tombstones = match curr_info {
+            NodeInfo::CommittedUnit(_) | NodeInfo::BoundaryDummy(_) | NodeInfo::FenceDummy(_) => {
+                false
+            }
+            NodeInfo::EndOfList => true,
+        };
+        let fc_result = self.do_flush_and_compact(units, skip_tombstones)?;
+
+        let did_cut_unit_nodes =
+            Self::potentially_replace_segment(fc_result, || unit_nodes.len(), prev_ref, &curr_info);
+
+        let mut cut_nodes = Vec::with_capacity(2);
+        if cut_dummy_nodes.is_empty() == false {
+            cut_nodes.push(cut_dummy_nodes);
+        }
+        if did_cut_unit_nodes {
+            cut_nodes.push(unit_nodes);
+        }
+        if cut_nodes.is_empty() == false {
+            self.record_list_ver_change(cut_nodes).await?;
         }
 
-        Ok(curr_node)
+        Ok(curr_info)
     }
-    async fn cut_non_boundary_dummies(&mut self, prior_excl: &ListNode<LsmElem>) -> CurrNode {
-        let mut slice = vec![];
 
-        let mut curr_ptr = SendPtr::from(prior_excl.next.load(Ordering::SeqCst));
+    fn collect_one_segment(
+        mut prev_ref: &ListNode<LsmElem>,
+    ) -> (
+        Vec<SendPtr<ListNode<LsmElem>>>,
+        Vec<SendPtr<ListNode<LsmElem>>>,
+        NodeInfo,
+    ) {
+        let mut cut_dummy_nodes = vec![];
+        let mut unit_nodes = vec![];
 
-        let curr_node_status = loop {
-            if curr_ptr.as_ptr().is_null() {
-                break CurrNodeStatus::EndOfList;
+        let mut curr_info;
+        loop {
+            curr_info = Self::cut_contiguous_non_boundary_dummies(prev_ref, &mut cut_dummy_nodes);
+            match curr_info {
+                NodeInfo::CommittedUnit(curr_ptr) => {
+                    unit_nodes.push(curr_ptr);
+                    prev_ref = unsafe { curr_ptr.as_ref() };
+                    continue;
+                }
+                NodeInfo::BoundaryDummy(_) | NodeInfo::FenceDummy(_) | NodeInfo::EndOfList => break,
+            };
+        }
+
+        (cut_dummy_nodes, unit_nodes, curr_info)
+    }
+
+    fn cut_contiguous_non_boundary_dummies(
+        prev_ref: &ListNode<LsmElem>,
+        cut_nodes: &mut Vec<SendPtr<ListNode<LsmElem>>>,
+    ) -> NodeInfo {
+        let mut has_cuttable = false;
+
+        let mut curr_ptr = prev_ref.next.load(Ordering::SeqCst);
+        let curr_info = loop {
+            if curr_ptr.is_null() {
+                break NodeInfo::EndOfList;
             } else {
-                let curr_ref = unsafe { curr_ptr.as_ref() };
+                let curr_ref = unsafe { &*curr_ptr };
+                let curr_sendptr = SendPtr::from(curr_ptr);
                 match &curr_ref.elem {
-                    LsmElem::Unit(_) => break CurrNodeStatus::CommittedUnit,
+                    LsmElem::Unit(_) => break NodeInfo::CommittedUnit(curr_sendptr),
                     LsmElem::Dummy {
                         hold_count,
                         is_fence,
                     } => {
+                        /* A held fence node must be considered a fence node, not a mere segment-boundary node.
+                        Hence we must check `is_fence` first, then `hold_count. */
                         if is_fence.load(Ordering::SeqCst) == true {
-                            break CurrNodeStatus::Fence;
+                            break NodeInfo::FenceDummy(curr_sendptr);
                         } else if hold_count.load(Ordering::SeqCst) != 0 {
-                            break CurrNodeStatus::NonFenceBoundary;
+                            break NodeInfo::BoundaryDummy(curr_sendptr);
                         } else {
-                            slice.push(curr_ref);
-                            curr_ptr = SendPtr::from(curr_ref.next.load(Ordering::SeqCst));
+                            cut_nodes.push(curr_sendptr);
+                            curr_ptr = curr_ref.next.load(Ordering::SeqCst);
+                            has_cuttable = true;
                         }
                     }
                 }
             }
         };
 
-        if !slice.is_empty() {
-            self.replace(prior_excl, curr_ptr, None, slice).await;
+        if has_cuttable == true {
+            prev_ref.next.store(curr_ptr, Ordering::SeqCst);
         }
 
-        CurrNode {
-            ptr: curr_ptr,
-            status: curr_node_status,
+        curr_info
+    }
+
+    fn potentially_replace_segment(
+        fc_result: CompactionResult,
+        unit_nodes_len: impl Fn() -> usize,
+        segm_head_ref: &ListNode<LsmElem>,
+        segm_tail_info: &NodeInfo,
+    ) -> bool {
+        let segm_tail_ptr = match segm_tail_info {
+            NodeInfo::CommittedUnit(ptr)
+            | NodeInfo::BoundaryDummy(ptr)
+            | NodeInfo::FenceDummy(ptr) => ptr.as_ptr_mut(),
+            NodeInfo::EndOfList => ptr::null_mut(),
+        };
+
+        match fc_result {
+            CompactionResult::NoChange => {
+                return false;
+            }
+            CompactionResult::Empty => {
+                if unit_nodes_len() == 0 {
+                    return false;
+                } else {
+                    segm_head_ref.next.store(segm_tail_ptr, Ordering::SeqCst);
+                    return true;
+                }
+            }
+            CompactionResult::Some(replc_unit) => {
+                let replc_node_own = lsm_state_utils::new_unit_node(replc_unit);
+                replc_node_own.next.store(segm_tail_ptr, Ordering::SeqCst);
+
+                let replc_node_ptr = Box::into_raw(replc_node_own);
+                segm_head_ref.next.store(replc_node_ptr, Ordering::SeqCst);
+
+                return true;
+            }
         }
     }
 
-    async fn replace(
+    async fn record_list_ver_change(
         &mut self,
-        slice_head_excl: &ListNode<LsmElem>,
-        slice_tail_excl: SendPtr<ListNode<LsmElem>>,
-        replacement_node: Option<Box<ListNode<LsmElem>>>,
-        slice: Vec<&ListNode<LsmElem>>,
-    ) {
-        if let Some(r_own) = replacement_node {
-            r_own
-                .next
-                .store(slice_tail_excl.as_ptr_mut(), Ordering::SeqCst);
-            let r_ptr = Box::into_raw(r_own);
-            slice_head_excl.next.store(r_ptr, Ordering::SeqCst);
-        } else {
-            slice_head_excl
-                .next
-                .store(slice_tail_excl.as_ptr_mut(), Ordering::SeqCst);
-        }
-
-        let penult_list_ver;
-        {
+        cut_nodes: Vec<Vec<SendPtr<ListNode<LsmElem>>>>,
+    ) -> Result<()> {
+        let (penult_list_ver, updated_mhlv) = {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
-            penult_list_ver = lsm_state.fetch_inc_curr_list_ver();
+            lsm_state.fetch_inc_curr_list_ver()
+        };
+
+        let dang_set = DanglingNodeSet {
+            max_incl_traversable_list_ver: penult_list_ver,
+            nodes: cut_nodes,
+        };
+        self.dangling_nodes.push_back(dang_set);
+
+        if let Some(mhlv) = updated_mhlv {
+            self.dangling_nodes.gc_old_nodes(mhlv)?;
         }
 
-        let nodes = slice
-            .into_iter()
-            .map(|node_ref| SendPtr::from(node_ref))
-            .collect::<Vec<_>>();
-        let dangling_node_set = DanglingNodeSet {
-            max_incl_traversable_list_ver: penult_list_ver,
-            nodes,
-        };
-        self.dangling_nodes.push_back(dangling_node_set);
+        Ok(())
     }
 }
 
-/// `status` property encodes the node's last known status.
-/// This obviates the need to load a dummy's atomic properties more than once.
-struct CurrNode {
-    ptr: SendPtr<ListNode<LsmElem>>,
-    status: CurrNodeStatus,
-}
-#[derive(PartialEq, Eq)]
-enum CurrNodeStatus {
-    CommittedUnit,
-    NonFenceBoundary,
-    Fence,
+/// This struct encodes semantic info gained
+/// from the first time an `AtomicPtr` was `load()`ed,
+/// so that we don't have to `load()` it again.
+enum NodeInfo {
+    CommittedUnit(SendPtr<ListNode<LsmElem>>),
+    BoundaryDummy(SendPtr<ListNode<LsmElem>>),
+    FenceDummy(SendPtr<ListNode<LsmElem>>),
     EndOfList,
 }

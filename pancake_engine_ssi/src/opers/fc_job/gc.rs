@@ -4,47 +4,65 @@ use crate::{
     lsm::{ListVer, LsmElem},
     opers::fc_job::FlushingAndCompactionJob,
 };
+use anyhow::Result;
+use std::collections::VecDeque;
 use std::time::Duration;
 
-pub struct DanglingNodeSet {
-    pub max_incl_traversable_list_ver: ListVer,
-    pub nodes: Vec<SendPtr<ListNode<LsmElem>>>,
+#[derive(Default)]
+pub struct DanglingNodeSetsDeque {
+    deque: VecDeque<DanglingNodeSet>,
 }
 
-impl FlushingAndCompactionJob {
-    fn do_gc(&mut self, is_gc_able: impl Fn(ListVer) -> bool) {
-        while let Some(DanglingNodeSet {
-            max_incl_traversable_list_ver,
-            ..
-        }) = self.dangling_nodes.front()
-        {
-            if is_gc_able(max_incl_traversable_list_ver.clone()) {
-                let DanglingNodeSet { nodes, .. } = self.dangling_nodes.pop_front().unwrap();
-                for node_ptr in nodes.into_iter() {
-                    let node_own = unsafe { Box::from_raw(node_ptr.as_ptr_mut()) };
-                    match node_own.elem {
-                        LsmElem::Unit(unit) => match unit.remove_dir() {
-                            Err(e) => {
-                                eprintln!("Unit dir could not be removed: {}", e.to_string());
+impl DanglingNodeSetsDeque {
+    pub fn push_back(&mut self, set: DanglingNodeSet) {
+        self.deque.push_back(set);
+    }
+
+    pub fn gc_old_nodes(&mut self, min_held_list_ver: ListVer) -> Result<()> {
+        let is_set_gcable =
+            |set: &DanglingNodeSet| set.max_incl_traversable_list_ver < min_held_list_ver;
+        self.gc(is_set_gcable)
+    }
+
+    pub fn gc_all_nodes(&mut self) -> Result<()> {
+        let is_set_gcable = |_: &DanglingNodeSet| true;
+        self.gc(is_set_gcable)
+    }
+
+    fn gc<F>(&mut self, is_set_gcable: F) -> Result<()>
+    where
+        F: Fn(&DanglingNodeSet) -> bool,
+    {
+        while let Some(set) = self.deque.front() {
+            if is_set_gcable(set) {
+                let set = self.deque.pop_front().unwrap();
+                for nodes in set.nodes {
+                    for node_ptr in nodes.into_iter() {
+                        let node_own = unsafe { Box::from_raw(node_ptr.as_ptr_mut()) };
+                        match node_own.elem {
+                            LsmElem::Unit(unit) => {
+                                unit.remove_dir()?;
                             }
-                            Ok(()) => {}
-                        },
-                        LsmElem::Dummy { .. } => {}
+                            LsmElem::Dummy { .. } => {}
+                        }
                     }
                 }
             } else {
                 break;
             }
         }
-    }
 
-    pub(super) fn gc_dangling_nodes(&mut self, min_held_list_ver: ListVer) {
-        self.do_gc(|max_incl_traversable_list_ver| {
-            max_incl_traversable_list_ver < min_held_list_ver
-        });
+        Ok(())
     }
+}
 
-    pub(super) async fn poll_held_list_vers_then_gc(&mut self) {
+pub struct DanglingNodeSet {
+    pub max_incl_traversable_list_ver: ListVer,
+    pub nodes: Vec<Vec<SendPtr<ListNode<LsmElem>>>>,
+}
+
+impl FlushingAndCompactionJob {
+    pub(super) async fn poll_held_list_vers_then_gc(&mut self) -> Result<()> {
         loop {
             println!("F+C is polling for all ListVers to be unheld.");
             {
@@ -57,6 +75,8 @@ impl FlushingAndCompactionJob {
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
-        self.do_gc(|_| true);
+        self.dangling_nodes.gc_all_nodes()?;
+
+        Ok(())
     }
 }
