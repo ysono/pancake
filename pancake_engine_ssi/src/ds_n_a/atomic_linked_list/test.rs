@@ -8,30 +8,33 @@ mod test {
     use std::sync::Arc;
     use std::time::Duration;
 
-    fn assert_node_elem<T>(node: *const ListNode<T>, exp_elem: T)
+    fn assert_node_elem<T>(exp_elem: T, node_ptr: NonNull<ListNode<T>>)
     where
         T: Debug + PartialEq,
     {
-        let node = unsafe { &*node };
-        assert_eq!(&node.elem, &exp_elem);
+        let node_ref = unsafe { node_ptr.as_ref() };
+        assert_eq!(&exp_elem, &node_ref.elem);
     }
 
-    fn assert_list_elems<T>(lst: &AtomicLinkedList<T>, exp_elems: &VecDeque<T>)
+    fn assert_list_elems<T>(exp_elems: &VecDeque<T>, lst: &AtomicLinkedList<T>)
     where
         T: Debug + PartialEq,
     {
-        let actual = lst.iter().collect::<Vec<_>>();
-        let exp_elem_refs = exp_elems.iter().collect::<Vec<_>>();
-        assert_eq!(actual, exp_elem_refs);
+        let exp = exp_elems.iter().collect::<Vec<_>>();
+        let act = lst.iter().collect::<Vec<_>>();
+        assert_eq!(exp, act);
     }
 
-    fn assert_snap_elems<T>(snap: &AtomicLinkedListSnapshot<T>, exp_elems: Vec<T>)
+    fn assert_snap_elems<T>(exp_elems: impl Iterator<Item = T>, snap: ListSnapshot<T>)
     where
-        T: 'static + Debug + PartialEq,
+        T: 'static + Debug + PartialEq + Clone,
     {
-        let actual = snap.iter().collect::<Vec<_>>();
-        let expected = exp_elems.iter().collect::<Vec<_>>();
-        assert_eq!(actual, expected);
+        let exp = exp_elems.collect::<Vec<_>>();
+        let act = snap
+            .iter_excluding_head_and_tail()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(exp, act);
     }
 
     #[test]
@@ -40,50 +43,43 @@ mod test {
 
         let mut exp_elems = VecDeque::new();
 
-        assert_list_elems(&lst, &exp_elems);
+        assert_list_elems(&exp_elems, &lst);
 
         let mut push_then_assert = |elem: i32| {
-            let node = lst.push_elem(elem);
-            assert_node_elem(node, elem);
+            let node_ptr = lst.push_head_elem(elem);
+            assert_node_elem(elem, node_ptr);
 
             exp_elems.push_front(elem);
-            assert_list_elems(&lst, &exp_elems);
+            assert_list_elems(&exp_elems, &lst);
+
+            node_ptr
         };
 
-        for elem in 0..5 {
+        let mut head_ptr = NonNull::dangling();
+        for elem in 0..=4 {
+            head_ptr = push_then_assert(elem);
+        }
+        let node4_ptr = head_ptr;
+
+        let iter_3_0 = ListSnapshot::new_tailless(head_ptr);
+
+        for elem in 5..=9 {
+            head_ptr = push_then_assert(elem);
+        }
+
+        let iter_8_0 = ListSnapshot::new_tailless(head_ptr);
+        let iter_8_5 = ListSnapshot::new(head_ptr, node4_ptr);
+
+        for elem in 10..=14 {
             push_then_assert(elem);
         }
 
-        let head = lst.head().unwrap();
-        let snap_3_0 = AtomicLinkedListSnapshot::<i32> {
-            head_excl_ptr: SendPtr::from(head),
-            tail_excl_ptr: None,
-        };
-
-        for elem in 5..10 {
-            push_then_assert(elem);
-        }
-
-        let head = lst.head().unwrap();
-        let snap_8_0 = AtomicLinkedListSnapshot::<i32> {
-            head_excl_ptr: SendPtr::from(head),
-            tail_excl_ptr: None,
-        };
-        let snap_8_5 = AtomicLinkedListSnapshot::<i32> {
-            head_excl_ptr: SendPtr::from(head),
-            tail_excl_ptr: Some(snap_3_0.head_excl_ptr),
-        };
-
-        for elem in 10..15 {
-            push_then_assert(elem);
-        }
-
-        assert_snap_elems(&snap_3_0, (0..=3).rev().collect::<Vec<_>>());
-        assert_snap_elems(&snap_8_0, (0..=8).rev().collect::<Vec<_>>());
-        assert_snap_elems(&snap_8_5, (5..=8).rev().collect::<Vec<_>>());
+        assert_snap_elems((0..=3).rev(), iter_3_0);
+        assert_snap_elems((0..=8).rev(), iter_8_0);
+        assert_snap_elems((5..=8).rev(), iter_8_5);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn push_concurrent() {
         let val_ceil = 500usize;
 
@@ -91,21 +87,20 @@ mod test {
         let lst = Arc::new(lst);
 
         let mut tasks = vec![];
-        let mut exp_vals = HashSet::new();
         for val in 0..val_ceil {
-            let lst = Arc::clone(&lst);
+            let lst_cloned = Arc::clone(&lst);
             let task = tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(1)).await;
-                lst.push_elem(val);
+                lst_cloned.push_head_elem(val);
             });
             tasks.push(task);
-            exp_vals.insert(val);
         }
         for task in tasks.into_iter() {
             task.await.unwrap();
         }
 
+        let exp_vals = (0..val_ceil).collect::<HashSet<_>>();
         let actual_vals = lst.iter().map(|val| val.clone()).collect::<HashSet<_>>();
-        assert_eq!(actual_vals, exp_vals);
+        assert_eq!(exp_vals, actual_vals,);
     }
 }

@@ -1,8 +1,8 @@
 use crate::{
     db_state::ScndIdxNum,
     ds_n_a::{
-        atomic_linked_list::{AtomicLinkedListSnapshot, ListNode},
-        send_ptr::SendPtr,
+        atomic_linked_list::{ListNode, ListSnapshot},
+        send_ptr::NonNullSendPtr,
     },
     lsm::{
         entryset::merging,
@@ -33,15 +33,12 @@ const MEMTABLE_FLUSH_PERIOD_ITEM_COUNT: usize = 5;
 impl<'job> ScndIdxCreationJob<'job> {
     pub(super) fn create_unit(
         &mut self,
-        snap_head: SendPtr<ListNode<LsmElem>>,
+        snap_head: NonNullSendPtr<ListNode<LsmElem>>,
         sv_spec: &SubValueSpec,
         si_num: ScndIdxNum,
         output_commit_ver: CommitVer,
     ) -> Result<Option<CommittedUnit>> {
-        let snap = AtomicLinkedListSnapshot {
-            head_excl_ptr: snap_head,
-            tail_excl_ptr: None,
-        };
+        let snap = ListSnapshot::new_tailless(snap_head);
 
         let prim_entries = Self::derive_prim_entries(&snap);
 
@@ -63,12 +60,14 @@ impl<'job> ScndIdxCreationJob<'job> {
     }
 
     fn derive_prim_entries<'snap>(
-        snap: &'snap AtomicLinkedListSnapshot<LsmElem>,
+        snap: &'snap ListSnapshot<LsmElem>,
     ) -> impl Iterator<Item = Entry<'snap, PKShared, PVShared>> {
-        let prim_entrysets = snap.iter().filter_map(|elem| match elem {
-            LsmElem::Dummy { .. } => None,
-            LsmElem::Unit(unit) => unit.prim.as_ref(),
-        });
+        let prim_entrysets = snap
+            .iter_excluding_head_and_tail()
+            .filter_map(|elem| match elem {
+                LsmElem::Dummy { .. } => None,
+                LsmElem::Unit(unit) => unit.prim.as_ref(),
+            });
         let prim_entries = merging::merge_committed_entrysets(
             prim_entrysets,
             None::<&PrimaryKey>,

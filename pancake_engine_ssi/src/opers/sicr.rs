@@ -1,7 +1,7 @@
 use crate::{
     db::DB,
     db_state::{ScndIdxNewDefnResult, ScndIdxNum, ScndIdxState},
-    ds_n_a::{atomic_linked_list::ListNode, send_ptr::SendPtr},
+    ds_n_a::{atomic_linked_list::ListNode, send_ptr::NonNullSendPtr},
     lsm::{
         lsm_state_utils,
         unit::{CommitVer, CommittedUnit},
@@ -73,7 +73,8 @@ impl<'job> ScndIdxCreationJob<'job> {
     async fn prepare_db_state_and_lsm_state(
         &self,
         sv_spec: &Arc<SubValueSpec>,
-    ) -> Result<(ScndIdxNum, SendPtr<ListNode<LsmElem>>, CommitVer), ScndIdxCreationJobErr> {
+    ) -> Result<(ScndIdxNum, NonNullSendPtr<ListNode<LsmElem>>, CommitVer), ScndIdxCreationJobErr>
+    {
         {
             let db_state = self.db.db_state().read().await;
 
@@ -108,8 +109,8 @@ impl<'job> ScndIdxCreationJob<'job> {
             {
                 let mut lsm_state = self.db.lsm_state().lock().await;
 
-                let snap_head_ptr_ = lsm_state.list.push_node(prepped_new_head);
-                snap_head_ptr = SendPtr::from(snap_head_ptr_);
+                let snap_head_ptr_ = lsm_state.list().push_head_node(prepped_new_head);
+                snap_head_ptr = NonNullSendPtr::from(snap_head_ptr_);
 
                 output_commit_ver = lsm_state.fetch_inc_next_commit_ver();
             }
@@ -120,7 +121,7 @@ impl<'job> ScndIdxCreationJob<'job> {
 
     async fn prepare_linked_list(
         &self,
-        snap_head: SendPtr<ListNode<LsmElem>>,
+        snap_head: NonNullSendPtr<ListNode<LsmElem>>,
     ) -> Result<(), anyhow::Error> {
         let (response_tx, response_rx) = oneshot::channel();
         let fc_req_msg = FlushAndCompactRequest {

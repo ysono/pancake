@@ -1,5 +1,5 @@
 use crate::ds_n_a::atomic_linked_list::ListNode;
-use crate::ds_n_a::send_ptr::SendPtr;
+use crate::ds_n_a::send_ptr::NonNullSendPtr;
 use crate::{
     lsm::{ListVer, LsmElem},
     opers::fc::FlushingAndCompactionWorker,
@@ -38,7 +38,7 @@ impl DanglingNodeSetsDeque {
                 let set = self.deque.pop_front().unwrap();
                 for nodes in set.nodes {
                     for node_ptr in nodes.into_iter() {
-                        let node_own = unsafe { Box::from_raw(node_ptr.as_ptr_mut()) };
+                        let node_own = unsafe { Box::from_raw(node_ptr.as_ptr().cast_mut()) };
                         match node_own.elem {
                             LsmElem::Unit(unit) => {
                                 unit.remove_dir()?;
@@ -58,7 +58,7 @@ impl DanglingNodeSetsDeque {
 
 pub struct DanglingNodeSet {
     pub max_incl_traversable_list_ver: ListVer,
-    pub nodes: Vec<Vec<SendPtr<ListNode<LsmElem>>>>,
+    pub nodes: Vec<Vec<NonNullSendPtr<ListNode<LsmElem>>>>,
 }
 
 impl FlushingAndCompactionWorker {

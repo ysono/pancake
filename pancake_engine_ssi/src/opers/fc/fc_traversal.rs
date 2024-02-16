@@ -1,4 +1,4 @@
-use crate::ds_n_a::{atomic_linked_list::ListNode, send_ptr::SendPtr};
+use crate::ds_n_a::{atomic_linked_list::ListNode, send_ptr::NonNullSendPtr};
 use crate::{
     db_state::DbState,
     lsm::{lsm_state_utils, LsmElem},
@@ -10,7 +10,7 @@ use crate::{
     DB,
 };
 use anyhow::Result;
-use std::ptr;
+use std::ptr::{self, NonNull};
 use std::sync::atomic::Ordering;
 use tokio::sync::RwLockReadGuard;
 
@@ -19,7 +19,7 @@ impl FlushingAndCompactionWorker {
     /// the ptr is already pushed to the linked list.
     pub(super) async fn flush_and_compact(
         &mut self,
-        maybe_snap_head_ptr: Option<SendPtr<ListNode<LsmElem>>>,
+        maybe_snap_head_ptr: Option<NonNullSendPtr<ListNode<LsmElem>>>,
     ) -> Result<()> {
         /* Hold a shared guard on `db_state` over the whole traversal of the LL. */
         let db_state_guard = self.db.db_state().read().await;
@@ -40,22 +40,28 @@ impl FlushingAndCompactionWorker {
     }
 
     async fn establish_snap_head<'a>(&self) -> &'a ListNode<LsmElem> {
-        /* The new_head is malloc'd and free'd outside the mutex guard.
-        Don't `move` the prepped new_head into the lambda. */
-        let mut prepped_new_head = Some(lsm_state_utils::new_dummy_node(0, false));
-        let update_or_provide_head = |elem: Option<&LsmElem>| match elem {
-            Some(LsmElem::Dummy { .. }) => return None,
-            _ => {
-                return prepped_new_head.take();
+        let should_push = |elem: &LsmElem| {
+            if let LsmElem::Dummy { is_fence, .. } = elem {
+                /* We must check `is_fence`. If the dummy is a fence, then we want to push a non-fence. */
+                if is_fence.load(Ordering::SeqCst) == false {
+                    return false;
+                }
             }
+            return true;
         };
-        let snap_head_ptr = {
+        let mut cand_snap_head = Some(lsm_state_utils::new_dummy_node(0, false));
+
+        let snap_head_ptr;
+        {
             let lsm_state = self.db.lsm_state().lock().await;
 
-            lsm_state.update_or_push(update_or_provide_head)
-        };
-        let snap_head_ref = unsafe { &*snap_head_ptr };
-        snap_head_ref
+            (snap_head_ptr, cand_snap_head) =
+                lsm_state.update_or_push_head(should_push, cand_snap_head.take().unwrap());
+        }
+
+        drop(cand_snap_head);
+
+        unsafe { snap_head_ptr.as_ref() }
     }
 }
 
@@ -131,8 +137,8 @@ impl<'job> FCJob<'job> {
     fn collect_one_segment(
         mut prev_ref: &ListNode<LsmElem>,
     ) -> (
-        Vec<SendPtr<ListNode<LsmElem>>>,
-        Vec<SendPtr<ListNode<LsmElem>>>,
+        Vec<NonNullSendPtr<ListNode<LsmElem>>>,
+        Vec<NonNullSendPtr<ListNode<LsmElem>>>,
         NodeInfo,
     ) {
         let mut cut_dummy_nodes = vec![];
@@ -156,33 +162,34 @@ impl<'job> FCJob<'job> {
 
     fn cut_contiguous_non_boundary_dummies(
         prev_ref: &ListNode<LsmElem>,
-        cut_nodes: &mut Vec<SendPtr<ListNode<LsmElem>>>,
+        cut_nodes: &mut Vec<NonNullSendPtr<ListNode<LsmElem>>>,
     ) -> NodeInfo {
         let mut has_cuttable = false;
 
         let mut curr_ptr = prev_ref.next.load(Ordering::SeqCst);
         let curr_info = loop {
-            if curr_ptr.is_null() {
-                break NodeInfo::EndOfList;
-            } else {
-                let curr_ref = unsafe { &*curr_ptr };
-                let curr_sendptr = SendPtr::from(curr_ptr);
-                match &curr_ref.elem {
-                    LsmElem::Unit(_) => break NodeInfo::CommittedUnit(curr_sendptr),
-                    LsmElem::Dummy {
-                        hold_count,
-                        is_fence,
-                    } => {
-                        /* A held fence node must be considered a fence node, not a mere segment-boundary node.
-                        Hence we must check `is_fence` first, then `hold_count. */
-                        if is_fence.load(Ordering::SeqCst) == true {
-                            break NodeInfo::FenceDummy(curr_sendptr);
-                        } else if hold_count.load(Ordering::SeqCst) != 0 {
-                            break NodeInfo::BoundaryDummy(curr_sendptr);
-                        } else {
-                            cut_nodes.push(curr_sendptr);
-                            curr_ptr = curr_ref.next.load(Ordering::SeqCst);
-                            has_cuttable = true;
+            match NonNull::new(curr_ptr) {
+                None => break NodeInfo::EndOfList,
+                Some(curr_ptr_nn) => {
+                    let curr_ref = unsafe { curr_ptr_nn.as_ref() };
+                    let curr_sendptr = NonNullSendPtr::from(curr_ptr_nn);
+                    match &curr_ref.elem {
+                        LsmElem::Unit(_) => break NodeInfo::CommittedUnit(curr_sendptr),
+                        LsmElem::Dummy {
+                            hold_count,
+                            is_fence,
+                        } => {
+                            /* A held fence node must be considered a fence node, not a mere segment-boundary node.
+                            Hence we must check `is_fence` first, then `hold_count. */
+                            if is_fence.load(Ordering::SeqCst) == true {
+                                break NodeInfo::FenceDummy(curr_sendptr);
+                            } else if hold_count.load(Ordering::SeqCst) != 0 {
+                                break NodeInfo::BoundaryDummy(curr_sendptr);
+                            } else {
+                                cut_nodes.push(curr_sendptr);
+                                curr_ptr = curr_ref.next.load(Ordering::SeqCst);
+                                has_cuttable = true;
+                            }
                         }
                     }
                 }
@@ -205,7 +212,7 @@ impl<'job> FCJob<'job> {
         let segm_tail_ptr = match segm_tail_info {
             NodeInfo::CommittedUnit(ptr)
             | NodeInfo::BoundaryDummy(ptr)
-            | NodeInfo::FenceDummy(ptr) => ptr.as_ptr_mut(),
+            | NodeInfo::FenceDummy(ptr) => ptr.as_ptr().cast_mut(),
             NodeInfo::EndOfList => ptr::null_mut(),
         };
 
@@ -235,7 +242,7 @@ impl<'job> FCJob<'job> {
 
     async fn record_list_ver_change(
         &mut self,
-        cut_nodes: Vec<Vec<SendPtr<ListNode<LsmElem>>>>,
+        cut_nodes: Vec<Vec<NonNullSendPtr<ListNode<LsmElem>>>>,
     ) -> Result<()> {
         let (penult_list_ver, updated_mhlv) = {
             let mut lsm_state = self.db.lsm_state().lock().await;
@@ -261,8 +268,8 @@ impl<'job> FCJob<'job> {
 /// from the first time an `AtomicPtr` was `load()`ed,
 /// so that we don't have to `load()` it again.
 enum NodeInfo {
-    CommittedUnit(SendPtr<ListNode<LsmElem>>),
-    BoundaryDummy(SendPtr<ListNode<LsmElem>>),
-    FenceDummy(SendPtr<ListNode<LsmElem>>),
+    CommittedUnit(NonNullSendPtr<ListNode<LsmElem>>),
+    BoundaryDummy(NonNullSendPtr<ListNode<LsmElem>>),
+    FenceDummy(NonNullSendPtr<ListNode<LsmElem>>),
     EndOfList,
 }

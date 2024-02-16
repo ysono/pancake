@@ -1,10 +1,10 @@
 use crate::ds_n_a::{
     atomic_linked_list::{AtomicLinkedList, ListNode},
     multiset::Multiset,
+    send_ptr::NonNullSendPtr,
 };
 use crate::lsm::unit::{CommitVer, CommittedUnit};
 use anyhow::Result;
-use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -28,7 +28,7 @@ pub enum LsmElem {
 
 pub struct LsmState {
     /// From newer to older.
-    pub list: AtomicLinkedList<LsmElem>,
+    list: AtomicLinkedList<LsmElem>,
 
     next_commit_ver: CommitVer,
 
@@ -43,8 +43,8 @@ impl LsmState {
         committed_units: impl IntoIterator<Item = CommittedUnit>,
         next_commit_ver: CommitVer,
     ) -> Self {
-        let list_elems = committed_units.into_iter().map(LsmElem::Unit);
-        let list = AtomicLinkedList::from_elems(list_elems);
+        let elems = committed_units.into_iter().map(LsmElem::Unit);
+        let list = AtomicLinkedList::from_elems(elems);
 
         Self {
             list,
@@ -54,6 +54,53 @@ impl LsmState {
             curr_list_ver: ListVer::AT_BOOTUP,
             held_list_vers: Multiset::default(),
             min_held_list_ver: ListVer::AT_BOOTUP,
+        }
+    }
+
+    pub fn list(&self) -> &AtomicLinkedList<LsmElem> {
+        &self.list
+    }
+
+    /// Non-atomically does the following:
+    /// 1. Retrieve the head.
+    /// 1. If there is no head, or if @arg `should_push` inspects the head element and returns `true`,
+    ///     then push @arg `candidate_head` at the head.
+    ///
+    /// When @arg `should_push` is given a [`LsmElem`] to read,
+    /// the callback is allowed to modify the [`LsmElem`], using interior mutability.
+    ///
+    /// [`LsmState`] is, in practice, guarded by a mutex.
+    /// The caller should allocate the candidate node outside the mutex guard.
+    /// This is why @arg `candidate_head` is required.
+    ///
+    /// @return
+    /// - tup.0 = Pointer to the latest head node, guaranteed to be non-null.
+    /// - tup.1 = The @arg `candidate_head`, iff it was not pushed.
+    ///     The caller should subsequently free it outside the mutex guard.
+    ///     (Or, return it to a pool of nodes. TODO.)
+    pub fn update_or_push_head<F>(
+        &self,
+        should_push: F,
+        candidate_head: Box<ListNode<LsmElem>>,
+    ) -> (
+        NonNullSendPtr<ListNode<LsmElem>>,
+        Option<Box<ListNode<LsmElem>>>,
+    )
+    where
+        F: FnOnce(&LsmElem) -> bool,
+    {
+        let maybe_head_ptr = self.list.head_node_ptr();
+        match maybe_head_ptr {
+            None => (self.list.push_head_node(candidate_head).into(), None),
+            Some(head_ptr) => {
+                let head_ref = unsafe { head_ptr.as_ref() };
+                let do_push = should_push(&head_ref.elem);
+                if do_push {
+                    (self.list.push_head_node(candidate_head).into(), None)
+                } else {
+                    (head_ptr.into(), Some(candidate_head))
+                }
+            }
         }
     }
 
@@ -128,27 +175,5 @@ impl LsmState {
 
     pub fn is_held_list_vers_empty(&self) -> bool {
         self.held_list_vers.len() == 0
-    }
-
-    /// Non-atomically does the following:
-    /// 1. Get the head.
-    /// 1. Callback reads the head and determines whether to push a new node.
-    /// 1. If there is a new node to push, push it.
-    /// Returns the resulting head.
-    pub fn update_or_push<Cb>(&self, update_or_provide_head: Cb) -> *const ListNode<LsmElem>
-    where
-        Cb: FnOnce(Option<&LsmElem>) -> Option<Box<ListNode<LsmElem>>>,
-    {
-        let maybe_head_ref = self.list.head();
-        let maybe_head_elem = maybe_head_ref.map(|head_ref| &head_ref.elem);
-        if let Some(new_node) = update_or_provide_head(maybe_head_elem) {
-            let new_head_ptr = self.list.push_node(new_node);
-            return new_head_ptr;
-        } else {
-            match maybe_head_ref {
-                None => return ptr::null(),
-                Some(head_ref) => return head_ref as *const _,
-            }
-        }
     }
 }

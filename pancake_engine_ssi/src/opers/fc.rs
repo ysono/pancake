@@ -1,5 +1,5 @@
 use crate::{
-    ds_n_a::{atomic_linked_list::ListNode, send_ptr::SendPtr},
+    ds_n_a::{atomic_linked_list::ListNode, send_ptr::NonNullSendPtr},
     lsm::{ListVer, LsmElem},
     opers::fc::gc::DanglingNodeSetsDeque,
     DB,
@@ -62,7 +62,7 @@ impl FlushingAndCompactionWorker {
 }
 
 pub struct FlushAndCompactRequest {
-    pub snap_head: SendPtr<ListNode<LsmElem>>,
+    pub snap_head: NonNullSendPtr<ListNode<LsmElem>>,
 
     pub response_tx: oneshot::Sender<()>,
 }

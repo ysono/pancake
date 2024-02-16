@@ -13,10 +13,13 @@ impl<'txn> Txn<'txn> {
             })
             .collect::<Vec<_>>();
 
-        let committed_units = self.snap.iter().filter_map(|elem| match &elem {
-            LsmElem::Dummy { .. } => None,
-            LsmElem::Unit(unit) => Some(unit),
-        });
+        let committed_units =
+            self.snap
+                .iter_excluding_head_and_tail()
+                .filter_map(|elem| match &elem {
+                    LsmElem::Dummy { .. } => None,
+                    LsmElem::Unit(unit) => Some(unit),
+                });
         for unit in committed_units {
             if let Some(committed_prim) = unit.prim.as_ref() {
                 let has_conflict = dep_itvs_prim.overlaps_with(committed_prim.get_all_keys())?;

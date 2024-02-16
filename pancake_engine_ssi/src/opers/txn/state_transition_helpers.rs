@@ -1,58 +1,41 @@
 use crate::ds_n_a::atomic_linked_list::ListNode;
-use crate::ds_n_a::send_ptr::SendPtr;
+use crate::ds_n_a::send_ptr::NonNullSendPtr;
 use crate::{
-    lsm::{lsm_state_utils, ListVer, LsmElem, LsmState},
+    lsm::{lsm_state_utils, ListVer, LsmElem},
     opers::txn::Txn,
 };
 use std::sync::atomic::Ordering;
-use tokio::sync::MutexGuard;
 
 impl<'txn> Txn<'txn> {
-    pub(super) fn prep_boundary_node() -> Option<Box<ListNode<LsmElem>>> {
+    pub(super) fn create_boundary_node() -> Option<Box<ListNode<LsmElem>>> {
         Some(lsm_state_utils::new_dummy_node(1, false))
     }
 
-    /// This helper ensures that the head is a dummy with one additional hold_count.
-    ///
-    /// The arg `prepped_boundary_node`:
-    /// - Caller should malloc'd the node outside the mutex guard.
-    /// - The arg is an `&mut Option<_>` so that it can be freed outside the mutex guard.
-    ///
-    /// Returns a non-null ptr to the resulting head.
-    pub(super) fn hold_boundary_at_head<'a>(
-        lsm_state: &mut MutexGuard<'a, LsmState>,
-        prepped_boundary_node: &mut Option<Box<ListNode<LsmElem>>>,
-    ) -> SendPtr<ListNode<LsmElem>> {
-        let update_or_provide_head = |elem: Option<&LsmElem>| match elem {
-            Some(LsmElem::Dummy { hold_count, .. }) => {
+    pub(super) fn should_push_boundary_head(elem: &LsmElem) -> bool {
+        match elem {
+            LsmElem::Dummy { hold_count, .. } => {
                 hold_count.fetch_add(1, Ordering::SeqCst);
-                return None;
+                false
             }
-            _ => {
-                return prepped_boundary_node.take();
-            }
-        };
-        let snap_head_excl = SendPtr::from(lsm_state.update_or_push(update_or_provide_head));
-        snap_head_excl
+            LsmElem::Unit(_) => true,
+        }
     }
 
-    /// Returns whether either node became non-held, hence LL replacement can be done.
-    pub(super) fn unhold_boundary_node(node_ptrs: &[Option<SendPtr<ListNode<LsmElem>>>]) -> bool {
+    /// @return Whether any of the arg nodes became non-held, i.e. whether the LL became F+C'able.
+    pub(super) fn unhold_boundary_nodes<const LEN: usize>(
+        node_ptrs: [Option<NonNullSendPtr<ListNode<LsmElem>>>; LEN],
+    ) -> bool {
         let mut is_fc_avail = false;
-
-        let mut do_unhold = |node_ptr: SendPtr<ListNode<LsmElem>>| {
-            let node_ref = unsafe { node_ptr.as_ref() };
-            if let LsmElem::Dummy { hold_count, .. } = &node_ref.elem {
-                let prior_hold_count = hold_count.fetch_sub(1, Ordering::SeqCst);
-                if prior_hold_count == 1 {
-                    is_fc_avail |= true;
-                }
-            }
-        };
 
         for node_ptr in node_ptrs {
             if let Some(node_ptr) = node_ptr {
-                do_unhold(node_ptr.clone());
+                let node_ref = unsafe { node_ptr.as_ref() };
+                if let LsmElem::Dummy { hold_count, .. } = &node_ref.elem {
+                    let prior_hold_count = hold_count.fetch_sub(1, Ordering::SeqCst);
+                    if prior_hold_count == 1 {
+                        is_fc_avail = true;
+                    }
+                }
             }
         }
 

@@ -5,12 +5,12 @@ mod stmt;
 
 use state_transitions::TryCommitResult;
 
-use crate::ds_n_a::atomic_linked_list::AtomicLinkedListSnapshot;
+use crate::ds_n_a::atomic_linked_list::ListSnapshot;
 use crate::ds_n_a::interval_set::IntervalSet;
 use crate::{
     db_state::{DbState, ScndIdxNum},
     lsm::{
-        unit::{CommitVer, StagingUnit},
+        unit::{CommitVer, CommittedUnit, StagingUnit},
         ListVer, LsmElem,
     },
     DB,
@@ -29,12 +29,12 @@ pub struct Txn<'txn> {
     db: &'txn DB,
     db_state_guard: RwLockReadGuard<'txn, DbState>,
 
-    snap: AtomicLinkedListSnapshot<LsmElem>,
+    snap: ListSnapshot<LsmElem>,
     snap_next_commit_ver: CommitVer,
     snap_list_ver: ListVer,
 
     /// The Vec version of `snap`. Lazily initialized and used by range queries only.
-    snap_vec: Option<Vec<&'txn LsmElem>>,
+    snap_vec: Option<Vec<&'txn CommittedUnit>>,
 
     dependent_itvs_prim: IntervalSet<&'txn PrimaryKey>,
     dependent_itvs_scnds: HashMap<ScndIdxNum, IntervalSet<&'txn SubValue>>,
