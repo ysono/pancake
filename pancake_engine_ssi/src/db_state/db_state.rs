@@ -79,24 +79,27 @@ impl DbState {
         }
     }
 
-    pub fn can_scnd_idx_be_removed(&self, sv_spec: &SubValueSpec) -> DeletionResult {
+    pub fn can_scnd_idx_be_removed(&self, sv_spec: &SubValueSpec) -> ScndIdxRemovalResult {
         let sis = &self.scnd_idxs_state;
         match sis.scnd_idxs.get(sv_spec) {
-            None => DeletionResult::DoesNotExist,
-            Some(si_state) if si_state.is_readable != true => DeletionResult::CreationInProgress,
-            Some(_) => DeletionResult::Deletable,
+            None => ScndIdxRemovalResult::DoesNotExist,
+            Some(si_state) if si_state.is_readable != true => {
+                ScndIdxRemovalResult::CreationInProgress
+            }
+            Some(_) => ScndIdxRemovalResult::Deletable,
         }
     }
-    pub fn remove_scnd_idx(&mut self, sv_spec: &SubValueSpec) -> Result<DeletionResult> {
-        match self.can_scnd_idx_be_removed(sv_spec) {
-            eligiblity @ DeletionResult::Deletable => {
+    pub fn remove_scnd_idx(&mut self, sv_spec: &SubValueSpec) -> Result<ScndIdxRemovalResult> {
+        let eligibility = self.can_scnd_idx_be_removed(sv_spec);
+        match eligibility {
+            ScndIdxRemovalResult::DoesNotExist | ScndIdxRemovalResult::CreationInProgress => {}
+            ScndIdxRemovalResult::Deletable => {
                 let sis = &mut self.scnd_idxs_state;
                 sis.scnd_idxs.remove(sv_spec);
                 sis.ser(&self.scnd_idxs_state_file_path)?;
-                Ok(eligiblity)
             }
-            eligibility => Ok(eligibility),
         }
+        Ok(eligibility)
     }
 }
 
@@ -105,7 +108,7 @@ pub enum ScndIdxNewDefnResult {
     DidDefineNew(ScndIdxNum),
 }
 
-pub enum DeletionResult {
+pub enum ScndIdxRemovalResult {
     DoesNotExist,
     CreationInProgress,
     Deletable,

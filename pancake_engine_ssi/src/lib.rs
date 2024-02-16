@@ -7,5 +7,6 @@ mod opers;
 pub use db::DB;
 pub use opers::{
     sicr::ScndIdxCreationJobErr,
+    sidel::ScndIdxDeletionJobErr,
     txn::{ClientCommitDecision, Txn},
 };

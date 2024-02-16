@@ -5,7 +5,7 @@ use crate::query::basic::{self as query_basic};
 use crate::wasm::engine_ssi::WasmEngine;
 use anyhow::{anyhow, Error, Result};
 use hyper::{Body, Request, Response};
-use pancake_engine_ssi::{ScndIdxCreationJobErr, DB};
+use pancake_engine_ssi::{ScndIdxCreationJobErr, ScndIdxDeletionJobErr, DB};
 use pancake_types::serde::Datum;
 use pancake_types::types::{PrimaryKey, Value};
 use routerify::prelude::*;
@@ -92,8 +92,11 @@ async fn query_handler(req: Request<Body>) -> Result<Response<Body>> {
             }
         }
         Operation::DelScndIdx(sv_spec) => match db.delete_scnd_idx(&sv_spec).await {
-            Err(e) => return resp::err(e),
-            Ok(()) => return resp::no_content(),
+            Ok(()) => return resp::ok(""),
+            Err(ScndIdxDeletionJobErr::CreationInProgress) => {
+                return resp::err(anyhow!("The secondary index is being created right now, and cannot be deleted until the creation is done."));
+            }
+            Err(ScndIdxDeletionJobErr::InternalError(e)) => resp::err(e),
         },
     }
 }

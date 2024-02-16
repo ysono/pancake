@@ -1,5 +1,3 @@
-mod scnd_client_req;
-
 use crate::{
     db_state::DbState,
     lsm::{ListVer, LsmDir, LsmState},

@@ -100,7 +100,10 @@ impl<'a> OneStmtSsiDbAdaptor<'a> {
     }
 
     pub async fn nonmut_delete_scnd_idx(&self, sv_spec: &SubValueSpec) -> Result<()> {
-        self.db.delete_scnd_idx(sv_spec).await
+        self.db
+            .delete_scnd_idx(sv_spec)
+            .await
+            .map_err(|e| anyhow!(e))
     }
 }
 
