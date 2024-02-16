@@ -1,10 +1,11 @@
 use crate::{db_state::ScndIdxNum, lsm::unit::UnitDir};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use pancake_engine_common::{fs_utils, WritableMemLog};
 use pancake_types::{
     serde::OptDatum,
     types::{PKShared, PVShared, SVPKShared},
 };
+use std::any;
 use std::collections::{hash_map, HashMap};
 
 pub struct StagingUnit {
@@ -14,10 +15,20 @@ pub struct StagingUnit {
 }
 
 impl StagingUnit {
-    pub fn new(dir: UnitDir) -> Result<Self> {
-        fs_utils::create_dir_all(dir.path())?;
+    pub fn new_empty(dir: UnitDir) -> Result<Self> {
+        let dir_path = dir.path();
+        if dir_path.exists() {
+            return Err(anyhow!(
+                "New {} cannot be created at an existing dir {:?}",
+                any::type_name::<Self>(),
+                dir_path
+            ));
+        }
+        fs_utils::create_dir_all(dir_path)?;
+
         let prim_path = dir.format_prim_file_path();
         let prim_memlog = WritableMemLog::load_or_new(prim_path)?;
+
         Ok(Self {
             prim: prim_memlog,
             scnds: HashMap::default(),
