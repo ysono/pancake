@@ -30,7 +30,7 @@ pub struct Txn<'txn> {
     db_state_guard: RwLockReadGuard<'txn, DbState>,
 
     snap: ListSnapshot<LsmElem>,
-    snap_next_commit_ver: CommitVer,
+    snap_commit_ver: CommitVer,
     snap_list_ver: ListVer,
 
     /// The Vec version of `snap`. Lazily initialized and used by range queries only.

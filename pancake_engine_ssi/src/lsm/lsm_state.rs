@@ -30,7 +30,7 @@ pub struct LsmState {
     /// From newer to older.
     list: AtomicLinkedList<LsmElem>,
 
-    next_commit_ver: CommitVer,
+    curr_commit_ver: CommitVer,
 
     curr_list_ver: ListVer,
     held_list_vers: Multiset<ListVer>,
@@ -41,7 +41,7 @@ impl LsmState {
     /// @arg `committed_units`: From newer to older.
     pub fn new(
         committed_units: impl IntoIterator<Item = CommittedUnit>,
-        next_commit_ver: CommitVer,
+        curr_commit_ver: CommitVer,
     ) -> Self {
         let elems = committed_units.into_iter().map(LsmElem::CommittedUnit);
         let list = AtomicLinkedList::from_elems(elems);
@@ -49,7 +49,7 @@ impl LsmState {
         Self {
             list,
 
-            next_commit_ver,
+            curr_commit_ver,
 
             curr_list_ver: ListVer::AT_BOOTUP,
             held_list_vers: Multiset::default(),
@@ -104,15 +104,14 @@ impl LsmState {
         }
     }
 
-    pub fn next_commit_ver(&self) -> CommitVer {
-        self.next_commit_ver
+    pub fn curr_commit_ver(&self) -> CommitVer {
+        self.curr_commit_ver
     }
 
-    /// @return The previously "next", newly "curr", CommitVer.
-    pub fn fetch_inc_next_commit_ver(&mut self) -> CommitVer {
-        let curr = self.next_commit_ver;
-        self.next_commit_ver.mut_inc();
-        curr
+    /// @return The post-bump CommitVer.
+    pub fn inc_fetch_curr_commit_ver(&mut self) -> CommitVer {
+        self.curr_commit_ver.mut_inc();
+        self.curr_commit_ver
     }
 
     /// @return

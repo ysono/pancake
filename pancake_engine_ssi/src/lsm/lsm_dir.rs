@@ -18,9 +18,9 @@ impl LsmDir {
 
         let (pq, dir) = Self::collect_committed_unit_dirs(&lsm_dir_path)?;
 
-        let (committed_units, next_commit_ver) = Self::load_committed_units(pq)?;
+        let (committed_units, curr_commit_ver) = Self::load_committed_units(pq)?;
 
-        let lsm_state = LsmState::new(committed_units, next_commit_ver);
+        let lsm_state = LsmState::new(committed_units, curr_commit_ver);
 
         let lsm_dir = Self { dir };
 
@@ -65,9 +65,9 @@ impl LsmDir {
     /// - Ordered vec of committed units, from highest to lowest commit versions.
     /// - The next commit ver.
     fn load_committed_units(mut pq: BinaryHeap<CIUD>) -> Result<(Vec<CommittedUnit>, CommitVer)> {
-        let next_commit_ver = match pq.peek() {
+        let curr_commit_ver = match pq.peek() {
             None => CommitVer::AT_EMPTY_DATASTORE,
-            Some(committed_unit) => committed_unit.commit_info.commit_ver_hi_incl().new_inc(),
+            Some(committed_unit) => committed_unit.commit_info.commit_ver_hi_incl().clone(),
         };
 
         let mut committed_units = Vec::<CommittedUnit>::new();
@@ -85,7 +85,7 @@ impl LsmDir {
             committed_units.push(unit);
         }
 
-        Ok((committed_units, next_commit_ver))
+        Ok((committed_units, curr_commit_ver))
     }
 
     pub fn format_new_unit_dir_path(&self) -> UnitDir {

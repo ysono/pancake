@@ -17,7 +17,7 @@ impl<'txn> Txn<'txn> {
     ) -> Txn<'txn> {
         let mut cand_snap_head = Self::create_boundary_node();
         let snap_head;
-        let snap_next_commit_ver;
+        let snap_commit_ver;
         let snap_list_ver;
         {
             let mut lsm_state = db.lsm_state().lock().await;
@@ -27,7 +27,7 @@ impl<'txn> Txn<'txn> {
                 cand_snap_head.take().unwrap(),
             );
 
-            snap_next_commit_ver = lsm_state.next_commit_ver();
+            snap_commit_ver = lsm_state.curr_commit_ver();
 
             snap_list_ver = lsm_state.hold_curr_list_ver();
         }
@@ -40,7 +40,7 @@ impl<'txn> Txn<'txn> {
             db_state_guard,
 
             snap,
-            snap_next_commit_ver,
+            snap_commit_ver,
             snap_list_ver,
 
             snap_vec: None,
@@ -71,7 +71,7 @@ impl<'txn> Txn<'txn> {
             {
                 let lsm_state = self.db.lsm_state().lock().await;
 
-                if self.snap_next_commit_ver != lsm_state.next_commit_ver() {
+                if self.snap_commit_ver != lsm_state.curr_commit_ver() {
                     self.update_snapshot_for_conflict_checking(lsm_state, &mut cand_snap_head)?;
                     if self.has_conflict()? {
                         return Ok(TryCommitResult::Conflict(self));
@@ -95,7 +95,7 @@ impl<'txn> Txn<'txn> {
             cand_snap_head.take().unwrap(),
         );
 
-        self.snap_next_commit_ver = lsm_state.next_commit_ver();
+        self.snap_commit_ver = lsm_state.curr_commit_ver();
 
         let updated_mhlv;
         (self.snap_list_ver, updated_mhlv) =
@@ -123,7 +123,7 @@ impl<'txn> Txn<'txn> {
                 cand_snap_head.take().unwrap(),
             );
 
-            self.snap_next_commit_ver = lsm_state.next_commit_ver();
+            self.snap_commit_ver = lsm_state.curr_commit_ver();
 
             (self.snap_list_ver, updated_mhlv) =
                 lsm_state.hold_and_unhold_list_ver(self.snap_list_ver)?;
@@ -167,7 +167,7 @@ impl<'txn> Txn<'txn> {
     }
 
     fn do_commit(mut self, mut lsm_state: MutexGuard<LsmState>) -> Result<()> {
-        let commit_ver = lsm_state.fetch_inc_next_commit_ver();
+        let commit_ver = lsm_state.inc_fetch_curr_commit_ver();
 
         /* Note, converting StagingUnit to CommittedUnit involves writing a file,
         which is not cheap, and we're doing it under a mutex guard. */

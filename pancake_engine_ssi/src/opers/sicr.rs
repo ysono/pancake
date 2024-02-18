@@ -112,7 +112,7 @@ impl<'job> ScndIdxCreationJob<'job> {
                 let snap_head_ptr_ = lsm_state.list().push_head_node(prepped_new_head);
                 snap_head_ptr = NonNullSendPtr::from(snap_head_ptr_);
 
-                output_commit_ver = lsm_state.fetch_inc_next_commit_ver();
+                output_commit_ver = lsm_state.inc_fetch_curr_commit_ver();
             }
         }
 
