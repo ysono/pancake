@@ -67,7 +67,7 @@ impl LsmDir {
     fn load_committed_units(mut pq: BinaryHeap<CIUD>) -> Result<(Vec<CommittedUnit>, CommitVer)> {
         let next_commit_ver = match pq.peek() {
             None => CommitVer::AT_EMPTY_DATASTORE,
-            Some(committed_unit) => committed_unit.commit_info.commit_ver_hi_incl().inc(),
+            Some(committed_unit) => committed_unit.commit_info.commit_ver_hi_incl().new_inc(),
         };
 
         let mut committed_units = Vec::<CommittedUnit>::new();

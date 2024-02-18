@@ -13,8 +13,8 @@ pub struct ListVer(u64);
 impl ListVer {
     pub const AT_BOOTUP: Self = Self(0);
 
-    pub fn inc(self) -> Self {
-        Self(self.0 + 1)
+    pub fn mut_inc(&mut self) {
+        self.0 += 1;
     }
 }
 
@@ -111,7 +111,7 @@ impl LsmState {
     /// @return The previously "next", newly "curr", CommitVer.
     pub fn fetch_inc_next_commit_ver(&mut self) -> CommitVer {
         let curr = self.next_commit_ver;
-        self.next_commit_ver = self.next_commit_ver.inc();
+        self.next_commit_ver.mut_inc();
         curr
     }
 
@@ -120,7 +120,7 @@ impl LsmState {
     /// - tup.1 = The updated min_held_list_ver, iff updated.
     pub fn fetch_inc_curr_list_ver(&mut self) -> (ListVer, Option<ListVer>) {
         let penult = self.curr_list_ver;
-        self.curr_list_ver = self.curr_list_ver.inc();
+        self.curr_list_ver.mut_inc();
 
         let updated_mhlv = self.advance_min_held_list_ver();
 
@@ -147,7 +147,7 @@ impl LsmState {
         while (self.min_held_list_ver < self.curr_list_ver)
             && (self.held_list_vers.contains(&self.min_held_list_ver) == false)
         {
-            self.min_held_list_ver = self.min_held_list_ver.inc();
+            self.min_held_list_ver.mut_inc();
             did_change = true;
         }
 
