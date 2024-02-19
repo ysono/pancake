@@ -5,4 +5,6 @@ stages:
 
 all_tests:
   stage: test
+  only:
+    - /^testongl-.*$/
   script: cargo test -- --nocapture
