@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use fs2::FileExt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Seek, SeekFrom};
 use std::iter::Iterator;
@@ -22,6 +23,14 @@ pub fn read_dir<'a>(parent_path: &'a Path) -> Result<impl 'a + Iterator<Item = R
 pub fn open_file<P: AsRef<Path>>(path: P, oo: &OpenOptions) -> Result<File> {
     let path = path.as_ref();
     oo.open(path).with_context(|| format!("open {path:?}"))
+}
+
+pub fn lock_file<P: AsRef<Path>>(path: P) -> Result<File> {
+    let path = path.as_ref();
+    let file = open_file(path, OpenOptions::new().read(true))?;
+    file.try_lock_exclusive()
+        .context(format!("try_lock_exclusive {path:?}"))?;
+    Ok(file)
 }
 
 pub fn seek<P: AsRef<Path>>(

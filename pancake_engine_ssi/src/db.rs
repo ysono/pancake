@@ -7,7 +7,9 @@ use crate::{
     },
 };
 use anyhow::Result;
+use pancake_engine_common::fs_utils;
 use shorthand::ShortHand;
+use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch, Mutex, RwLock};
@@ -23,6 +25,8 @@ const SCND_IDX_CREATION_CONCURRENT_COUNT_MAX: usize = 1;
 #[derive(ShortHand)]
 #[shorthand(visibility("pub(in crate)"))]
 pub struct DB {
+    _lock_dir: File,
+
     db_state: RwLock<DbState>,
 
     lsm_dir: LsmDir,
@@ -42,6 +46,10 @@ impl DB {
         db_dir_path: P,
     ) -> Result<(Arc<Self>, FlushingAndCompactionWorker)> {
         let db_dir_path = db_dir_path.as_ref();
+
+        fs_utils::create_dir_all(&db_dir_path)?;
+        let lock_dir = fs_utils::lock_file(db_dir_path)?;
+
         let si_state_file_path = db_dir_path.join(SCND_IDXS_STATE_FILE_NAME);
         let lsm_dir_path = db_dir_path.join(LSM_DIR_NAME);
         let si_cr_dir_path = db_dir_path.join(ALL_SCND_IDX_CREATION_JOBS_DIR_NAME);
@@ -59,6 +67,8 @@ impl DB {
         let (is_terminating_tx, is_terminating_rx) = watch::channel(());
 
         let db = Self {
+            _lock_dir: lock_dir,
+
             db_state: RwLock::new(db_state),
 
             lsm_dir,

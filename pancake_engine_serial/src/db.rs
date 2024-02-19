@@ -1,11 +1,12 @@
 use crate::{lsm::LSMTree, scnd_idx::SecondaryIndex};
 use anyhow::{anyhow, Context, Result};
 use pancake_engine_common::{
-    fs_utils::{AntiCollisionParentDir, NamePattern},
+    fs_utils::{self, AntiCollisionParentDir, NamePattern},
     Entry,
 };
 use pancake_types::types::{PKShared, PVShared, PrimaryKey, SubValue, SubValueSpec};
 use std::collections::HashMap;
+use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -13,6 +14,7 @@ const PRIM_LSM_DIR_NAME: &str = "prim_lsm";
 const ALL_SCND_IDXS_PARENT_DIR_NAME: &str = "scnd_idxs";
 
 pub struct DB {
+    _lock_dir: File,
     prim_lsm: LSMTree<PKShared, PVShared>,
     scnd_idxs: HashMap<Arc<SubValueSpec>, SecondaryIndex>,
     all_scnd_idxs_parent_dir: AntiCollisionParentDir,
@@ -20,9 +22,13 @@ pub struct DB {
 
 impl DB {
     pub fn load_or_new<P: AsRef<Path>>(db_dir_path: P) -> Result<DB> {
-        let prim_lsm_dir_path = db_dir_path.as_ref().join(PRIM_LSM_DIR_NAME);
-        let all_scnd_idxs_parent_dir_path =
-            db_dir_path.as_ref().join(ALL_SCND_IDXS_PARENT_DIR_NAME);
+        let db_dir_path = db_dir_path.as_ref();
+
+        fs_utils::create_dir_all(&db_dir_path)?;
+        let lock_dir = fs_utils::lock_file(db_dir_path)?;
+
+        let prim_lsm_dir_path = db_dir_path.join(PRIM_LSM_DIR_NAME);
+        let all_scnd_idxs_parent_dir_path = db_dir_path.join(ALL_SCND_IDXS_PARENT_DIR_NAME);
 
         let prim_lsm = LSMTree::load_or_new(prim_lsm_dir_path)?;
 
@@ -42,6 +48,7 @@ impl DB {
         )?;
 
         Ok(DB {
+            _lock_dir: lock_dir,
             prim_lsm,
             scnd_idxs,
             all_scnd_idxs_parent_dir,
