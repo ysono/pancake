@@ -1,12 +1,6 @@
-mod conflict;
-mod state_transition_helpers;
-mod state_transitions;
-mod stmt;
-
-use state_transitions::TryCommitResult;
-
-use crate::ds_n_a::atomic_linked_list::ListSnapshot;
+use crate::ds_n_a::atomic_linked_list::{ListNode, ListSnapshot};
 use crate::ds_n_a::interval_set::IntervalSet;
+use crate::ds_n_a::send_ptr::NonNullSendPtr;
 use crate::{
     db_state::{DbState, ScndIdxNum},
     lsm::{
@@ -20,6 +14,13 @@ use pancake_types::types::{PrimaryKey, SubValue};
 use std::collections::HashMap;
 use tokio::sync::RwLockReadGuard;
 
+mod conflict;
+mod state_transition_helpers;
+mod state_transitions;
+mod stmt;
+
+use state_transitions::TryCommitResult;
+
 pub enum ClientCommitDecision<ClientOk> {
     Commit(ClientOk),
     Abort(ClientOk),
@@ -29,12 +30,9 @@ pub struct Txn<'txn> {
     db: &'txn DB,
     db_state_guard: RwLockReadGuard<'txn, DbState>,
 
-    snap: ListSnapshot<LsmElem>,
+    snap: CachedSnap<'txn>,
     snap_commit_ver: CommitVer,
     snap_list_ver: ListVer,
-
-    /// The Vec version of `snap`. Lazily initialized and used by range queries only.
-    snap_vec: Option<Vec<&'txn CommittedUnit>>,
 
     dependent_itvs_prim: IntervalSet<&'txn PrimaryKey>,
     dependent_itvs_scnds: HashMap<ScndIdxNum, IntervalSet<&'txn SubValue>>,
@@ -89,5 +87,42 @@ impl<'txn> Txn<'txn> {
                 }
             }
         }
+    }
+}
+
+struct CachedSnap<'snap> {
+    list_snap: ListSnapshot<LsmElem>,
+
+    /// Lazily initialized.
+    units_cache: Option<Vec<&'snap CommittedUnit>>,
+}
+impl<'snap> CachedSnap<'snap> {
+    fn new(list_snap: ListSnapshot<LsmElem>) -> Self {
+        Self {
+            list_snap,
+            units_cache: None,
+        }
+    }
+
+    fn head_ptr(&self) -> NonNullSendPtr<ListNode<LsmElem>> {
+        self.list_snap.head_ptr()
+    }
+    fn tail_ptr(&self) -> Option<NonNullSendPtr<ListNode<LsmElem>>> {
+        self.list_snap.tail_ptr()
+    }
+
+    fn ensure_collect_units(&mut self) -> &Vec<&'snap CommittedUnit> {
+        if self.units_cache.is_none() {
+            let units = self
+                .list_snap
+                .iter_excluding_head_and_tail()
+                .filter_map(|elem| match elem {
+                    LsmElem::CommittedUnit(unit) => Some(unit),
+                    LsmElem::Dummy { .. } => None,
+                })
+                .collect::<Vec<_>>();
+            self.units_cache = Some(units);
+        }
+        self.units_cache.as_ref().unwrap()
     }
 }

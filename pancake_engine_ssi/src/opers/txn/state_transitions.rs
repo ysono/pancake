@@ -3,7 +3,7 @@ use crate::ds_n_a::interval_set::IntervalSet;
 use crate::{
     db_state::DbState,
     lsm::{unit::CommittedUnit, LsmElem, LsmState},
-    opers::txn::Txn,
+    opers::txn::{CachedSnap, Txn},
     DB,
 };
 use anyhow::Result;
@@ -33,7 +33,8 @@ impl<'txn> Txn<'txn> {
         }
         drop(cand_snap_head);
 
-        let snap = ListSnapshot::new_tailless(snap_head);
+        let list_snap = ListSnapshot::new_tailless(snap_head);
+        let snap = CachedSnap::new(list_snap);
 
         Self {
             db,
@@ -42,8 +43,6 @@ impl<'txn> Txn<'txn> {
             snap,
             snap_commit_ver,
             snap_list_ver,
-
-            snap_vec: None,
 
             dependent_itvs_prim: IntervalSet::new(),
             dependent_itvs_scnds: HashMap::new(),
@@ -104,7 +103,8 @@ impl<'txn> Txn<'txn> {
         drop(lsm_state);
 
         let is_fc_avail = Self::unhold_boundary_nodes([self.snap.tail_ptr()]);
-        self.snap = ListSnapshot::new(snap_head, self.snap.head_ptr());
+        let list_snap = ListSnapshot::new(snap_head, self.snap.head_ptr());
+        self.snap = CachedSnap::new(list_snap);
 
         self.notify_fc_worker(updated_mhlv, is_fc_avail);
 
@@ -132,11 +132,11 @@ impl<'txn> Txn<'txn> {
 
         let is_fc_avail =
             Self::unhold_boundary_nodes([Some(self.snap.head_ptr()), self.snap.tail_ptr()]);
-        self.snap = ListSnapshot::new_tailless(snap_head);
+        let list_snap = ListSnapshot::new_tailless(snap_head);
+        self.snap = CachedSnap::new(list_snap);
 
         self.notify_fc_worker(updated_mhlv, is_fc_avail);
 
-        self.snap_vec = None;
         self.dependent_itvs_prim.clear();
         self.dependent_itvs_scnds.clear();
         if let Some(stg) = self.staging.as_mut() {

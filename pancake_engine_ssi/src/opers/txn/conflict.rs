@@ -1,4 +1,4 @@
-use crate::{lsm::LsmElem, opers::txn::Txn};
+use crate::opers::txn::Txn;
 use anyhow::Result;
 
 impl<'txn> Txn<'txn> {
@@ -13,14 +13,7 @@ impl<'txn> Txn<'txn> {
             })
             .collect::<Vec<_>>();
 
-        let committed_units =
-            self.snap
-                .iter_excluding_head_and_tail()
-                .filter_map(|elem| match &elem {
-                    LsmElem::Dummy { .. } => None,
-                    LsmElem::CommittedUnit(unit) => Some(unit),
-                });
-        for unit in committed_units {
+        for unit in self.snap.ensure_collect_units().iter() {
             if let Some(committed_prim) = unit.prim.as_ref() {
                 let has_conflict = dep_itvs_prim.overlaps_with(committed_prim.get_all_keys())?;
                 if has_conflict {

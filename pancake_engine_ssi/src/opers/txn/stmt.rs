@@ -1,11 +1,7 @@
 use crate::ds_n_a::interval_set::{Interval, IntervalSet};
 use crate::{
     db_state::ScndIdxState,
-    lsm::{
-        entryset::merging,
-        unit::{CommittedUnit, StagingUnit},
-        LsmElem,
-    },
+    lsm::{entryset::merging, unit::StagingUnit},
     opers::txn::Txn,
 };
 use anyhow::{anyhow, Result};
@@ -14,21 +10,6 @@ use pancake_types::serde::OptDatum;
 use pancake_types::types::{PKShared, PVShared, PrimaryKey, SVPKShared, SubValue, SubValueSpec};
 
 impl<'txn> Txn<'txn> {
-    fn get_snap_units_iter(&self) -> impl Iterator<Item = &'txn CommittedUnit> {
-        self.snap
-            .iter_excluding_head_and_tail()
-            .filter_map(|elem| match elem {
-                LsmElem::CommittedUnit(unit) => Some(unit),
-                LsmElem::Dummy { .. } => None,
-            })
-    }
-    fn ensure_collect_snap_units_vec(&mut self) {
-        if self.snap_vec.is_none() {
-            let vec = self.get_snap_units_iter().collect();
-            self.snap_vec = Some(vec);
-        }
-    }
-
     pub fn get_pk_one(&mut self, pk: &'txn PrimaryKey) -> Result<Option<(PKShared, PVShared)>> {
         self.dependent_itvs_prim.add(Interval {
             lo_incl: Some(pk),
@@ -44,7 +25,9 @@ impl<'txn> Txn<'txn> {
         }
 
         let committed_entrysets = self
-            .get_snap_units_iter()
+            .snap
+            .ensure_collect_units()
+            .iter()
             .filter_map(|unit| unit.prim.as_ref());
         for entryset in committed_entrysets {
             let gotten = entryset.get_one(pk);
@@ -64,8 +47,6 @@ impl<'txn> Txn<'txn> {
         pk_lo: Option<&'txn PrimaryKey>,
         pk_hi: Option<&'txn PrimaryKey>,
     ) -> impl Iterator<Item = Entry<PKShared, PVShared>> {
-        self.ensure_collect_snap_units_vec();
-
         self.dependent_itvs_prim.add(Interval {
             lo_incl: pk_lo,
             hi_incl: pk_hi,
@@ -73,9 +54,8 @@ impl<'txn> Txn<'txn> {
 
         let stg = self.staging.as_ref().map(|stg| &stg.prim);
         let committed_entrysets = self
-            .snap_vec
-            .as_ref()
-            .unwrap()
+            .snap
+            .ensure_collect_units()
             .iter()
             .filter_map(|unit| unit.prim.as_ref());
         let kmerged_entries =
@@ -90,8 +70,6 @@ impl<'txn> Txn<'txn> {
         sv_lo: Option<&'txn SubValue>,
         sv_hi: Option<&'txn SubValue>,
     ) -> Result<impl Iterator<Item = Entry<SVPKShared, PVShared>>> {
-        self.ensure_collect_snap_units_vec();
-
         let ScndIdxState {
             scnd_idx_num,
             is_readable,
@@ -120,9 +98,8 @@ impl<'txn> Txn<'txn> {
             .as_ref()
             .and_then(|stg| stg.scnds.get(scnd_idx_num));
         let committed_entrysets = self
-            .snap_vec
-            .as_ref()
-            .unwrap()
+            .snap
+            .ensure_collect_units()
             .iter()
             .filter_map(|unit| unit.scnds.get(scnd_idx_num));
         let kmerged_entries =

@@ -154,8 +154,7 @@ impl<T> ListSnapshot<T> {
         self.tail_ptr
     }
 
-    /// For convenience, the output iterator's lifetime is specified as `'static`.
-    pub fn iter_excluding_head_and_tail<'a>(&'a self) -> ListIterator<'static, T> {
+    pub fn iter_excluding_head_and_tail<'a, 'b>(&'a self) -> ListIterator<'b, T> {
         let head_ref = unsafe { self.head_ptr.as_ref() };
         let tail_excl_ptr = match self.tail_ptr {
             None => ptr::null(),
