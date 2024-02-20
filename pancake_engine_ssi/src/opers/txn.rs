@@ -1,4 +1,4 @@
-use crate::ds_n_a::atomic_linked_list::{ListNode, ListSnapshot};
+use crate::ds_n_a::atomic_linked_list::{ListIterator, ListNode, ListSnapshot};
 use crate::ds_n_a::interval_set::IntervalSet;
 use crate::ds_n_a::send_ptr::NonNullSendPtr;
 use crate::{
@@ -12,6 +12,7 @@ use crate::{
 use anyhow::{anyhow, Result};
 use pancake_types::types::{PrimaryKey, SubValue};
 use std::collections::HashMap;
+use std::iter;
 use tokio::sync::RwLockReadGuard;
 
 mod conflict;
@@ -30,7 +31,7 @@ pub struct Txn<'txn> {
     db: &'txn DB,
     db_state_guard: RwLockReadGuard<'txn, DbState>,
 
-    snap: CachedSnap<'txn>,
+    snap: CachedSnap,
     snap_commit_ver: CommitVer,
     snap_list_ver: ListVer,
 
@@ -90,17 +91,22 @@ impl<'txn> Txn<'txn> {
     }
 }
 
-struct CachedSnap<'snap> {
+struct CachedSnap {
     list_snap: ListSnapshot<LsmElem>,
 
-    /// Lazily initialized.
-    units_cache: Option<Vec<&'snap CommittedUnit>>,
+    /// The lifetime is marked as `'static` for our convenience.
+    list_iter: ListIterator<'static, LsmElem>,
+
+    /// Lazily populated.
+    units_cache: Vec<&'static CommittedUnit>,
 }
-impl<'snap> CachedSnap<'snap> {
+impl CachedSnap {
     fn new(list_snap: ListSnapshot<LsmElem>) -> Self {
+        let list_iter = list_snap.iter_excluding_head_and_tail();
         Self {
             list_snap,
-            units_cache: None,
+            list_iter,
+            units_cache: vec![],
         }
     }
 
@@ -111,18 +117,29 @@ impl<'snap> CachedSnap<'snap> {
         self.list_snap.tail_ptr()
     }
 
-    fn ensure_collect_units(&mut self) -> &Vec<&'snap CommittedUnit> {
-        if self.units_cache.is_none() {
-            let units = self
-                .list_snap
-                .iter_excluding_head_and_tail()
-                .filter_map(|elem| match elem {
-                    LsmElem::CommittedUnit(unit) => Some(unit),
-                    LsmElem::Dummy { .. } => None,
-                })
-                .collect::<Vec<_>>();
-            self.units_cache = Some(units);
-        }
-        self.units_cache.as_ref().unwrap()
+    fn iter<'a>(&'a mut self) -> impl 'a + Iterator<Item = &'a CommittedUnit> {
+        let mut cache_i = 0;
+        let iter_fn = move || {
+            if cache_i < self.units_cache.len() {
+                let ret = self.units_cache[cache_i];
+                cache_i += 1;
+                return Some(ret);
+            } else {
+                loop {
+                    match self.list_iter.next() {
+                        Some(elem) => match elem {
+                            LsmElem::CommittedUnit(unit) => {
+                                self.units_cache.push(unit);
+                                cache_i += 1;
+                                return Some(unit);
+                            }
+                            LsmElem::Dummy { .. } => continue,
+                        },
+                        None => return None,
+                    }
+                }
+            }
+        };
+        iter::from_fn(iter_fn)
     }
 }

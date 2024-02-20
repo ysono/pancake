@@ -1,4 +1,4 @@
-use crate::ds_n_a::send_ptr::NonNullSendPtr;
+use crate::ds_n_a::send_ptr::{NonNullSendPtr, SendPtr};
 use std::ptr::{self, NonNull};
 use std::sync::atomic::{AtomicPtr, Ordering};
 
@@ -83,7 +83,7 @@ impl<T> AtomicLinkedList<T> {
     pub fn iter<'a>(&'a self) -> ListIterator<'a, T> {
         ListIterator {
             next_ptr_ref: &self.head_ptr,
-            tail_excl_ptr: ptr::null(),
+            tail_excl_ptr: SendPtr::from(ptr::null()),
         }
     }
 }
@@ -100,13 +100,13 @@ impl<T> Drop for AtomicLinkedList<T> {
 
 pub struct ListIterator<'a, T> {
     next_ptr_ref: &'a AtomicPtr<ListNode<T>>,
-    tail_excl_ptr: *const ListNode<T>,
+    tail_excl_ptr: SendPtr<ListNode<T>>,
 }
 impl<'a, T> Iterator for ListIterator<'a, T> {
     type Item = &'a T;
     fn next(&mut self) -> Option<Self::Item> {
         let curr_ptr = self.next_ptr_ref.load(Ordering::SeqCst).cast_const();
-        if curr_ptr.is_null() || (curr_ptr == self.tail_excl_ptr) {
+        if curr_ptr.is_null() || (curr_ptr == self.tail_excl_ptr.as_ptr()) {
             return None;
         }
         let curr_ref = unsafe { &*curr_ptr };
@@ -157,8 +157,8 @@ impl<T> ListSnapshot<T> {
     pub fn iter_excluding_head_and_tail<'a, 'b>(&'a self) -> ListIterator<'b, T> {
         let head_ref = unsafe { self.head_ptr.as_ref() };
         let tail_excl_ptr = match self.tail_ptr {
-            None => ptr::null(),
-            Some(tail_ptr) => tail_ptr.as_ptr(),
+            None => SendPtr::from(ptr::null()),
+            Some(tail_ptr) => *tail_ptr,
         };
         ListIterator {
             next_ptr_ref: &head_ref.next,

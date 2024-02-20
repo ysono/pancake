@@ -13,7 +13,7 @@ impl<'txn> Txn<'txn> {
             })
             .collect::<Vec<_>>();
 
-        for unit in self.snap.ensure_collect_units().iter() {
+        for unit in self.snap.iter() {
             if let Some(committed_prim) = unit.prim.as_ref() {
                 let has_conflict = dep_itvs_prim.overlaps_with(committed_prim.get_all_keys())?;
                 if has_conflict {

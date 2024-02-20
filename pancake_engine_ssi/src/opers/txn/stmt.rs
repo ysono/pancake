@@ -24,11 +24,7 @@ impl<'txn> Txn<'txn> {
             }
         }
 
-        let committed_entrysets = self
-            .snap
-            .ensure_collect_units()
-            .iter()
-            .filter_map(|unit| unit.prim.as_ref());
+        let committed_entrysets = self.snap.iter().filter_map(|unit| unit.prim.as_ref());
         for entryset in committed_entrysets {
             let gotten = entryset.get_one(pk);
             if let Some(entry) = gotten {
@@ -53,11 +49,7 @@ impl<'txn> Txn<'txn> {
         });
 
         let stg = self.staging.as_ref().map(|stg| &stg.prim);
-        let committed_entrysets = self
-            .snap
-            .ensure_collect_units()
-            .iter()
-            .filter_map(|unit| unit.prim.as_ref());
+        let committed_entrysets = self.snap.iter().filter_map(|unit| unit.prim.as_ref());
         let kmerged_entries =
             merging::merge_txnlocal_and_committed_entrysets(stg, committed_entrysets, pk_lo, pk_hi);
         let non_tomb_entries = kmerged_entries.filter_map(|entry| entry.to_option_entry());
@@ -99,7 +91,6 @@ impl<'txn> Txn<'txn> {
             .and_then(|stg| stg.scnds.get(scnd_idx_num));
         let committed_entrysets = self
             .snap
-            .ensure_collect_units()
             .iter()
             .filter_map(|unit| unit.scnds.get(scnd_idx_num));
         let kmerged_entries =
