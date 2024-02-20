@@ -944,6 +944,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "pancake_engine_common",
  "pancake_engine_serial",
  "pancake_engine_ssi",
  "pancake_types",

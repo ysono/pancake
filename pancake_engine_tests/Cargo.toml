@@ -9,6 +9,7 @@ async-trait = { workspace = true }
 rand = { workspace = true }
 tokio = { workspace = true }
 
+pancake_engine_common = { workspace = true }
 pancake_engine_serial = { workspace = true }
 pancake_engine_ssi = { workspace = true }
 pancake_types = { workspace = true }
