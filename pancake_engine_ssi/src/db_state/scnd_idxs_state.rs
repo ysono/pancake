@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use pancake_engine_common::fs_utils::{self, PathNameNum};
 use pancake_types::{io_utils, types::SubValueSpec};
 use std::collections::HashMap;
@@ -59,7 +59,7 @@ impl ScndIdxState {
         }
         let scnd_idx_num = str::from_utf8(&buf)?
             .parse::<u64>()
-            .map_err(|_| anyhow!("Invalid scnd_idx_num"))?;
+            .context("Invalid scnd_idx_num")?;
 
         /* is_readable */
         buf.clear();
@@ -116,7 +116,7 @@ impl ScndIdxsState {
         io_utils::read_until_then_trim(r, '\n' as u8, &mut buf)?;
         let next_scnd_idx_num = str::from_utf8(&buf)?
             .parse::<u64>()
-            .map_err(|_| anyhow!("Invalid next_scnd_idx_num"))?;
+            .context("Invalid next_scnd_idx_num")?;
         let next_scnd_idx_num = ScndIdxNum(next_scnd_idx_num);
 
         let mut scnd_idxs = HashMap::new();
@@ -145,6 +145,7 @@ impl ScndIdxsState {
     }
     pub fn ser<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let file = fs_utils::open_file(path, OpenOptions::new().create(true).write(true))?;
+        file.set_len(0)?;
         let mut w = BufWriter::new(file);
         self.do_ser(&mut w)?;
         w.flush()?;

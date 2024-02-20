@@ -1,5 +1,5 @@
 use crate::db_state::{ScndIdxNum, ScndIdxState, ScndIdxsState};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use pancake_engine_common::fs_utils;
 use pancake_types::types::SubValueSpec;
 use std::collections::HashMap;
@@ -18,7 +18,7 @@ impl DbState {
         let sis_path = scnd_idxs_state_file_path.as_ref();
         let scnd_idxs_state;
         if sis_path.exists() {
-            scnd_idxs_state = ScndIdxsState::deser(sis_path)?;
+            scnd_idxs_state = ScndIdxsState::deser(sis_path).context(format!("{sis_path:?}"))?;
             for (sv_spec, si_state) in scnd_idxs_state.scnd_idxs.iter() {
                 if si_state.is_readable == false {
                     return Err(anyhow!("Prior secondary index creation never completed for {sv_spec:?}. You should remove this secondary index's info manually from {sis_path:?}", ));
