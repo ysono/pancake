@@ -49,7 +49,7 @@ where
         let sstables_dir_path = lsm_dir_path.as_ref().join(SSTABLES_DIR_NAME);
         fs_utils::create_dir_all(&sstables_dir_path)?;
 
-        let memlog = WritableMemLog::load_or_new(&log_file_path)?;
+        let memlog = WritableMemLog::load_or_new(log_file_path)?;
 
         let mut sstable_file_paths = vec![];
         let sstables_dir = AntiCollisionParentDir::load_or_new(

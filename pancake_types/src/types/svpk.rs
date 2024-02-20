@@ -62,22 +62,21 @@ impl Borrow<PKShared> for SVPKShared {
         &self.pk
     }
 }
-impl Into<PKShared> for SVPKShared {
-    fn into(self) -> PKShared {
-        self.pk
+impl From<SVPKShared> for PKShared {
+    fn from(svpk: SVPKShared) -> PKShared {
+        svpk.pk
     }
 }
 
 /* SVPKShared is comparable against the same type. */
 impl PartialOrd for SVPKShared {
     fn partial_cmp(&self, other: &SVPKShared) -> Option<Ordering> {
-        let ord = self.sv.cmp(&other.sv).then_with(|| self.pk.cmp(&other.pk));
-        Some(ord)
+        Some(self.cmp(other))
     }
 }
 impl Ord for SVPKShared {
     fn cmp(&self, other: &SVPKShared) -> Ordering {
-        self.partial_cmp(other).unwrap()
+        self.sv.cmp(&other.sv).then_with(|| self.pk.cmp(&other.pk))
     }
 }
 

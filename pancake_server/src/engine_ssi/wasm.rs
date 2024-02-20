@@ -75,7 +75,7 @@ struct DbProvider {
 impl DbProvider {
     /// 'db > 'txn > 'one_try
     /// `'one_try` refers to the lifetime of one (re)try run of the transaction.
-    fn txn<'one_try>(&self) -> &mut Txn<'one_try> {
+    fn txn<'a, 'b, 'one_try>(&'a self) -> &'b mut Txn<'one_try> {
         let txn_ptr = self.txn_ptr as *mut Txn<'one_try>;
         unsafe { &mut *txn_ptr }
     }

@@ -119,7 +119,7 @@ impl SubValueSpec {
         let mut buf = vec![];
 
         /* datum_type */
-        io_utils::read_until_then_trim(r, ';' as u8, &mut buf)?;
+        io_utils::read_until_then_trim(r, b';', &mut buf)?;
         let datum_type_int = str::from_utf8(&buf)?.parse::<u8>()?;
         let datum_type_int = DatumTypeInt::from(datum_type_int);
         let datum_type = DatumType::try_from(datum_type_int)?;
@@ -128,7 +128,7 @@ impl SubValueSpec {
         let mut member_idxs = vec![];
         loop {
             buf.clear();
-            io_utils::read_until_then_trim(r, ',' as u8, &mut buf)?;
+            io_utils::read_until_then_trim(r, b',', &mut buf)?;
             if buf.is_empty() {
                 break;
             }

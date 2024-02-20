@@ -24,3 +24,6 @@ simple_get_pk_range = []
 simple_get_sv_range = []
 simple_put = []
 simple_del = []
+
+[lints]
+workspace = true

@@ -62,7 +62,7 @@ where
         let mut sst_iter = None;
         match self {
             Self::RMemLog(r_memlog) => {
-                let iter = r_memlog.memtable.iter().map(|(k, _v)| Entry::Ref((k, &())));
+                let iter = r_memlog.memtable.keys().map(|k| Entry::Ref((k, &())));
                 rml_iter = Some(iter);
             }
             Self::SSTable(sstable) => {

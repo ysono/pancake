@@ -1,3 +1,4 @@
+#[allow(clippy::module_inception)]
 mod db_state;
 mod scnd_idxs_state;
 

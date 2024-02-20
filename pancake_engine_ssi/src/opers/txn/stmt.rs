@@ -79,7 +79,7 @@ impl<'txn> Txn<'txn> {
         let itvset = self
             .dependent_itvs_scnds
             .entry(*scnd_idx_num)
-            .or_insert_with(|| IntervalSet::new());
+            .or_insert_with(IntervalSet::new);
         itvset.add(Interval {
             lo_incl: sv_lo,
             hi_incl: sv_hi,
@@ -105,7 +105,7 @@ impl<'txn> Txn<'txn> {
 
         self.ensure_create_staging()?;
 
-        self.put_scnd_stg_delta(pk, &old_pv, &new_pv)?;
+        self.put_scnd_stg_delta(pk, &old_pv, new_pv)?;
 
         let new_pv = OptDatum::<PVShared>::from(new_pv.clone());
         let stg = self.staging.as_mut().unwrap();

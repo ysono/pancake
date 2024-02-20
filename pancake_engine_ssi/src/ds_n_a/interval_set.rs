@@ -119,7 +119,7 @@ impl<'a, T> MergedIntervalSet<'a, T> {
                                 itv_iter.next();
                                 continue 'walk;
                             }
-                            _ => (),
+                            _ => {}
                         }
                     }
                     /* lo_incl < point <= hi_incl */

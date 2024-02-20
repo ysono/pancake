@@ -14,6 +14,7 @@ impl<T> SendPtr<T> {
     }
 }
 impl<T> Clone for SendPtr<T> {
+    #[allow(clippy::non_canonical_clone_impl)]
     fn clone(&self) -> Self {
         Self(self.0)
     }
@@ -32,6 +33,7 @@ impl<T> From<NonNull<T>> for NonNullSendPtr<T> {
     }
 }
 impl<T> Clone for NonNullSendPtr<T> {
+    #[allow(clippy::non_canonical_clone_impl)]
     fn clone(&self) -> Self {
         Self(self.0)
     }

@@ -24,7 +24,7 @@ impl DB {
     pub fn load_or_new<P: AsRef<Path>>(db_dir_path: P) -> Result<DB> {
         let db_dir_path = db_dir_path.as_ref();
 
-        fs_utils::create_dir_all(&db_dir_path)?;
+        fs_utils::create_dir_all(db_dir_path)?;
         let lock_dir = fs_utils::lock_file(db_dir_path)?;
 
         let prim_lsm_dir_path = db_dir_path.join(PRIM_LSM_DIR_NAME);
@@ -96,7 +96,7 @@ impl DB {
     }
 
     pub fn create_scnd_idx(&mut self, spec: Arc<SubValueSpec>) -> Result<()> {
-        if let Some(_) = self.scnd_idxs.get(&spec) {
+        if self.scnd_idxs.get(&spec).is_some() {
             return Ok(());
         }
 

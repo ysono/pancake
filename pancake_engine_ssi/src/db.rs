@@ -47,14 +47,14 @@ impl DB {
     ) -> Result<(Arc<Self>, FlushingAndCompactionWorker)> {
         let db_dir_path = db_dir_path.as_ref();
 
-        fs_utils::create_dir_all(&db_dir_path)?;
+        fs_utils::create_dir_all(db_dir_path)?;
         let lock_dir = fs_utils::lock_file(db_dir_path)?;
 
         let si_state_file_path = db_dir_path.join(SCND_IDXS_STATE_FILE_NAME);
         let lsm_dir_path = db_dir_path.join(LSM_DIR_NAME);
         let si_cr_dir_path = db_dir_path.join(ALL_SCND_IDX_CREATION_JOBS_DIR_NAME);
 
-        let db_state = DbState::load_or_new(&si_state_file_path)?;
+        let db_state = DbState::load_or_new(si_state_file_path)?;
 
         let (lsm_dir, lsm_state) = LsmDir::load_or_new(lsm_dir_path)?;
 

@@ -18,9 +18,9 @@ impl From<PathNameNum> for ScndIdxNum {
         Self(*num)
     }
 }
-impl Into<PathNameNum> for ScndIdxNum {
-    fn into(self) -> PathNameNum {
-        PathNameNum::from(self.0)
+impl From<ScndIdxNum> for PathNameNum {
+    fn from(si_num: ScndIdxNum) -> PathNameNum {
+        PathNameNum::from(si_num.0)
     }
 }
 impl ScndIdxNum {
@@ -39,6 +39,7 @@ pub struct ScndIdxState {
     pub is_readable: bool,
 }
 
+#[allow(clippy::write_with_newline)] // We must be consistent re: '\n' vs '\r\n'.
 impl ScndIdxState {
     fn do_ser<W: Write>(&self, w: &mut BufWriter<W>) -> Result<()> {
         write!(
@@ -53,7 +54,7 @@ impl ScndIdxState {
         let mut buf = vec![];
 
         /* scnd_idx_num */
-        io_utils::read_until_then_trim(r, ',' as u8, &mut buf)?;
+        io_utils::read_until_then_trim(r, b',', &mut buf)?;
         if buf.is_empty() {
             return Ok(None);
         }
@@ -63,7 +64,7 @@ impl ScndIdxState {
 
         /* is_readable */
         buf.clear();
-        io_utils::read_until_then_trim(r, '\n' as u8, &mut buf)?;
+        io_utils::read_until_then_trim(r, b'\n', &mut buf)?;
         let is_readable_str = str::from_utf8(&buf)?;
         let is_readable = if is_readable_str == "T" {
             true
@@ -86,6 +87,7 @@ pub struct ScndIdxsState {
     pub(super) next_scnd_idx_num: ScndIdxNum,
 }
 
+#[allow(clippy::write_with_newline)] // We must be consistent re: '\n' vs '\r\n'.
 impl ScndIdxsState {
     pub fn new_empty() -> Self {
         Self {
@@ -113,7 +115,7 @@ impl ScndIdxsState {
         let mut buf = vec![];
 
         /* next_scnd_idx_num */
-        io_utils::read_until_then_trim(r, '\n' as u8, &mut buf)?;
+        io_utils::read_until_then_trim(r, b'\n', &mut buf)?;
         let next_scnd_idx_num = str::from_utf8(&buf)?
             .parse::<u64>()
             .context("Invalid next_scnd_idx_num")?;
@@ -124,7 +126,7 @@ impl ScndIdxsState {
             buf.clear();
 
             /* sv_spec */
-            io_utils::read_until_then_trim(r, '\n' as u8, &mut buf)?;
+            io_utils::read_until_then_trim(r, b'\n', &mut buf)?;
             if buf.is_empty() {
                 break;
             }

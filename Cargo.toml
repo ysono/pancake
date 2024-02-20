@@ -44,3 +44,12 @@ pancake_engine_common = { path = "./pancake_engine_common" }
 pancake_engine_serial = { path = "./pancake_engine_serial" }
 pancake_engine_ssi = { path = "./pancake_engine_ssi" }
 pancake_types = { path = "./pancake_types" }
+
+[workspace.lints.clippy]
+bool_comparison = "allow"
+len_zero = "allow"
+let_and_return = "allow"
+manual_flatten = "allow"
+needless_lifetimes = "allow"
+needless_return = "allow"
+single_match = "allow"

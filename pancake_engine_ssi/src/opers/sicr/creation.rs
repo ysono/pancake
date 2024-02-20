@@ -169,10 +169,9 @@ impl<'job> ScndIdxCreationJob<'job> {
 
             /* Note, we wrote as (svpk, pv), and
             now we're reading as (svpk, optdat<pv>). This is valid. */
-            let sstable;
-            if interm_file_paths.len() == 1 {
+            let sstable = if interm_file_paths.len() == 1 {
                 fs_utils::rename_file(interm_file_paths.first().unwrap(), &sstable_path)?;
-                sstable = SSTable::<SVPKShared, OptDatum<PVShared>>::load(sstable_path)?;
+                SSTable::<SVPKShared, OptDatum<PVShared>>::load(sstable_path)?
             } else {
                 let entry_iters = interm_file_paths
                     .into_iter()
@@ -186,8 +185,8 @@ impl<'job> ScndIdxCreationJob<'job> {
                     .collect::<Result<Vec<_>>>()?;
                 let entries = common_merging::merge_entry_iters(entry_iters.into_iter());
                 let entries = entries.map(Entry::Own);
-                sstable = SSTable::new(entries, sstable_path)?;
-            }
+                SSTable::new(entries, sstable_path)?
+            };
 
             compacted_unit.scnds.insert(si_num, sstable);
 

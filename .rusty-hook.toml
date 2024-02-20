@@ -1,5 +1,5 @@
 [hooks]
-pre-commit = "cargo fmt --check && cargo doc --no-deps --document-private-items"
+pre-commit = "cargo fmt --check && cargo clippy && cargo doc --no-deps --document-private-items"
 
 [logging]
 verbose = true

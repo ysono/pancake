@@ -16,7 +16,7 @@ impl LsmDir {
     pub fn load_or_new<P: AsRef<Path>>(lsm_dir_path: P) -> Result<(Self, LsmState)> {
         let lsm_dir_path = lsm_dir_path.as_ref();
 
-        let (pq, dir) = Self::collect_committed_unit_dirs(&lsm_dir_path)?;
+        let (pq, dir) = Self::collect_committed_unit_dirs(lsm_dir_path)?;
 
         let (committed_units, curr_commit_ver) = Self::load_committed_units(pq)?;
 
@@ -67,7 +67,7 @@ impl LsmDir {
     fn load_committed_units(mut pq: BinaryHeap<CIUD>) -> Result<(Vec<CommittedUnit>, CommitVer)> {
         let curr_commit_ver = match pq.peek() {
             None => CommitVer::AT_EMPTY_DATASTORE,
-            Some(committed_unit) => committed_unit.commit_info.commit_ver_hi_incl().clone(),
+            Some(committed_unit) => *(committed_unit.commit_info.commit_ver_hi_incl()),
         };
 
         let mut committed_units = Vec::<CommittedUnit>::new();
@@ -95,6 +95,7 @@ impl LsmDir {
 }
 
 #[derive(PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)]
 struct CIUD {
     commit_info: CommitInfo,
     unit_dir: UnitDir,
@@ -105,6 +106,11 @@ impl PartialOrd for CIUD {
     /// 1. [`CommitInfo::commit_ver_hi_incl`]
     /// 1. [`CommitInfo::replacement_num`]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for CIUD {
+    fn cmp(&self, other: &Self) -> Ordering {
         let slf_commit_ver = &self.commit_info.commit_ver_hi_incl;
         let oth_commit_ver = &other.commit_info.commit_ver_hi_incl;
         let commit_ver_ord = slf_commit_ver.cmp(oth_commit_ver);
@@ -114,12 +120,6 @@ impl PartialOrd for CIUD {
             let oth_rn = &other.commit_info.replacement_num;
             slf_rn.cmp(oth_rn)
         });
-
-        Some(ord)
-    }
-}
-impl Ord for CIUD {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
+        ord
     }
 }

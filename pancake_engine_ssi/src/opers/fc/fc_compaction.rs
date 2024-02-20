@@ -37,7 +37,7 @@ impl<'job> FCJob<'job> {
     /// - The slice contains 2+ Units (regardless of MemLogs or SSTables).
     ///
     /// This is an arbitrary policy, and can be tuned in the future.
-    fn should_slice_be_compacted<'data>(units: &Vec<&'data CommittedUnit>) -> bool {
+    fn should_slice_be_compacted<'data>(units: &[&'data CommittedUnit]) -> bool {
         (units.len() >= 2)
             || (units
                 .iter()
@@ -46,7 +46,7 @@ impl<'job> FCJob<'job> {
 
     fn potentially_create_compacted_unit<'data>(
         &self,
-        existing_units: &Vec<&'data CommittedUnit>,
+        existing_units: &[&'data CommittedUnit],
         skip_tombstones: bool,
     ) -> Result<Option<CompactedUnit>> {
         let mut maybe_output_unit = None;
@@ -65,7 +65,7 @@ impl<'job> FCJob<'job> {
                 .filter_map(|unit| unit.scnds.get(scnd_idx_num));
             let compacted_entries = Self::derive_kmerged_iter(existing_entrysets, skip_tombstones);
             let mut compacted_entries = compacted_entries.peekable();
-            if let Some(_) = compacted_entries.peek() {
+            if compacted_entries.peek().is_some() {
                 ensure_create_output_unit(&mut maybe_output_unit)?;
                 let out_unit = maybe_output_unit.as_mut().unwrap();
 
@@ -80,7 +80,7 @@ impl<'job> FCJob<'job> {
             let existing_entrysets = existing_units.iter().filter_map(|unit| unit.prim.as_ref());
             let compacted_entries = Self::derive_kmerged_iter(existing_entrysets, skip_tombstones);
             let mut compacted_entries = compacted_entries.peekable();
-            if let Some(_) = compacted_entries.peek() {
+            if compacted_entries.peek().is_some() {
                 ensure_create_output_unit(&mut maybe_output_unit)?;
                 let out_unit = maybe_output_unit.as_mut().unwrap();
 
@@ -120,15 +120,13 @@ impl<'job> FCJob<'job> {
         compacted_entries
     }
 
-    fn derive_commit_info<'data>(units: &Vec<&'data CommittedUnit>) -> CommitInfo {
-        #[rustfmt::skip]
-        let commit_ver_hi_incl = units.first().unwrap().commit_info.commit_ver_hi_incl().clone();
-        #[rustfmt::skip]
-        let commit_ver_lo_incl = units.last().unwrap().commit_info.commit_ver_lo_incl().clone();
+    fn derive_commit_info<'data>(units: &[&'data CommittedUnit]) -> CommitInfo {
+        let commit_ver_hi_incl = *(units.first().unwrap().commit_info.commit_ver_hi_incl());
+        let commit_ver_lo_incl = *(units.last().unwrap().commit_info.commit_ver_lo_incl());
 
         let replc_nums = units
             .iter()
-            .map(|unit| unit.commit_info.replacement_num().clone());
+            .map(|unit| *(unit.commit_info.replacement_num()));
         let replacement_num = ReplacementNum::new_larger_than_all_of(replc_nums);
 
         CommitInfo {

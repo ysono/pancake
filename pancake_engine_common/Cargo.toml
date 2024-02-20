@@ -11,3 +11,6 @@ itertools = { workspace = true }
 shorthand = { workspace = true }
 
 pancake_types = { workspace = true }
+
+[lints]
+workspace = true

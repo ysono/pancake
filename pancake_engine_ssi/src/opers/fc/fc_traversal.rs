@@ -157,6 +157,7 @@ impl<'job> FCJob<'job> {
     }
 
     /// @return `Some` iff the segment starting with @arg `segm_head_info` is F+C'able.
+    #[allow(clippy::type_complexity)]
     fn collect_one_segment<'ret>(
         segm_head_info: NodeInfo,
     ) -> Option<(

@@ -25,7 +25,7 @@ fn main() -> Result<()> {
 
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("const_gen.rs");
-    fs::write(&dest_path, const_declarations).unwrap();
+    fs::write(dest_path, const_declarations).unwrap();
 
     println!("cargo:rerun-if-changed=build.rs");
 

@@ -37,12 +37,12 @@ impl SecondaryIndex {
         let spec_file_path = Self::spec_file_path(&scnd_idx_dir_path);
         let lsm_dir_path = Self::lsm_dir_path(&scnd_idx_dir_path);
 
-        let spec_file = fs_utils::open_file(&spec_file_path, OpenOptions::new().read(true))?;
+        let spec_file = fs_utils::open_file(spec_file_path, OpenOptions::new().read(true))?;
         let mut spec_reader = BufReader::new(spec_file);
         let spec = SubValueSpec::deser(&mut spec_reader)?;
         let spec = Arc::new(spec);
 
-        let lsm = LSMTree::load_or_new(&lsm_dir_path)?;
+        let lsm = LSMTree::load_or_new(lsm_dir_path)?;
 
         Ok(Self {
             dir_path: scnd_idx_dir_path.as_ref().into(),
@@ -61,7 +61,7 @@ impl SecondaryIndex {
         fs_utils::create_dir_all(&lsm_dir_path)?;
 
         let spec_file = fs_utils::open_file(
-            &spec_file_path,
+            spec_file_path,
             OpenOptions::new().create_new(true).write(true),
         )?;
         let mut spec_writer = BufWriter::new(spec_file);

@@ -36,7 +36,7 @@ impl UnitDir {
         let file_path = file_path.as_ref();
         let file_name = file_path.file_name().and_then(|os_str| os_str.to_str());
         let path_name_num = file_name.and_then(|s| Self::scnd_file_name_pattern().parse(s).ok());
-        let si_num = path_name_num.map(|n| ScndIdxNum::from(n));
+        let si_num = path_name_num.map(ScndIdxNum::from);
         si_num
     }
     pub fn list_scnd_file_paths<'a>(

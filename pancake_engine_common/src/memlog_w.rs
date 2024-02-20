@@ -67,8 +67,8 @@ where
     }
 }
 
-impl<K, V> Into<ReadonlyMemLog<K, V>> for WritableMemLog<K, V> {
-    fn into(self) -> ReadonlyMemLog<K, V> {
-        self.r_memlog
+impl<K, V> From<WritableMemLog<K, V>> for ReadonlyMemLog<K, V> {
+    fn from(w_memlog: WritableMemLog<K, V>) -> ReadonlyMemLog<K, V> {
+        w_memlog.r_memlog
     }
 }

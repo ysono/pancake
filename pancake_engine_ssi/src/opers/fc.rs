@@ -40,7 +40,7 @@ impl FlushingAndCompactionWorker {
                 }
                 res = (self.min_held_list_ver_rx.changed()) => {
                     res.ok();
-                    let min_held_list_ver = self.min_held_list_ver_rx.borrow().clone();
+                    let min_held_list_ver = *(self.min_held_list_ver_rx.borrow());
                     self.dangling_nodes.gc_old_nodes(min_held_list_ver)?;
                 }
                 res = (self.is_terminating_rx.changed()) => {
