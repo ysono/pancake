@@ -8,6 +8,23 @@ mod test {
     use std::sync::Arc;
     use std::time::Duration;
 
+    fn elem_into_node<T>(elem: T) -> Box<ListNode<T>> {
+        Box::new(ListNode {
+            elem,
+            next: AtomicPtr::default(),
+        })
+    }
+
+    fn new_snap_from_nonsend<T>(
+        head_ptr: NonNull<ListNode<T>>,
+        tail_ptr: Option<NonNull<ListNode<T>>>,
+    ) -> ListSnapshot<T> {
+        ListSnapshot::new(
+            NonNullSendPtr::from(head_ptr),
+            tail_ptr.map(NonNullSendPtr::from),
+        )
+    }
+
     fn assert_node_elem<T>(exp_elem: T, node_ptr: NonNull<ListNode<T>>)
     where
         T: Debug + PartialEq,
@@ -31,7 +48,7 @@ mod test {
     {
         let exp = exp_elems.collect::<Vec<_>>();
         let act = snap
-            .iter_excluding_head_and_tail()
+            .into_iter_including_head_excluding_tail()
             .cloned()
             .collect::<Vec<_>>();
         assert_eq!(exp, act);
@@ -46,7 +63,7 @@ mod test {
         assert_list_elems(&exp_elems, &lst);
 
         let mut push_then_assert = |elem: i32| {
-            let node_ptr = lst.push_head_elem(elem);
+            let node_ptr = lst.push_head_node(elem_into_node(elem));
             assert_node_elem(elem, node_ptr);
 
             exp_elems.push_front(elem);
@@ -61,22 +78,22 @@ mod test {
         }
         let node4_ptr = head_ptr;
 
-        let iter_3_0 = ListSnapshot::new_tailless(head_ptr);
+        let iter_4_0 = new_snap_from_nonsend(head_ptr, None);
 
         for elem in 5..=9 {
             head_ptr = push_then_assert(elem);
         }
 
-        let iter_8_0 = ListSnapshot::new_tailless(head_ptr);
-        let iter_8_5 = ListSnapshot::new(head_ptr, node4_ptr);
+        let iter_9_0 = new_snap_from_nonsend(head_ptr, None);
+        let iter_9_5 = new_snap_from_nonsend(head_ptr, Some(node4_ptr));
 
         for elem in 10..=14 {
             push_then_assert(elem);
         }
 
-        assert_snap_elems((0..=3).rev(), iter_3_0);
-        assert_snap_elems((0..=8).rev(), iter_8_0);
-        assert_snap_elems((5..=8).rev(), iter_8_5);
+        assert_snap_elems((0..=4).rev(), iter_4_0);
+        assert_snap_elems((0..=9).rev(), iter_9_0);
+        assert_snap_elems((5..=9).rev(), iter_9_5);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -91,7 +108,7 @@ mod test {
             let lst_cloned = Arc::clone(&lst);
             let task = tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(1)).await;
-                lst_cloned.push_head_elem(val);
+                lst_cloned.push_head_node(elem_into_node(val));
             });
             tasks.push(task);
         }

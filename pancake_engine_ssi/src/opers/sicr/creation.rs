@@ -9,7 +9,7 @@ use crate::{
         unit::{
             CommitDataType, CommitInfo, CommitVer, CommittedUnit, CompactedUnit, ReplacementNum,
         },
-        LsmElem,
+        LsmElem, LsmElemType,
     },
     opers::sicr::{ScndIdxCreationJob, ScndIdxCreationJobDir},
 };
@@ -38,9 +38,7 @@ impl<'job> ScndIdxCreationJob<'job> {
         si_num: ScndIdxNum,
         output_commit_ver: CommitVer,
     ) -> Result<Option<CommittedUnit>> {
-        let snap = ListSnapshot::new_tailless(snap_head);
-
-        let prim_entries = Self::derive_prim_entries(&snap);
+        let prim_entries = Self::derive_prim_entries(snap_head);
 
         let scnd_entries = Self::derive_scnd_entries(prim_entries, sv_spec);
 
@@ -60,13 +58,16 @@ impl<'job> ScndIdxCreationJob<'job> {
     }
 
     fn derive_prim_entries<'snap>(
-        snap: &'snap ListSnapshot<LsmElem>,
+        snap_head: NonNullSendPtr<ListNode<LsmElem>>,
     ) -> impl Iterator<Item = Entry<'snap, PKShared, PVShared>> {
+        let snap = ListSnapshot::new(snap_head, None);
+
+        /* The first element is the fence dummy that we pushed. We skip it (implicitly). */
         let prim_entrysets = snap
-            .iter_excluding_head_and_tail()
-            .filter_map(|elem| match elem {
-                LsmElem::Dummy { .. } => None,
-                LsmElem::CommittedUnit(unit) => unit.prim.as_ref(),
+            .into_iter_including_head_excluding_tail()
+            .filter_map(|elem| match &elem.elem_type {
+                LsmElemType::Dummy { .. } => None,
+                LsmElemType::CommittedUnit(unit) => unit.prim.as_ref(),
             });
         let prim_entries = merging::merge_committed_entrysets(
             prim_entrysets,

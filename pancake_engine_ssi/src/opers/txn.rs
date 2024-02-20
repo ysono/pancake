@@ -1,11 +1,11 @@
-use crate::ds_n_a::atomic_linked_list::{ListIterator, ListNode, ListSnapshot};
+use crate::ds_n_a::atomic_linked_list::{ListNode, ListSnapshot, ListSnapshotIterator};
 use crate::ds_n_a::interval_set::IntervalSet;
 use crate::ds_n_a::send_ptr::NonNullSendPtr;
 use crate::{
     db_state::{DbState, ScndIdxNum},
     lsm::{
         unit::{CommitVer, CommittedUnit, StagingUnit},
-        ListVer, LsmElem,
+        ListVer, LsmElem, LsmElemType,
     },
     DB,
 };
@@ -92,29 +92,26 @@ impl<'txn> Txn<'txn> {
 }
 
 struct CachedSnap {
-    list_snap: ListSnapshot<LsmElem>,
-
     /// The lifetime is marked as `'static` for our convenience.
-    list_iter: ListIterator<'static, LsmElem>,
+    list_iter: ListSnapshotIterator<'static, LsmElem>,
 
     /// Lazily populated.
     units_cache: Vec<&'static CommittedUnit>,
 }
 impl CachedSnap {
     fn new(list_snap: ListSnapshot<LsmElem>) -> Self {
-        let list_iter = list_snap.iter_excluding_head_and_tail();
+        let list_iter = list_snap.into_iter_including_head_excluding_tail();
         Self {
-            list_snap,
             list_iter,
             units_cache: vec![],
         }
     }
 
     fn head_ptr(&self) -> NonNullSendPtr<ListNode<LsmElem>> {
-        self.list_snap.head_ptr()
+        self.list_iter.snap().head_ptr()
     }
     fn tail_ptr(&self) -> Option<NonNullSendPtr<ListNode<LsmElem>>> {
-        self.list_snap.tail_ptr()
+        self.list_iter.snap().tail_ptr()
     }
 
     fn iter<'a>(&'a mut self) -> impl 'a + Iterator<Item = &'a CommittedUnit> {
@@ -127,13 +124,13 @@ impl CachedSnap {
             } else {
                 loop {
                     match self.list_iter.next() {
-                        Some(elem) => match elem {
-                            LsmElem::CommittedUnit(unit) => {
+                        Some(elem) => match &elem.elem_type {
+                            LsmElemType::CommittedUnit(unit) => {
                                 self.units_cache.push(unit);
                                 cache_i += 1;
                                 return Some(unit);
                             }
-                            LsmElem::Dummy { .. } => continue,
+                            LsmElemType::Dummy { .. } => continue,
                         },
                         None => return None,
                     }

@@ -1,4 +1,5 @@
 use crate::ds_n_a::send_ptr::{NonNullSendPtr, SendPtr};
+use derive_more::Constructor;
 use std::ptr::{self, NonNull};
 use std::sync::atomic::{AtomicPtr, Ordering};
 
@@ -47,14 +48,6 @@ impl<T> AtomicLinkedList<T> {
     pub fn head_node_ptr(&self) -> Option<NonNull<ListNode<T>>> {
         let head_ptr = self.head_ptr.load(Ordering::SeqCst);
         NonNull::new(head_ptr)
-    }
-
-    pub fn push_head_elem(&self, elem: T) -> NonNull<ListNode<T>> {
-        let y_own = Box::new(ListNode {
-            elem,
-            next: AtomicPtr::default(),
-        });
-        self.push_head_node(y_own)
     }
 
     pub fn push_head_node(&self, y_own: Box<ListNode<T>>) -> NonNull<ListNode<T>> {
@@ -118,35 +111,12 @@ impl<'a, T> Iterator for ListIterator<'a, T> {
 /// A non-empty snapshot of an [`AtomicLinkedList`].
 ///
 /// The relationship between any instance of this type and any instance of [`AtomicLinkedList`] is strictly implicit.
+#[derive(Constructor)]
 pub struct ListSnapshot<T> {
     head_ptr: NonNullSendPtr<ListNode<T>>,
     tail_ptr: Option<NonNullSendPtr<ListNode<T>>>,
 }
 impl<T> ListSnapshot<T> {
-    pub fn new<PH, PT>(head_ptr: PH, tail_ptr: PT) -> Self
-    where
-        NonNullSendPtr<ListNode<T>>: From<PH>,
-        NonNullSendPtr<ListNode<T>>: From<PT>,
-    {
-        Self {
-            head_ptr: NonNullSendPtr::from(head_ptr),
-            tail_ptr: Some(NonNullSendPtr::from(tail_ptr)),
-        }
-    }
-
-    /// If [`Self::new()`] took [`Option`] as the arg for the tail_ptr,
-    /// and if the caller specifies `None`, then the caller must specify the type signature (`None::<Foo>`),
-    /// which is annoying, hence this separate constructor.
-    pub fn new_tailless<PH>(head_ptr: PH) -> Self
-    where
-        NonNullSendPtr<ListNode<T>>: From<PH>,
-    {
-        Self {
-            head_ptr: NonNullSendPtr::from(head_ptr),
-            tail_ptr: None,
-        }
-    }
-
     pub fn head_ptr(&self) -> NonNullSendPtr<ListNode<T>> {
         self.head_ptr
     }
@@ -154,15 +124,51 @@ impl<T> ListSnapshot<T> {
         self.tail_ptr
     }
 
-    pub fn iter_excluding_head_and_tail<'a, 'b>(&'a self) -> ListIterator<'b, T> {
-        let head_ref = unsafe { self.head_ptr.as_ref() };
-        let tail_excl_ptr = match self.tail_ptr {
+    pub fn into_iter_including_head_excluding_tail<'iter>(self) -> ListSnapshotIterator<'iter, T> {
+        ListSnapshotIterator::new(self)
+    }
+}
+
+pub struct ListSnapshotIterator<'iter, T> {
+    snap: ListSnapshot<T>,
+
+    did_iterate_head: bool,
+    remaining_iter: ListIterator<'iter, T>,
+}
+impl<'iter, T> ListSnapshotIterator<'iter, T> {
+    fn new(snap: ListSnapshot<T>) -> Self {
+        let head_ref = unsafe { snap.head_ptr.as_ref() };
+        let tail_excl_ptr = match snap.tail_ptr {
             None => SendPtr::from(ptr::null()),
             Some(tail_ptr) => *tail_ptr,
         };
-        ListIterator {
+        let remaining_iter = ListIterator {
             next_ptr_ref: &head_ref.next,
             tail_excl_ptr,
+        };
+
+        Self {
+            snap,
+
+            did_iterate_head: false,
+            remaining_iter,
+        }
+    }
+
+    pub fn snap(&self) -> &ListSnapshot<T> {
+        &self.snap
+    }
+}
+impl<'iter, T> Iterator for ListSnapshotIterator<'iter, T> {
+    type Item = &'iter T;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.did_iterate_head == false {
+            self.did_iterate_head = true;
+
+            let head_ref = unsafe { self.snap.head_ptr.as_ref() };
+            return Some(&head_ref.elem);
+        } else {
+            return self.remaining_iter.next();
         }
     }
 }

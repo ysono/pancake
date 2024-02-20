@@ -5,11 +5,11 @@ use crate::{
     lsm::{
         lsm_state_utils,
         unit::{CommitVer, CommittedUnit},
-        LsmElem,
+        LsmElem, LsmElemType,
     },
     opers::fc::FlushAndCompactRequest,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use derive_more::Display;
 use pancake_types::types::SubValueSpec;
 use std::sync::atomic::Ordering;
@@ -89,7 +89,7 @@ impl<'job> ScndIdxCreationJob<'job> {
         }
 
         /* The new_head is malloc'd outside the two RwLock guards. */
-        let prepped_new_head = lsm_state_utils::new_dummy_node(0, true);
+        let prepped_new_head = lsm_state_utils::new_dummy_node(true, 0);
         let si_num;
         let snap_head_ptr;
         let output_commit_ver;
@@ -132,8 +132,12 @@ impl<'job> ScndIdxCreationJob<'job> {
             .fc_request_tx()
             .send(fc_req_msg)
             .await
-            .map_err(|_e| anyhow!("The F+C worker appears dead"))?;
-        response_rx.await.map_err(|e| anyhow!(e))?;
+            .map_err(|e| anyhow!(e.to_string()))
+            .context("Could not send to the F+C worker")?;
+        response_rx
+            .await
+            .map_err(|e| anyhow!(e))
+            .context("Could not receive from the F+C worker")?;
 
         Ok(())
     }
@@ -141,7 +145,7 @@ impl<'job> ScndIdxCreationJob<'job> {
     fn insert_node(&self, snap_head: &ListNode<LsmElem>, committed_unit: CommittedUnit) {
         let snap_second_ptr = snap_head.next.load(Ordering::SeqCst);
 
-        let node_own = lsm_state_utils::new_unit_node(committed_unit);
+        let node_own = lsm_state_utils::new_unit_node(committed_unit, 0);
         node_own.next.store(snap_second_ptr, Ordering::SeqCst);
 
         let node_ptr = Box::into_raw(node_own);
@@ -153,7 +157,7 @@ impl<'job> ScndIdxCreationJob<'job> {
         snap_head: &ListNode<LsmElem>,
         sv_spec: &SubValueSpec,
     ) -> Result<()> {
-        if let LsmElem::Dummy { is_fence, .. } = &snap_head.elem {
+        if let LsmElemType::Dummy { is_fence, .. } = &snap_head.elem.elem_type {
             is_fence.store(false, Ordering::SeqCst);
         }
 
@@ -164,7 +168,10 @@ impl<'job> ScndIdxCreationJob<'job> {
         }
 
         let send_res = self.db.fc_avail_tx().send(());
-        send_res.ok(); // If F+C couldn't receive, the DB must be termianting. Ignore.
+        if let Err(e) = send_res {
+            /* If F+C couldn't receive, the DB must be termianting. Ignore. */
+            eprintln!("SICr couldn't notify fc_avail to F+C. {e}");
+        }
 
         Ok(())
     }

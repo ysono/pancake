@@ -1,7 +1,7 @@
 use crate::ds_n_a::atomic_linked_list::ListNode;
 use crate::ds_n_a::send_ptr::NonNullSendPtr;
 use crate::{
-    lsm::{ListVer, LsmElem},
+    lsm::{ListVer, LsmElem, LsmElemType},
     opers::fc::FlushingAndCompactionWorker,
 };
 use anyhow::Result;
@@ -39,11 +39,11 @@ impl DanglingNodeSetsDeque {
                 for nodes in set.nodes {
                     for node_ptr in nodes.into_iter() {
                         let node_own = unsafe { Box::from_raw(node_ptr.as_ptr().cast_mut()) };
-                        match node_own.elem {
-                            LsmElem::CommittedUnit(unit) => {
+                        match node_own.elem.elem_type {
+                            LsmElemType::CommittedUnit(unit) => {
                                 unit.remove_dir()?;
                             }
-                            LsmElem::Dummy { .. } => {}
+                            LsmElemType::Dummy { .. } => {}
                         }
                     }
                 }

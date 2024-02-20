@@ -20,10 +20,10 @@ impl<'job> FCJob<'job> {
             return Ok(CompactionResult::NoChange);
         }
 
-        let mut maybe_compacted_unit =
+        let maybe_compacted_unit =
             self.potentially_create_compacted_unit(&units, skip_tombstones)?;
 
-        if let Some(compacted_unit) = maybe_compacted_unit.take() {
+        if let Some(compacted_unit) = maybe_compacted_unit {
             let commit_info = Self::derive_commit_info(&units);
             let committed_unit = CommittedUnit::from_compacted(compacted_unit, commit_info)?;
             return Ok(CompactionResult::Some(committed_unit));
@@ -105,7 +105,7 @@ impl<'job> FCJob<'job> {
         let compacted_entries =
             merging::merge_committed_entrysets(entrysets, None::<&K>, None::<&K>);
         let compacted_entries = compacted_entries.filter(move |entry| {
-            if skip_tombstones {
+            if skip_tombstones == true {
                 match entry.try_borrow() {
                     Err(_) => true,
                     Ok((_, optdat_v)) => match optdat_v {

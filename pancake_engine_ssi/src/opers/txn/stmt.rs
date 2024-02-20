@@ -58,7 +58,7 @@ impl<'txn> Txn<'txn> {
 
     pub fn get_sv_range(
         &mut self,
-        sv_spec_arg: &'txn SubValueSpec,
+        sv_spec_arg: &SubValueSpec,
         sv_lo: Option<&'txn SubValue>,
         sv_hi: Option<&'txn SubValue>,
     ) -> Result<impl Iterator<Item = Entry<SVPKShared, PVShared>>> {
