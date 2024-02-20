@@ -16,7 +16,9 @@ cargo run --release --package wit-component --bin wit-component -- --output comp
 ## Running
 
 ```sh
-cargo run --package pancake_server
+# Run 
+cargo run --package pancake_server --bin pancake_server_serial
+cargo run --package pancake_server --bin pancake_server_ssi
 
 ENGINE_VARIETY="${1:-ssi}"
 DB="localhost:3000/${ENGINE_VARIETY}"

@@ -100,7 +100,7 @@
 //! It's meant to be a stop-gap impl.
 //! It ought to be replaced by one based on a lexer and a parser.
 
-use crate::api::{Operation, SearchRange, Statement};
+use crate::oper::api::{Operation, SearchRange, Statement};
 use anyhow::{anyhow, Context, Result};
 use pancake_types::serde::{Datum, DatumType};
 use pancake_types::types::{PrimaryKey, SubValue, SubValueSpec, Value};

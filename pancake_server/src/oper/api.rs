@@ -1,13 +1,6 @@
 use pancake_types::types::{PrimaryKey, SubValue, SubValueSpec, Value};
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum Statement {
-    GetPK(SearchRange<PrimaryKey>),
-    GetSV(SubValueSpec, SearchRange<SubValue>),
-    Put(PrimaryKey, Option<Value>),
-}
-
-#[derive(PartialEq, Eq, Debug)]
 pub enum Operation {
     Query(Statement),
     CreateScndIdx(SubValueSpec),
@@ -18,6 +11,13 @@ impl From<Statement> for Operation {
     fn from(stmt: Statement) -> Self {
         Self::Query(stmt)
     }
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub enum Statement {
+    GetPK(SearchRange<PrimaryKey>),
+    GetSV(SubValueSpec, SearchRange<SubValue>),
+    Put(PrimaryKey, Option<Value>),
 }
 
 #[derive(PartialEq, Eq, Debug)]

@@ -5,9 +5,10 @@ edition = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-hyper = { workspace = true }
+axum = { workspace = true }
+derive_more = { workspace = true }
 regex = { workspace = true }
-routerify = { workspace = true }
+shorthand = { workspace = true }
 tokio = { workspace = true }
 wit-bindgen-host-wasmtime-rust = { workspace = true }
 

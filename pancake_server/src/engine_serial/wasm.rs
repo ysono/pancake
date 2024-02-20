@@ -2,7 +2,8 @@ use anyhow::{anyhow, Result};
 use pancake_engine_serial::DB;
 use pancake_types::types::{Deser, PrimaryKey, Ser, SubValue, SubValueSpec, Value};
 use std::borrow::BorrowMut;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use wit_bindgen_host_wasmtime_rust::wasmtime::{
     self,
     component::{Component, Linker},
@@ -34,9 +35,9 @@ impl WasmEngine {
         Ok(Self { db, engine, linker })
     }
 
-    pub fn serve(&self, compo_bytes: &[u8]) -> Result<String> {
+    pub async fn serve(&self, compo_bytes: &[u8]) -> Result<String> {
         // Coerce `&mut db` as `'static`.
-        let mut db = self.db.write().unwrap();
+        let mut db = self.db.write().await;
         let db: &mut DB = db.borrow_mut();
         let db = db as *mut DB;
         let db: &'static mut DB = unsafe { &mut *db };

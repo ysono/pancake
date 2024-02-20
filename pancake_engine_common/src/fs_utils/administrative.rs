@@ -7,6 +7,7 @@ pub const ENV_VAR_PARENT_DIR: &str = "PANCAKE_PARENT_DIR";
 pub const SERIAL_DB_ROOT_NAME: &str = "serial";
 pub const SSI_DB_ROOT_NAME: &str = "ssi";
 
+#[derive(Clone, Copy)]
 pub enum EngineType {
     SERIAL,
     SSI,
