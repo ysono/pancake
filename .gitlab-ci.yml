@@ -7,4 +7,6 @@ all_tests:
   stage: test
   only:
     - /^testongl-.*$/
-  script: cargo test -- --nocapture
+  script:
+    - cargo test -- --nocapture
+    - ./pancake_server/tests/pancake-test-script.sh
