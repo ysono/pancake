@@ -28,6 +28,6 @@ cargo run --package pancake_server --bin pancake_server_ssi
 
 Accessing the server:
 
-- Simple CRUD by http method. See [this sample test script](./pancake_server/tests/pancake-test-script.sh) for examples.
-- A [query language](https://ysono.github.io/pancake/pancake_server/oper/query_basic/index.html). See [this sample test script](./pancake_server/tests/pancake-test-script.sh) for examples.
+- Simple CRUD by http method. See [this sample test script](./pancake_server/tests/pancake-server-test.sh) for examples.
+- A [query language](https://ysono.github.io/pancake/pancake_server/oper/query_basic/index.html). See [this sample test script](./pancake_server/tests/pancake-server-test.sh) for examples.
 - Transaction expressed as a [WASM component](https://github.com/WebAssembly/component-model). See [instruction](examples_wasm_txn/readme.md).

@@ -9,4 +9,4 @@ all_tests:
     - /^testongl-.*$/
   script:
     - cargo test -- --nocapture
-    - ./pancake_server/tests/pancake-test-script.sh
+    - ./pancake_server/tests/pancake-server-test.sh

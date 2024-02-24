@@ -21,7 +21,7 @@ req() {
         curl -i --no-progress-meter -X "${@:2}"
     )"
     echo "${resp}"
-    echo "${resp}" | grep "${exp_resp_line}"
+    echo "${resp}" | head -1 | grep "${exp_resp_line}"
 }
 
 crud() {
@@ -125,6 +125,7 @@ launch_server() {
         if (( ct >= 1 )) ; then
             break
         fi
+        sleep 0.1
     done
 }
 
