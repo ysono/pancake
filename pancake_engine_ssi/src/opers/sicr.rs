@@ -3,18 +3,20 @@ use crate::{
     db_state::{ScndIdxNewDefnResult, ScndIdxNum, ScndIdxState},
     ds_n_a::{atomic_linked_list::ListNode, send_ptr::NonNullSendPtr},
     lsm::{
-        lsm_state_utils,
-        unit::{CommitVer, CommittedUnit},
-        LsmElem, LsmElemType,
+        entryset::CommittedEntrySet,
+        unit::{CommitVer, CommittedUnit, StagingUnit},
     },
-    opers::fc::FlushAndCompactRequest,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use derive_more::Display;
-use pancake_types::types::SubValueSpec;
-use std::sync::atomic::Ordering;
+use pancake_engine_common::{fs_utils, SSTable};
+use pancake_types::{
+    serde::OptDatum,
+    types::{PVShared, SVPKShared, SubValueSpec},
+};
+use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::oneshot;
+use tokio::sync::MutexGuard;
 
 mod creation;
 mod paths;
@@ -27,56 +29,39 @@ impl DB {
         &self,
         sv_spec: &Arc<SubValueSpec>,
     ) -> Result<(), ScndIdxCreationJobErr> {
-        let mut job = ScndIdxCreationJob {
-            db: self,
-            job_dir: None,
-        };
-        job.run(sv_spec).await
+        let mut job = ScndIdxCreationJob::new(self, sv_spec).await?;
+        job.run().await?;
+        job.remove_intermediary_files()?;
+
+        Ok(())
     }
 }
 
 struct ScndIdxCreationJob<'job> {
     db: &'job DB,
-    job_dir: Option<ScndIdxCreationJobDir>,
+
+    _si_cr_guard: MutexGuard<'job, ()>,
+
+    sv_spec: Arc<SubValueSpec>,
+
+    si_num: ScndIdxNum,
+    pre_output_commit_ver: CommitVer,
+    output_commit_ver: CommitVer,
+    output_node: NonNullSendPtr<ListNode<CommittedUnit>>,
+
+    job_dir: ScndIdxCreationJobDir,
+    prim_entryset_file_paths: Vec<PathBuf>,
 }
 
 impl<'job> ScndIdxCreationJob<'job> {
-    async fn run(&mut self, sv_spec: &Arc<SubValueSpec>) -> Result<(), ScndIdxCreationJobErr> {
-        let guard = match self.db.si_cr_mutex().try_lock() {
-            /* Stylistic gotcha:
-            We either mark `guard` as an unused variable, or explicitly drop it at the end.
-            If we explicitly drop it, if we forget to handle the `Err(_)` case, rust would not catch it.
-            Therefore, here, we prefer `match` + `return` to `?`. */
-            Err(_e) => return Err(ScndIdxCreationJobErr::Busy),
+    async fn new(db: &'job DB, sv_spec: &Arc<SubValueSpec>) -> Result<Self, ScndIdxCreationJobErr> {
+        let si_cr_guard = match db.si_cr_mutex().try_lock() {
+            Err(_) => return Err(ScndIdxCreationJobErr::Busy),
             Ok(guard) => guard,
         };
 
-        let (si_num, snap_head_ptr, output_commit_ver) =
-            self.prepare_db_state_and_lsm_state(sv_spec).await?;
-        let snap_head_ref = unsafe { snap_head_ptr.as_ref() };
-
-        self.prepare_linked_list(snap_head_ptr).await?;
-
-        let committed_unit = self.create_unit(snap_head_ptr, sv_spec, si_num, output_commit_ver)?;
-
-        if let Some(committed_unit) = committed_unit {
-            self.insert_node(snap_head_ref, committed_unit);
-        }
-
-        self.notify_completion(snap_head_ref, sv_spec).await?;
-
-        drop(guard);
-
-        Ok(())
-    }
-
-    async fn prepare_db_state_and_lsm_state(
-        &self,
-        sv_spec: &Arc<SubValueSpec>,
-    ) -> Result<(ScndIdxNum, NonNullSendPtr<ListNode<LsmElem>>, CommitVer), ScndIdxCreationJobErr>
-    {
         {
-            let db_state = self.db.db_state().read().await;
+            let db_state = db.db_state().read().await;
 
             if db_state.is_terminating == true {
                 return Err(anyhow!("DB is terminating").into());
@@ -88,13 +73,12 @@ impl<'job> ScndIdxCreationJob<'job> {
             }
         }
 
-        /* The new_head is malloc'd outside the two RwLock guards. */
-        let prepped_new_head = lsm_state_utils::new_dummy_node(true, 0);
-        let si_num;
-        let snap_head_ptr;
-        let output_commit_ver;
+        let output_unit_dir_path = db.lsm_dir().format_new_unit_dir_path();
+        let output_unit = StagingUnit::new_empty(output_unit_dir_path)?;
+
+        let (si_num, pre_output_commit_ver, output_commit_ver, snap, snap_list_ver);
         {
-            let mut db_state = self.db.db_state().write().await;
+            let mut db_state = db.db_state().write().await;
 
             if db_state.is_terminating == true {
                 return Err(anyhow!("DB is terminating").into());
@@ -107,72 +91,116 @@ impl<'job> ScndIdxCreationJob<'job> {
             }
 
             {
-                let mut lsm_state = self.db.lsm_state().lock().await;
+                let mut lsm_state = db.lsm_state().lock().await;
 
-                let snap_head_ptr_ = lsm_state.list().push_head_node(prepped_new_head);
-                snap_head_ptr = NonNullSendPtr::from(snap_head_ptr_);
+                pre_output_commit_ver = lsm_state.hold_curr_commit_ver();
 
-                output_commit_ver = lsm_state.inc_fetch_curr_commit_ver();
+                lsm_state.bump_commit_ver(output_unit)?;
+
+                output_commit_ver = lsm_state.hold_curr_commit_ver();
+
+                snap = lsm_state.list().snap();
+
+                snap_list_ver = lsm_state.hold_curr_list_ver();
             }
         }
 
-        Ok((si_num, snap_head_ptr, output_commit_ver))
+        let job_dir = db.si_cr_dir().create_new_job_dir()?;
+        let mut prim_entryset_file_paths = vec![];
+        for unit in snap.iter() {
+            if unit.prim.is_some() {
+                let prim_file_path = unit.dir.format_prim_file_path();
+                let stg_file_path = job_dir.format_new_kv_file_path();
+                fs_utils::hard_link_file(prim_file_path, &stg_file_path)?;
+                prim_entryset_file_paths.push(stg_file_path);
+            }
+        }
+
+        let output_node = snap.head_ptr().unwrap();
+
+        let updated_mhlv;
+        {
+            let mut lsm_state = db.lsm_state().lock().await;
+
+            updated_mhlv = lsm_state.unhold_list_ver(snap_list_ver)?;
+        }
+        if let Some(mhlv) = updated_mhlv {
+            db.notify_min_held_list_ver(mhlv);
+        }
+
+        Ok(Self {
+            db,
+
+            _si_cr_guard: si_cr_guard,
+
+            sv_spec: Arc::clone(sv_spec),
+
+            si_num,
+            pre_output_commit_ver,
+            output_commit_ver,
+            output_node,
+
+            job_dir,
+            prim_entryset_file_paths,
+        })
     }
 
-    async fn prepare_linked_list(
-        &self,
-        snap_head: NonNullSendPtr<ListNode<LsmElem>>,
-    ) -> Result<(), anyhow::Error> {
-        let (response_tx, response_rx) = oneshot::channel();
-        let fc_req_msg = FlushAndCompactRequest {
-            snap_head,
-            response_tx,
-        };
-        self.db
-            .fc_request_tx()
-            .send(fc_req_msg)
-            .await
-            .map_err(|e| anyhow!(e.to_string()))
-            .context("Could not send to the F+C worker")?;
-        response_rx
-            .await
-            .map_err(|e| anyhow!(e))
-            .context("Could not receive from the F+C worker")?;
+    async fn run(&mut self) -> Result<(), ScndIdxCreationJobErr> {
+        let merged_file_path = self.create_unit()?;
+
+        self.modify_lsm_state(merged_file_path).await?;
 
         Ok(())
     }
 
-    fn insert_node(&self, snap_head: &ListNode<LsmElem>, committed_unit: CommittedUnit) {
-        let snap_second_ptr = snap_head.next.load(Ordering::SeqCst);
-
-        let node_own = lsm_state_utils::new_unit_node(committed_unit, 0);
-        node_own.next.store(snap_second_ptr, Ordering::SeqCst);
-
-        let node_ptr = Box::into_raw(node_own);
-        snap_head.next.store(node_ptr, Ordering::SeqCst);
-    }
-
-    async fn notify_completion(
-        &self,
-        snap_head: &ListNode<LsmElem>,
-        sv_spec: &SubValueSpec,
-    ) -> Result<()> {
-        if let LsmElemType::Dummy { is_fence, .. } = &snap_head.elem.elem_type {
-            is_fence.store(false, Ordering::SeqCst);
-        }
-
+    async fn modify_lsm_state(&self, merged_file_path: Option<PathBuf>) -> Result<()> {
         {
             let mut db_state = self.db.db_state().write().await;
 
-            db_state.set_scnd_idx_as_readable(sv_spec)?;
+            /* We're modifying output_node, which has already been in the LL, in-place.
+            We must modify it while no other threads are traversing over the node. */
+            if let Some(orig_path) = merged_file_path {
+                let out_node_ref = unsafe { &mut *(self.output_node.as_ptr()) };
+
+                let out_path = out_node_ref.elem.dir.format_scnd_file_path(self.si_num);
+
+                fs_utils::rename_file(orig_path, &out_path)?;
+
+                /* Note, we wrote as <SVPK, PV>, but are now reading as <SVPK, OptDatum<PV>>. This is valid. */
+                let out_sstable = SSTable::<SVPKShared, OptDatum<PVShared>>::load(out_path)?;
+
+                let out_entryset = CommittedEntrySet::SSTable(out_sstable);
+
+                out_node_ref.elem.scnds.insert(self.si_num, out_entryset);
+            }
+
+            db_state.set_scnd_idx_as_readable(&self.sv_spec)?;
         }
 
-        let send_res = self.db.fc_avail_tx().send(());
-        if let Err(e) = send_res {
-            /* If F+C couldn't receive, the DB must be termianting. Ignore. */
-            eprintln!("SICr couldn't notify fc_avail to F+C. {e}");
+        let fc_able_commit_vers;
+        {
+            let mut lsm_state = self.db.lsm_state().lock().await;
+
+            fc_able_commit_vers = lsm_state.unhold_commit_vers([
+                Some(self.pre_output_commit_ver),
+                Some(self.output_commit_ver),
+            ])?;
         }
 
+        for cmt_ver in fc_able_commit_vers {
+            if let Some(cmt_ver) = cmt_ver {
+                let send_res = self.db.fc_able_commit_vers_tx().send(cmt_ver).await;
+                if send_res.is_err() {
+                    eprintln!("SICr could not notify to F+C that post-completion unholding of CommitVers caused one or more of these CommitVers to become non-held.");
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn remove_intermediary_files(self) -> Result<()> {
+        self.job_dir.remove_dir()?;
         Ok(())
     }
 }

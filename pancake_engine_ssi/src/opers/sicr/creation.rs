@@ -1,105 +1,58 @@
-use crate::{
-    db_state::ScndIdxNum,
-    ds_n_a::{
-        atomic_linked_list::{ListNode, ListSnapshot},
-        send_ptr::NonNullSendPtr,
-    },
-    lsm::{
-        entryset::merging,
-        unit::{
-            CommitDataType, CommitInfo, CommitVer, CommittedUnit, CompactedUnit, ReplacementNum,
-        },
-        LsmElem, LsmElemType,
-    },
-    opers::sicr::{ScndIdxCreationJob, ScndIdxCreationJobDir},
-};
+use crate::opers::sicr::ScndIdxCreationJob;
 use anyhow::Result;
-use pancake_engine_common::{fs_utils, merging as common_merging, Entry, SSTable};
+use pancake_engine_common::{fs_utils, merging};
 use pancake_types::{
     iters::KeyValueReader,
     serde::OptDatum,
-    types::{PKShared, PVShared, PrimaryKey, SVPKShared, Ser, SubValueSpec},
+    types::{PKShared, PVShared, SVPKShared, Ser},
 };
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io::BufWriter;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 /// The period is exaggeratedly small, so as to be helpful with debugging.
 /// In the future, we'll allow setting it from an env var.
 const MEMTABLE_FLUSH_PERIOD_ITEM_COUNT: usize = 5;
 
 impl<'job> ScndIdxCreationJob<'job> {
-    pub(super) fn create_unit(
-        &mut self,
-        snap_head: NonNullSendPtr<ListNode<LsmElem>>,
-        sv_spec: &SubValueSpec,
-        si_num: ScndIdxNum,
-        output_commit_ver: CommitVer,
-    ) -> Result<Option<CommittedUnit>> {
-        let prim_entries = Self::derive_prim_entries(snap_head);
-
-        let scnd_entries = Self::derive_scnd_entries(prim_entries, sv_spec);
+    pub(super) fn create_unit(&mut self) -> Result<Option<PathBuf>> {
+        let scnd_entries = self.derive_scnd_entries()?;
 
         let interm_file_paths = self.create_all_intermediary_files(scnd_entries)?;
 
-        let compacted_unit = self.merge_intermediary_files(interm_file_paths, si_num)?;
+        let merged_file_path = self.merge_intermediary_files(interm_file_paths)?;
 
-        self.remove_intermediary_files()?;
-
-        if let Some(compacted_unit) = compacted_unit {
-            let committed_unit =
-                Self::convert_output_to_committed_unit(compacted_unit, output_commit_ver)?;
-            return Ok(Some(committed_unit));
-        }
-
-        return Ok(None);
-    }
-
-    fn derive_prim_entries<'snap>(
-        snap_head: NonNullSendPtr<ListNode<LsmElem>>,
-    ) -> impl Iterator<Item = Entry<'snap, PKShared, PVShared>> {
-        let snap = ListSnapshot::new(snap_head, None);
-
-        /* The first element is the fence dummy that we pushed. We skip it (implicitly). */
-        let prim_entrysets = snap
-            .into_iter_including_head_excluding_tail()
-            .filter_map(|elem| match &elem.elem_type {
-                LsmElemType::Dummy { .. } => None,
-                LsmElemType::CommittedUnit(unit) => unit.prim.as_ref(),
-            });
-        let prim_entries = merging::merge_committed_entrysets(
-            prim_entrysets,
-            None::<&PrimaryKey>,
-            None::<&PrimaryKey>,
-        );
-        let nontomb_prim_entries = prim_entries.filter_map(|entry| entry.to_option_entry());
-        nontomb_prim_entries
+        Ok(merged_file_path)
     }
 
     fn derive_scnd_entries<'snap>(
-        prim_entries: impl 'snap + Iterator<Item = Entry<'snap, PKShared, PVShared>>,
-        sv_spec: &'snap SubValueSpec,
-    ) -> impl 'snap + Iterator<Item = Result<(SVPKShared, PVShared)>> {
-        let nontomb_scnd_entries =
-            prim_entries.filter_map(|prim_entry| match prim_entry.try_borrow() {
-                Err(e) => return Some(Err(e)),
-                Ok((pk, pv)) => match sv_spec.extract(pv) {
-                    None => return None,
-                    Some(sv) => {
-                        let pk = Arc::clone(pk);
-                        let pv = Arc::clone(pv);
-                        let svpk = SVPKShared { sv, pk };
-                        return Some(Ok((svpk, pv)));
-                    }
-                },
-            });
-        nontomb_scnd_entries
+        &'snap self,
+    ) -> Result<impl 'snap + Iterator<Item = Result<(SVPKShared, PVShared)>>> {
+        let mut prim_entrysets = vec![];
+        for pi_file_path in self.prim_entryset_file_paths.iter() {
+            let pi_file = fs_utils::open_file(pi_file_path, OpenOptions::new().read(true))?;
+            let reader = KeyValueReader::<_, PKShared, OptDatum<PVShared>>::from(pi_file);
+            let iter = reader.into_iter_kv();
+            prim_entrysets.push(iter);
+        }
+        let prim_entries = merging::merge_entry_iters(prim_entrysets.into_iter());
+        let nontomb_scnd_entries = prim_entries.filter_map(|res_pk_pv| match res_pk_pv {
+            Err(e) => Some(Err(e)),
+            Ok((_pk, OptDatum::Tombstone)) => None,
+            Ok((pk, OptDatum::Some(pv))) => match self.sv_spec.extract(&pv) {
+                None => None,
+                Some(sv) => {
+                    let svpk = SVPKShared { sv, pk };
+                    Some(Ok((svpk, pv)))
+                }
+            },
+        });
+        Ok(nontomb_scnd_entries)
     }
 
     fn create_all_intermediary_files<'a>(
-        &mut self,
+        &self,
         scnd_entries: impl 'a + Iterator<Item = Result<(SVPKShared, PVShared)>>,
     ) -> Result<Vec<PathBuf>> {
         let mut memtable = BTreeMap::new();
@@ -128,11 +81,10 @@ impl<'job> ScndIdxCreationJob<'job> {
     }
 
     fn create_one_intermediary_file(
-        &mut self,
+        &self,
         memtable: &BTreeMap<SVPKShared, PVShared>,
     ) -> Result<PathBuf> {
-        let job_dir = self.ensure_create_job_dir()?;
-        let interm_file_path = job_dir.format_new_kv_file_path();
+        let interm_file_path = self.job_dir.format_new_kv_file_path();
         let interm_file = fs_utils::open_file(
             &interm_file_path,
             OpenOptions::new().create(true).write(true),
@@ -147,75 +99,41 @@ impl<'job> ScndIdxCreationJob<'job> {
         Ok(interm_file_path)
     }
 
-    fn ensure_create_job_dir(&mut self) -> Result<&ScndIdxCreationJobDir> {
-        if self.job_dir.is_none() {
-            let job_dir = self.db.si_cr_dir().create_new_job_dir()?;
-            self.job_dir = Some(job_dir);
-        }
-        let job_dir = self.job_dir.as_ref().unwrap();
-        Ok(job_dir)
-    }
-
     fn merge_intermediary_files(
-        &mut self,
-        interm_file_paths: Vec<PathBuf>,
-        si_num: ScndIdxNum,
-    ) -> Result<Option<CompactedUnit>> {
+        &self,
+        mut interm_file_paths: Vec<PathBuf>,
+    ) -> Result<Option<PathBuf>> {
         if interm_file_paths.len() > 0 {
-            let unit_dir = self.db.lsm_dir().format_new_unit_dir_path();
-            let mut compacted_unit = CompactedUnit::new_empty(unit_dir)?;
-
-            let sstable_path = compacted_unit.dir.format_scnd_file_path(si_num);
-
-            /* Note, we wrote as (svpk, pv), and
-            now we're reading as (svpk, optdat<pv>). This is valid. */
-            let sstable = if interm_file_paths.len() == 1 {
-                fs_utils::rename_file(interm_file_paths.first().unwrap(), &sstable_path)?;
-                SSTable::<SVPKShared, OptDatum<PVShared>>::load(sstable_path)?
+            let merged_file_path;
+            if interm_file_paths.len() == 1 {
+                merged_file_path = interm_file_paths.pop().unwrap();
             } else {
                 let entry_iters = interm_file_paths
                     .into_iter()
                     .map(|path| {
                         let interm_file = fs_utils::open_file(path, OpenOptions::new().read(true))?;
-                        let iter =
-                            KeyValueReader::<_, SVPKShared, OptDatum<PVShared>>::from(interm_file)
-                                .into_iter_kv();
+                        let iter = KeyValueReader::<_, SVPKShared, PVShared>::from(interm_file)
+                            .into_iter_kv();
                         Ok(iter)
                     })
                     .collect::<Result<Vec<_>>>()?;
-                let entries = common_merging::merge_entry_iters(entry_iters.into_iter());
-                let entries = entries.map(Entry::Own);
-                SSTable::new(entries, sstable_path)?
+                let entries = merging::merge_entry_iters(entry_iters.into_iter());
+
+                merged_file_path = self.job_dir.format_new_kv_file_path();
+                let mut merged_file = fs_utils::open_file(
+                    &merged_file_path,
+                    OpenOptions::new().create(true).write(true),
+                )?;
+                for entry in entries {
+                    let (svpk, pv) = entry?;
+                    svpk.ser(&mut merged_file)?;
+                    pv.ser(&mut merged_file)?;
+                }
             };
 
-            compacted_unit.scnds.insert(si_num, sstable);
-
-            return Ok(Some(compacted_unit));
+            Ok(Some(merged_file_path))
         } else {
-            return Ok(None);
+            Ok(None)
         }
-    }
-
-    fn remove_intermediary_files(&mut self) -> Result<()> {
-        if let Some(job_dir) = self.job_dir.take() {
-            job_dir.remove_dir()?;
-        }
-        Ok(())
-    }
-
-    fn convert_output_to_committed_unit(
-        compacted_unit: CompactedUnit,
-        output_commit_ver: CommitVer,
-    ) -> Result<CommittedUnit> {
-        let commit_info = CommitInfo {
-            commit_ver_hi_incl: output_commit_ver,
-            commit_ver_lo_incl: output_commit_ver,
-            replacement_num: ReplacementNum::FOR_NEW_COMMIT_VER_INTERVAL,
-            data_type: CommitDataType::SSTable,
-        };
-
-        let committed_unit = CommittedUnit::from_compacted(compacted_unit, commit_info)?;
-
-        Ok(committed_unit)
     }
 }

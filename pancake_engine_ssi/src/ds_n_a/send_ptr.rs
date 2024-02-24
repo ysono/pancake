@@ -1,5 +1,5 @@
 use derive_more::{Deref, From};
-use std::ptr::NonNull;
+use std::ptr::{self, NonNull};
 
 /// A newtype of `*const T` that's `unsafe`ly marked as [`Send`] and [`Sync`].
 /// Use at your own discretion.
@@ -8,9 +8,6 @@ pub struct SendPtr<T>(*const T);
 impl<T> SendPtr<T> {
     pub fn as_ptr(&self) -> *const T {
         self.0
-    }
-    pub unsafe fn as_ref<'a, 'b>(&'a self) -> &'b T {
-        &*(self.0)
     }
 }
 impl<T> Clone for SendPtr<T> {
@@ -25,11 +22,17 @@ unsafe impl<T> Sync for SendPtr<T> {}
 
 /// A newtype of [`NonNull`] that's `unsafe`ly marked as [`Send`] and [`Sync`].
 /// Use at your own discretion.
-#[derive(Deref)]
-pub struct NonNullSendPtr<T>(SendPtr<T>);
-impl<T> From<NonNull<T>> for NonNullSendPtr<T> {
-    fn from(ptr: NonNull<T>) -> Self {
-        Self(SendPtr::from(ptr.as_ptr().cast_const()))
+#[derive(From, Deref)]
+pub struct NonNullSendPtr<T>(NonNull<T>);
+impl<T> NonNullSendPtr<T> {
+    pub fn as_ptr(opt_self: Option<Self>) -> *const T {
+        match opt_self {
+            None => ptr::null(),
+            Some(slf) => slf.0.as_ptr(),
+        }
+    }
+    pub fn as_sendptr(opt_self: Option<Self>) -> SendPtr<T> {
+        SendPtr::from(Self::as_ptr(opt_self))
     }
 }
 impl<T> Clone for NonNullSendPtr<T> {

@@ -27,7 +27,7 @@ pub async fn verify_get(
                 .collect::<Vec<_>>();
             assert_eq!(exp, act);
         }
-        _etc => panic!("ok-err mistmatch"),
+        (exp, act) => panic!("ok-err mistmatch {exp:?} {act:?}"),
     }
 
     Ok(())

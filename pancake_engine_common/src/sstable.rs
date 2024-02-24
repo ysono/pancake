@@ -11,7 +11,7 @@ use std::fs::OpenOptions;
 use std::io::{BufWriter, SeekFrom, Write};
 use std::iter;
 use std::marker::PhantomData;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// The sparseness is exaggeratedly small, so as to be helpful with debugging.
 /// In the future, we'll allow setting it from an env var.
@@ -86,8 +86,10 @@ where
     K: Deser + Ord,
     V: Deser,
 {
-    pub fn load(kv_file_path: PathBuf) -> Result<Self> {
-        let kv_file = fs_utils::open_file(&kv_file_path, OpenOptions::new().read(true))?;
+    pub fn load<P: AsRef<Path>>(kv_file_path: P) -> Result<Self> {
+        let kv_file_path = kv_file_path.as_ref();
+
+        let kv_file = fs_utils::open_file(kv_file_path, OpenOptions::new().read(true))?;
         let mut reader = KeyValueReader::<_, K, V>::from(kv_file);
 
         let mut sparse_file_offsets = SparseFileOffsets::from(vec![]);
@@ -112,7 +114,7 @@ where
 
         Ok(Self {
             sparse_file_offsets,
-            kv_file_path,
+            kv_file_path: kv_file_path.into(),
             _phant: PhantomData,
         })
     }

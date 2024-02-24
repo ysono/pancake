@@ -4,7 +4,7 @@ use crate::{
         entryset::{merging, CommittedEntrySet},
         unit::{CommitDataType, CommitInfo, CommittedUnit, CompactedUnit, ReplacementNum},
     },
-    opers::fc::fc_traversal::FCJob,
+    opers::fc::fc_segm::FCJob,
 };
 use anyhow::Result;
 use pancake_engine_common::{Entry, SSTable};

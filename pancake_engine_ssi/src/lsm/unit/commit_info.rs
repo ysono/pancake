@@ -12,14 +12,14 @@ use std::path::Path;
 /// The commit version uniquely identifies every commitment as well as the datastore state after the commitment.
 ///
 /// The datastore's commit version increases for the whole lifetime of the datastore instance.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CommitVer(u64);
 
 impl CommitVer {
     pub const AT_EMPTY_DATASTORE: Self = Self(0);
 
-    pub fn mut_inc(&mut self) {
-        self.0 += 1;
+    pub fn new_inc(&self) -> Self {
+        Self(self.0 + 1)
     }
 }
 

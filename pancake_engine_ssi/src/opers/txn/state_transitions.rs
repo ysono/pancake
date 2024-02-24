@@ -1,8 +1,7 @@
-use crate::ds_n_a::atomic_linked_list::ListSnapshot;
 use crate::ds_n_a::interval_set::IntervalSet;
 use crate::{
     db_state::DbState,
-    lsm::{lsm_state_utils, unit::CommittedUnit, LsmState},
+    lsm::LsmState,
     opers::txn::{CachedSnap, Txn},
     DB,
 };
@@ -12,28 +11,26 @@ use tokio::sync::{MutexGuard, RwLockReadGuard};
 
 impl<'txn> Txn<'txn> {
     pub(super) async fn new(db: &'txn DB, db_state_guard: RwLockReadGuard<'txn, DbState>) -> Self {
-        let snap_head;
-        let snap_commit_ver;
+        let snap_commit_ver_hi_incl;
+        let list_snap;
         let snap_list_ver;
         {
             let mut lsm_state = db.lsm_state().lock().await;
 
-            snap_head = Self::hold_snap_head(&lsm_state);
+            snap_commit_ver_hi_incl = lsm_state.hold_curr_commit_ver();
 
-            snap_commit_ver = lsm_state.curr_commit_ver();
+            list_snap = lsm_state.list().snap();
 
             snap_list_ver = lsm_state.hold_curr_list_ver();
         }
 
-        let list_snap = ListSnapshot::new(snap_head, None);
-        let snap = CachedSnap::new(list_snap);
+        let snap = CachedSnap::new(snap_commit_ver_hi_incl, None, list_snap);
 
         Self {
             db,
             db_state_guard,
 
             snap,
-            snap_commit_ver,
             snap_list_ver,
 
             dependent_itvs_prim: IntervalSet::new(),
@@ -57,7 +54,7 @@ impl<'txn> Txn<'txn> {
         loop {
             let lsm_state = self.db.lsm_state().lock().await;
 
-            if self.snap_commit_ver != lsm_state.curr_commit_ver() {
+            if self.snap.commit_ver_hi_incl != lsm_state.curr_commit_ver() {
                 self.update_snapshot_for_conflict_checking(lsm_state)?;
                 if self.has_conflict()? {
                     return Ok(TryCommitResult::Conflict(self));
@@ -73,45 +70,56 @@ impl<'txn> Txn<'txn> {
         &mut self,
         mut lsm_state: MutexGuard<LsmState>,
     ) -> Result<()> {
-        let new_snap_head = Self::hold_snap_head(&lsm_state);
+        let snap_commit_ver_hi_incl = lsm_state.hold_curr_commit_ver();
 
-        self.snap_commit_ver = lsm_state.curr_commit_ver();
+        let fc_able_commit_vers = lsm_state.unhold_commit_vers([self.snap.commit_ver_lo_excl])?;
 
-        let updated_mhlv;
-        (self.snap_list_ver, updated_mhlv) =
+        let list_snap = lsm_state.list().snap();
+
+        let (snap_list_ver, updated_mhlv) =
             lsm_state.hold_and_unhold_list_ver(self.snap_list_ver)?;
 
         drop(lsm_state);
 
-        let is_fc_avail = Self::unhold_boundary_nodes([self.snap.tail_ptr()]);
-        let list_snap = ListSnapshot::new(new_snap_head, Some(self.snap.head_ptr()));
-        self.snap = CachedSnap::new(list_snap);
+        self.snap = CachedSnap::new(
+            snap_commit_ver_hi_incl,
+            Some(self.snap.commit_ver_hi_incl),
+            list_snap,
+        );
 
-        self.notify_fc_worker(updated_mhlv, is_fc_avail);
+        self.snap_list_ver = snap_list_ver;
+
+        self.notify_fc_worker(updated_mhlv, fc_able_commit_vers);
 
         Ok(())
     }
 
     pub(super) async fn reset(&mut self) -> Result<()> {
-        let new_snap_head;
-        let updated_mhlv;
+        let snap_commit_ver_hi_incl;
+        let fc_able_commit_vers;
+        let list_snap;
+        let (snap_list_ver, updated_mhlv);
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
-            new_snap_head = Self::hold_snap_head(&lsm_state);
+            snap_commit_ver_hi_incl = lsm_state.hold_curr_commit_ver();
 
-            self.snap_commit_ver = lsm_state.curr_commit_ver();
+            fc_able_commit_vers = lsm_state.unhold_commit_vers([
+                Some(self.snap.commit_ver_hi_incl),
+                self.snap.commit_ver_lo_excl,
+            ])?;
 
-            (self.snap_list_ver, updated_mhlv) =
+            list_snap = lsm_state.list().snap();
+
+            (snap_list_ver, updated_mhlv) =
                 lsm_state.hold_and_unhold_list_ver(self.snap_list_ver)?;
         }
 
-        let is_fc_avail =
-            Self::unhold_boundary_nodes([Some(self.snap.head_ptr()), self.snap.tail_ptr()]);
-        let list_snap = ListSnapshot::new(new_snap_head, None);
-        self.snap = CachedSnap::new(list_snap);
+        self.snap = CachedSnap::new(snap_commit_ver_hi_incl, None, list_snap);
 
-        self.notify_fc_worker(updated_mhlv, is_fc_avail);
+        self.snap_list_ver = snap_list_ver;
+
+        self.notify_fc_worker(updated_mhlv, fc_able_commit_vers);
 
         self.dependent_itvs_prim.clear();
         self.dependent_itvs_scnds.clear();
@@ -123,17 +131,20 @@ impl<'txn> Txn<'txn> {
     }
 
     pub(super) async fn close(self) -> Result<()> {
+        let fc_able_commit_vers;
         let updated_mhlv;
         {
             let mut lsm_state = self.db.lsm_state().lock().await;
 
+            fc_able_commit_vers = lsm_state.unhold_commit_vers([
+                Some(self.snap.commit_ver_hi_incl),
+                self.snap.commit_ver_lo_excl,
+            ])?;
+
             updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver)?;
         }
 
-        let is_fc_avail =
-            Self::unhold_boundary_nodes([Some(self.snap.head_ptr()), self.snap.tail_ptr()]);
-
-        self.notify_fc_worker(updated_mhlv, is_fc_avail);
+        self.notify_fc_worker(updated_mhlv, fc_able_commit_vers);
 
         if let Some(staging) = self.staging {
             staging.remove_dir()?;
@@ -143,23 +154,19 @@ impl<'txn> Txn<'txn> {
     }
 
     fn do_commit(mut self, mut lsm_state: MutexGuard<LsmState>) -> Result<()> {
-        let commit_ver = lsm_state.inc_fetch_curr_commit_ver();
+        let stg = self.staging.take().unwrap();
+        lsm_state.bump_commit_ver(stg)?;
 
-        /* Note, converting StagingUnit to CommittedUnit involves writing a file,
-        which is not cheap, and we're doing it under a mutex guard. */
-        let committed_unit = CommittedUnit::from_staging(self.staging.take().unwrap(), commit_ver)?;
-
-        let node = lsm_state_utils::new_unit_node(committed_unit, 0);
-        lsm_state.list().push_head_node(node);
+        let fc_able_commit_vers = lsm_state.unhold_commit_vers([
+            Some(self.snap.commit_ver_hi_incl),
+            self.snap.commit_ver_lo_excl,
+        ])?;
 
         let updated_mhlv = lsm_state.unhold_list_ver(self.snap_list_ver)?;
 
         drop(lsm_state);
 
-        Self::unhold_boundary_nodes([Some(self.snap.head_ptr()), self.snap.tail_ptr()]);
-
-        let is_fc_avail = true;
-        self.notify_fc_worker(updated_mhlv, is_fc_avail);
+        self.notify_fc_worker(updated_mhlv, fc_able_commit_vers);
 
         Ok(())
     }

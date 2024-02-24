@@ -1,18 +1,19 @@
-use crate::ds_n_a::atomic_linked_list::{ListNode, ListSnapshot, ListSnapshotIterator};
-use crate::ds_n_a::interval_set::IntervalSet;
-use crate::ds_n_a::send_ptr::NonNullSendPtr;
 use crate::{
     db_state::{DbState, ScndIdxNum},
+    ds_n_a::{
+        atomic_linked_list::{ListIterator, ListSnapshot},
+        interval_set::IntervalSet,
+        iterator_cache::IteratorCache,
+    },
     lsm::{
         unit::{CommitVer, CommittedUnit, StagingUnit},
-        ListVer, LsmElem, LsmElemType,
+        ListVer,
     },
     DB,
 };
 use anyhow::{anyhow, Result};
 use pancake_types::types::{PrimaryKey, SubValue};
 use std::collections::HashMap;
-use std::iter;
 use tokio::sync::RwLockReadGuard;
 
 mod conflict;
@@ -32,7 +33,6 @@ pub struct Txn<'txn> {
     db_state_guard: RwLockReadGuard<'txn, DbState>,
 
     snap: CachedSnap,
-    snap_commit_ver: CommitVer,
     snap_list_ver: ListVer,
 
     dependent_itvs_prim: IntervalSet<&'txn PrimaryKey>,
@@ -92,51 +92,70 @@ impl<'txn> Txn<'txn> {
 }
 
 struct CachedSnap {
-    /// The lifetime is marked as `'static` for our convenience.
-    list_iter: ListSnapshotIterator<'static, LsmElem>,
+    commit_ver_hi_incl: CommitVer,
+    commit_ver_lo_excl: Option<CommitVer>,
 
-    /// Lazily populated.
-    units_cache: Vec<&'static CommittedUnit>,
+    /// The lifetime is marked as `'static` for our convenience.
+    iter: IteratorCache<TxnSnapIterator, &'static CommittedUnit>,
 }
 impl CachedSnap {
-    fn new(list_snap: ListSnapshot<LsmElem>) -> Self {
-        let list_iter = list_snap.into_iter_including_head_excluding_tail();
+    fn new(
+        commit_ver_hi_incl: CommitVer,
+        commit_ver_lo_excl: Option<CommitVer>,
+        list_snap: ListSnapshot<CommittedUnit>,
+    ) -> Self {
+        let iter = TxnSnapIterator::new(list_snap.iter(), commit_ver_lo_excl);
+        let iter = IteratorCache::new(iter);
+
         Self {
-            list_iter,
-            units_cache: vec![],
+            commit_ver_hi_incl,
+            commit_ver_lo_excl,
+
+            iter,
         }
     }
 
-    fn head_ptr(&self) -> NonNullSendPtr<ListNode<LsmElem>> {
-        self.list_iter.snap().head_ptr()
+    fn iter<'s>(&'s mut self) -> impl 's + Iterator<Item = &'static CommittedUnit> {
+        self.iter.iter().cloned()
     }
-    fn tail_ptr(&self) -> Option<NonNullSendPtr<ListNode<LsmElem>>> {
-        self.list_iter.snap().tail_ptr()
-    }
+}
 
-    fn iter<'a>(&'a mut self) -> impl 'a + Iterator<Item = &'a CommittedUnit> {
-        let mut cache_i = 0;
-        let iter_fn = move || {
-            if cache_i < self.units_cache.len() {
-                let ret = self.units_cache[cache_i];
-                cache_i += 1;
-                return Some(ret);
-            } else {
-                loop {
-                    match self.list_iter.next() {
-                        Some(elem) => match &elem.elem_type {
-                            LsmElemType::CommittedUnit(unit) => {
-                                self.units_cache.push(unit);
-                                cache_i += 1;
-                                return Some(unit);
-                            }
-                            LsmElemType::Dummy { .. } => continue,
-                        },
-                        None => return None,
-                    }
+/// A named [`std::iter::TakeWhile`].
+struct TxnSnapIterator {
+    iter: ListIterator<'static, CommittedUnit>,
+    commit_ver_lo_excl: Option<CommitVer>,
+    iter_reached_end: bool,
+}
+impl TxnSnapIterator {
+    fn new(
+        iter: ListIterator<'static, CommittedUnit>,
+        commit_ver_lo_excl: Option<CommitVer>,
+    ) -> Self {
+        Self {
+            iter,
+            commit_ver_lo_excl,
+            iter_reached_end: false,
+        }
+    }
+}
+impl Iterator for TxnSnapIterator {
+    type Item = &'static CommittedUnit;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.iter_reached_end == false {
+            self.iter.next().and_then(|unit| {
+                let is_included = match self.commit_ver_lo_excl {
+                    None => true,
+                    Some(cmt_ver_lo) => cmt_ver_lo < unit.commit_info.commit_ver_hi_incl,
+                };
+                if is_included {
+                    return Some(unit);
+                } else {
+                    self.iter_reached_end = true;
+                    return None;
                 }
-            }
-        };
-        iter::from_fn(iter_fn)
+            })
+        } else {
+            return None;
+        }
     }
 }

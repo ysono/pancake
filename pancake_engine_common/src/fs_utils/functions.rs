@@ -49,6 +49,12 @@ pub fn rename_file<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<()>
     fs::rename(from, to).with_context(|| format!("rename {from:?} {to:?}"))
 }
 
+pub fn hard_link_file<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> Result<()> {
+    let original = original.as_ref();
+    let link = link.as_ref();
+    fs::hard_link(original, link).with_context(|| format!("hard_link {original:?} {link:?}"))
+}
+
 pub fn remove_file<P: AsRef<Path>>(path: P) -> Result<()> {
     let path = path.as_ref();
     fs::remove_file(path).with_context(|| format!("remove_file {path:?}"))

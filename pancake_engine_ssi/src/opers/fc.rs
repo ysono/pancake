@@ -1,15 +1,14 @@
 use crate::{
-    ds_n_a::{atomic_linked_list::ListNode, send_ptr::NonNullSendPtr},
-    lsm::{ListVer, LsmElem},
+    lsm::{unit::CommitVer, ListVer},
     opers::fc::gc::DanglingNodeSetsDeque,
     DB,
 };
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, watch};
 
 mod fc_compaction;
-mod fc_traversal;
+mod fc_segm;
 mod gc;
 
 pub struct FlushingAndCompactionWorker {
@@ -17,8 +16,7 @@ pub struct FlushingAndCompactionWorker {
 
     pub(crate) dangling_nodes: DanglingNodeSetsDeque,
 
-    pub(crate) fc_avail_rx: watch::Receiver<()>,
-    pub(crate) fc_request_rx: mpsc::Receiver<FlushAndCompactRequest>,
+    pub(crate) fc_able_commit_vers_rx: mpsc::Receiver<CommitVer>,
     pub(crate) min_held_list_ver_rx: watch::Receiver<ListVer>,
     pub(crate) is_terminating_rx: watch::Receiver<()>,
 }
@@ -27,15 +25,9 @@ impl FlushingAndCompactionWorker {
     pub async fn run(mut self) -> Result<()> {
         loop {
             tokio::select! {
-                res = (self.fc_avail_rx.changed()) => {
-                    res.ok();
-                    self.flush_and_compact(None).await?;
-                }
-                opt_msg = (self.fc_request_rx.recv()) => {
-                    if let Some(msg) = opt_msg {
-                        let FlushAndCompactRequest{snap_head, response_tx} = msg;
-                        self.flush_and_compact(Some(snap_head)).await?;
-                        response_tx.send(()).map_err(|()| anyhow!("Could not notify flushing+compaction job completion to its requester."))?;
+                opt_msg = (self.fc_able_commit_vers_rx.recv()) => {
+                    if let Some(probe_commit_ver) = opt_msg {
+                        self.flush_and_compact(probe_commit_ver).await?;
                     }
                 }
                 res = (self.min_held_list_ver_rx.changed()) => {
@@ -59,10 +51,4 @@ impl FlushingAndCompactionWorker {
 
         Ok(())
     }
-}
-
-pub struct FlushAndCompactRequest {
-    pub snap_head: NonNullSendPtr<ListNode<LsmElem>>,
-
-    pub response_tx: oneshot::Sender<()>,
 }
