@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SVShared"],"mod":["pk","pv","serializable","sv","sv_spec","svpk"],"struct":["PrimaryKey","SVPKShared","SubValue","SubValueSpec","Value"],"trait":["Deser","Ser","Serializable"],"type":["PKShared","PVShared"]};

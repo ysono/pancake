@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Datum","DatumType","OptDatum","ReadResult"],"mod":["datum","datum_type","lengths"],"struct":["DatumTypeInt","WriteLen"]};

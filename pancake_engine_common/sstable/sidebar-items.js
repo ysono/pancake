@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FILE_OFFSETS_SPARSENESS"],"fn":["is_kv_sparsely_captured"],"struct":["FileOffset","SSTable","SparseFileOffsets"]};

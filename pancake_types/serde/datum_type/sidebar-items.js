@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["_IMPL_NUM_FromPrimitive_FOR_DatumType","_IMPL_NUM_ToPrimitive_FOR_DatumType"],"enum":["DatumType"],"struct":["DatumTypeInt"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ScndIdxCreationJobErr"],"mod":["creation","paths"],"struct":["ScndIdxCreationJob"]};

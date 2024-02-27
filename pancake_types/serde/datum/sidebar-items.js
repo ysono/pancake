@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Datum","OptDatum"],"mod":["deser","ser","serde_test"]};

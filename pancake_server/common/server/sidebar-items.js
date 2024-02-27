@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ENV_VAR_BIND_ADDR","ENV_VAR_ROOT_DIR"],"fn":["default_bind_addr"]};

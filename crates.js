@@ -1,0 +1,1 @@
+window.ALL_CRATES = ["examples_wasm_txn","pancake_engine_common","pancake_engine_serial","pancake_engine_ssi","pancake_server","pancake_server_serial","pancake_server_ssi","pancake_types"];

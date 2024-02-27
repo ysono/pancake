@@ -1,0 +1,56 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Serialization format"><title>pancake_types::serde - Rust</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-ac92e1bbe349e143.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="pancake_types" data-themes="" data-resource-suffix="" data-rustdoc-version="1.76.0 (07dca489a 2024-02-04)" data-channel="1.76.0" data-search-js="search-2b6ce74ff89ae146.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-f2adc0d6ca4d09fb.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-305769736d49e732.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-feafe1bb7466e4bd.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../pancake_types/index.html">pancake_types</a><span class="version">0.1.0</span></h2></div><h2 class="location"><a href="#">Module serde</a></h2><div class="sidebar-elems"><section><ul class="block"><li><a href="#modules">Modules</a></li><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li></ul></section><h2><a href="../index.html">In crate pancake_types</a></h2></div></nav><div class="sidebar-resizer"></div>
+    <main><div class="width-limiter"><nav class="sub"><form class="search-form"><span></span><div id="sidebar-button" tabindex="-1"><a href="../../pancake_types/all.html" title="show sidebar"></a></div><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" tabindex="-1"><a href="../../help.html" title="help">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../index.html">pancake_types</a>::<wbr><a class="mod" href="#">serde</a><button id="copy-path" title="Copy item path to clipboard"><img src="../../static.files/clipboard-7571035ce49a181d.svg" width="19" height="18" alt="Copy item path"></button></h1><span class="out-of-band"><a class="src" href="../../src/pancake_types/serde/mod.rs.html#1-70">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="serialization-format"><a href="#serialization-format">Serialization format</a></h2>
+<p>The primitive de/serializable type is <a href="datum/enum.OptDatum.html" title="enum pancake_types::serde::datum::OptDatum"><code>OptDatum&lt;Datum&gt;</code></a>.</p>
+<p>The below pseudocode depicts its serialized representations.</p>
+<p>They all start with <code>datum_type</code>, which is encoded in <code>u8</code>.
+In case we need to deprecate supported datum_types over time, this allows us
+<code>(pow(2, 8) - count_of_active_datum_types)</code> deprecations, before rolling over to zero.</p>
+<p>Some <code>Datum</code> types have fixed body lengths; these lengths are not encoded.
+For other <code>Datum</code> types, which have dynamic body lengths, these lengths are
+encoded following <code>datum_type</code>.
+The body length is encoded before the body, so that readers may skip the body.</p>
+<p>A <code>Datum::Tuple</code> nests other non-<code>Tombstone</code> <code>Datum</code>s, including possibly other <code>Datum::Tuple</code>s.</p>
+<div class="example-wrap"><pre class="language-text"><code>struct OptDatum::Tombstone {
+    datum_type:         u8,
+}
+
+struct Datum::I64 {
+    datum_type:         u8,
+    datum_body:         [u8; 8],
+}
+
+struct Datum::Bytes or Datum::Str {
+    datum_type:         u8,
+    datum_body_len:     u32,
+    datum_body:         [u8; datum_body_len],
+}
+
+struct Datum::Tuple {
+    datum_type:         u8,
+    datum_body_len:     u32,
+    datum_body:         {
+        members_count:      u32,
+        member_0:           Datum::I64 {
+            datum_type:         u8,
+            datum_body:         [u8; 8],
+        },
+        member_1:           Datum::Bytes or Datum::Str {
+            datum_type:         u8,
+            datum_body_len:     u32,
+            datum_body:         [u8; datum_body_len],
+        },
+        member_2:           Datum::Tuple {
+            datum_type:         u8,
+            // (Notice, no datum_body_len here.)
+            datum_body:         {
+                members_count:      u32,
+                member_0:           Datum::*,
+                ...
+            }
+        },
+        member_3:           Datum::*
+        ...
+        // Tombstone may not be nested under Tuple.
+    }
+}
+</code></pre></div></div></details><h2 id="modules" class="section-header"><a href="#modules">Modules</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="datum/index.html" title="mod pancake_types::serde::datum">datum</a><span title="Restricted Visibility">&nbsp;🔒</span> </div></li><li><div class="item-name"><a class="mod" href="datum_type/index.html" title="mod pancake_types::serde::datum_type">datum_type</a><span title="Restricted Visibility">&nbsp;🔒</span> </div></li><li><div class="item-name"><a class="mod" href="lengths/index.html" title="mod pancake_types::serde::lengths">lengths</a><span title="Restricted Visibility">&nbsp;🔒</span> </div></li></ul><h2 id="structs" class="section-header"><a href="#structs">Structs</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.DatumTypeInt.html" title="struct pancake_types::serde::DatumTypeInt">DatumTypeInt</a></div></li><li><div class="item-name"><a class="struct" href="struct.WriteLen.html" title="struct pancake_types::serde::WriteLen">WriteLen</a></div></li></ul><h2 id="enums" class="section-header"><a href="#enums">Enums</a></h2><ul class="item-table"><li><div class="item-name"><a class="enum" href="enum.Datum.html" title="enum pancake_types::serde::Datum">Datum</a></div></li><li><div class="item-name"><a class="enum" href="enum.DatumType.html" title="enum pancake_types::serde::DatumType">DatumType</a></div><div class="desc docblock-short">We manually map enum members to data_type integers because:</div></li><li><div class="item-name"><a class="enum" href="enum.OptDatum.html" title="enum pancake_types::serde::OptDatum">OptDatum</a></div></li><li><div class="item-name"><a class="enum" href="enum.ReadResult.html" title="enum pancake_types::serde::ReadResult">ReadResult</a></div></li></ul></section></div></main></body></html>

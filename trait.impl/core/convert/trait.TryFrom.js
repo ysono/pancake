@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"pancake_types":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.76.0/core/convert/trait.TryFrom.html\" title=\"trait core::convert::TryFrom\">TryFrom</a>&lt;<a class=\"struct\" href=\"pancake_types/serde/datum_type/struct.DatumTypeInt.html\" title=\"struct pancake_types::serde::datum_type::DatumTypeInt\">DatumTypeInt</a>&gt; for <a class=\"enum\" href=\"pancake_types/serde/datum_type/enum.DatumType.html\" title=\"enum pancake_types::serde::datum_type::DatumType\">DatumType</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

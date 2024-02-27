@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["test"],"struct":["ScndIdxNum","ScndIdxState","ScndIdxsState"]};

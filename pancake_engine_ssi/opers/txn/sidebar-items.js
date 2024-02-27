@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ClientCommitDecision"],"mod":["conflict","state_transition_helpers","state_transitions","stmt"],"struct":["CachedSnap","Txn","TxnSnapIterator"]};

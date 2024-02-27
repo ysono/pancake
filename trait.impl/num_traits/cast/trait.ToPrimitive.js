@@ -1,0 +1,4 @@
+(function() {var implementors = {
+"pancake_engine_ssi":[["impl <a class=\"trait\" href=\"https://docs.rs/num-traits/0.2/num_traits/cast/trait.ToPrimitive.html\" title=\"trait num_traits::cast::ToPrimitive\">ToPrimitive</a> for <a class=\"enum\" href=\"pancake_engine_ssi/lsm/unit/commit_info/enum.CommitDataType.html\" title=\"enum pancake_engine_ssi::lsm::unit::commit_info::CommitDataType\">CommitDataType</a>"]],
+"pancake_types":[["impl <a class=\"trait\" href=\"https://docs.rs/num-traits/0.2/num_traits/cast/trait.ToPrimitive.html\" title=\"trait num_traits::cast::ToPrimitive\">ToPrimitive</a> for <a class=\"enum\" href=\"pancake_types/serde/datum_type/enum.DatumType.html\" title=\"enum pancake_types::serde::datum_type::DatumType\">DatumType</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

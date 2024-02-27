@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["LSM_DIR_NAME","SPEC_FILE_NAME"],"struct":["SecondaryIndex"]};

@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"pancake_engine_ssi":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.76.0/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"pancake_engine_ssi/opers/fc/gc/struct.DanglingNodeSetsDeque.html\" title=\"struct pancake_engine_ssi::opers::fc::gc::DanglingNodeSetsDeque\">DanglingNodeSetsDeque</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

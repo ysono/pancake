@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["merge_memlog_and_sstables","merge_sstables"]};

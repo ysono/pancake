@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ENV_VAR_PARENT_DIR","SERIAL_DB_ROOT_NAME","SSI_DB_ROOT_NAME"],"enum":["EngineType"],"fn":["default_db_root_dir"]};
